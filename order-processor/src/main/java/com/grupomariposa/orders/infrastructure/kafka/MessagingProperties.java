@@ -18,7 +18,8 @@ public record MessagingProperties(
         boolean createTopics,
         @Min(1) short replicationFactor,
         @Valid @NotNull RecordRetry recordRetry,
-        @NotNull Duration healthTimeout) {
+        @NotNull Duration healthTimeout,
+        @NotNull Duration deadLetterRetryDelay) {
 
     public record Topics(
             @NotBlank String ordersCreated,

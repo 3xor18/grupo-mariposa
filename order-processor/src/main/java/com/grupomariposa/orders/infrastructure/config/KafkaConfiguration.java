@@ -84,7 +84,8 @@ public class KafkaConfiguration {
                 new DltHeadersFactory(clock, sanitizer));
         final DefaultErrorHandler handler = new DefaultErrorHandler(
                 new DeadLetterRecoverer(deadLetters, technicalFailures, observer, metrics,
-                        sanitizer), backOff(properties.recordRetry()));
+                        sanitizer, properties.deadLetterRetryDelay()),
+                backOff(properties.recordRetry()));
         handler.defaultFalse();
         handler.addRetryableExceptions(RetryableRecordFailure.class);
         return handler;
