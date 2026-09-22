@@ -4,63 +4,61 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/url"
 	"slices"
-	"strings"
 
 	"github.com/grupomariposa/platform/products-api/internal/config"
 )
 
 const (
-	redacted          = "******"
 	logLoaded         = "remote configuration loaded"
 	logSkipped        = "config server unavailable, continuing with environment and defaults"
 	logKeyURL         = "configServer"
 	logKeyApplication = "application"
 	logKeyProfile     = "profile"
-	logKeyProperties  = "properties"
+	logKeyKeys        = "keys"
+	logKeyCount       = "count"
 	logKeyError       = "error"
 )
-
-var sensitiveMarkers = []string{"SECRET", "PASSWORD", "KEY", "TOKEN"}
 
 func Resolve(ctx context.Context, env config.LookupFunc, logger *slog.Logger) (
 	config.LookupFunc, error,
 ) {
-	settings, err := LoadSettings(env)
+	s, err := loadSettings(env)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("config server settings: %w", err)
 	}
-	if !settings.Enabled() {
+	if !s.enabled() {
 		return env, nil
 	}
-	properties, err := NewClient(settings).Fetch(ctx)
+	properties, err := newClient(s).fetch(ctx)
 	if err != nil {
-		return failure(ctx, env, logger, settings, err)
+		return failure(ctx, env, logger, s, err)
 	}
 	remote := toEnvKeys(properties)
-	logger.InfoContext(ctx, logLoaded, sourceAttrs(settings,
-		slog.Any(logKeyProperties, Redact(remote)))...)
-	return Layered(env, remote), nil
+	keys := slices.Sorted(maps.Keys(remote))
+	logger.InfoContext(ctx, logLoaded, sourceAttrs(s,
+		slog.Any(logKeyKeys, keys), slog.Int(logKeyCount, len(keys)))...)
+	return layered(env, remote), nil
 }
 
-func failure(ctx context.Context, env config.LookupFunc, logger *slog.Logger, s Settings,
+func failure(ctx context.Context, env config.LookupFunc, logger *slog.Logger, s settings,
 	err error,
 ) (config.LookupFunc, error) {
-	if s.FailFast {
+	if s.failFast {
 		return nil, fmt.Errorf("load remote configuration: %w", err)
 	}
 	logger.WarnContext(ctx, logSkipped, sourceAttrs(s, slog.String(logKeyError, err.Error()))...)
 	return env, nil
 }
 
-func sourceAttrs(s Settings, extra slog.Attr) []any {
-	return []any{
-		slog.String(logKeyURL, redactedURL(s.BaseURL)),
-		slog.String(logKeyApplication, s.AppName),
-		slog.String(logKeyProfile, s.Profile),
-		extra,
-	}
+func sourceAttrs(s settings, extra ...any) []any {
+	return append([]any{
+		slog.String(logKeyURL, redactedURL(s.baseURL)),
+		slog.String(logKeyApplication, s.appName),
+		slog.String(logKeyProfile, s.profile),
+	}, extra...)
 }
 
 func redactedURL(raw string) string {
@@ -71,9 +69,9 @@ func redactedURL(raw string) string {
 	return parsed.Redacted()
 }
 
-func Layered(env config.LookupFunc, remote map[string]string) config.LookupFunc {
+func layered(env config.LookupFunc, remote map[string]string) config.LookupFunc {
 	return func(key string) (string, bool) {
-		if value, ok := env(key); ok && strings.TrimSpace(value) != "" {
+		if value, ok := env(key); ok {
 			return value, true
 		}
 		value, ok := remote[key]
@@ -81,28 +79,12 @@ func Layered(env config.LookupFunc, remote map[string]string) config.LookupFunc 
 	}
 }
 
-func Redact(properties map[string]string) map[string]string {
-	safe := make(map[string]string, len(properties))
-	for key, value := range properties {
-		if IsSensitive(key) {
-			value = redacted
-		}
-		safe[key] = value
-	}
-	return safe
-}
-
-func IsSensitive(key string) bool {
-	upper := strings.ToUpper(key)
-	return slices.ContainsFunc(sensitiveMarkers, func(marker string) bool {
-		return strings.Contains(upper, marker)
-	})
-}
-
 func toEnvKeys(properties map[string]string) map[string]string {
 	converted := make(map[string]string, len(properties))
-	for key, value := range properties {
-		converted[EnvKey(key)] = value
+	for property, value := range properties {
+		if key := envKey(property); !config.EnvOnly(key) {
+			converted[key] = value
+		}
 	}
 	return converted
 }

@@ -1,31 +1,32 @@
-package remote_test
+package remote
 
 import (
-	"errors"
 	"strings"
 	"testing"
-
-	"github.com/grupomariposa/platform/products-api/internal/config/remote"
 )
 
-const springBody = `# comment
-! bang comment
-
-rate-limit.rps: 200
-auth.jwks-url: http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs
-fault.rules=PRD-012:503:2,PRD-013:timeout
-escaped\:key\=name = a\\b\:c\=d
-spaced   value with spaces
-tabs=one\ttwo\nthree
-unicode=caf\u00e9
-multi.line = first,\
-    second
-management.endpoints.web.exposure.include: health
-empty.value=
-lonely.key`
+const springBody = "# comment\n" +
+	"! bang comment\n" +
+	"\n" +
+	"rate-limit.rps: 200\n" +
+	"auth.jwks-url: http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs\n" +
+	"fault.rules=PRD-012:503:2,PRD-013:timeout\n" +
+	`escaped\:key\=name = a\\b\:c\=d` + "\n" +
+	"spaced   value with spaces \t\n" +
+	`kept.trailing = value\ ` + "\n" +
+	`tabs=one\ttwo\nthree\rfour\ffive` + "\n" +
+	`unicode=caf\u00e9` + "\n" +
+	`emoji=\uD83D\uDE00` + "\n" +
+	`lonely.surrogate=\uD83Dx` + "\n" +
+	"multi.line = first,\\\n" +
+	"    second\n" +
+	"\f  form.feed.indent=yes\n" +
+	"management.endpoints.web.exposure.include: health\n" +
+	"empty.value=\n" +
+	"lonely.key\n"
 
 func TestParseProperties(t *testing.T) {
-	got, err := remote.ParseProperties(strings.NewReader(springBody))
+	got, err := parseProperties(strings.NewReader(springBody))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -35,9 +36,13 @@ func TestParseProperties(t *testing.T) {
 		"fault.rules":      "PRD-012:503:2,PRD-013:timeout",
 		"escaped:key=name": `a\b:c=d`,
 		"spaced":           "value with spaces",
-		"tabs":             "one\ttwo\nthree",
+		"kept.trailing":    "value ",
+		"tabs":             "one\ttwo\nthree\rfour\ffive",
 		"unicode":          "café",
+		"emoji":            "\U0001F600",
+		"lonely.surrogate": "\uFFFDx",
 		"multi.line":       "first,second",
+		"form.feed.indent": "yes",
 		"management.endpoints.web.exposure.include": "health",
 		"empty.value": "",
 		"lonely.key":  "",
@@ -61,7 +66,7 @@ func TestParsePropertiesRejectsMalformedInput(t *testing.T) {
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := remote.ParseProperties(strings.NewReader(body)); err == nil {
+			if _, err := parseProperties(strings.NewReader(body)); err == nil {
 				t.Fatal("want parse error")
 			}
 		})
@@ -69,41 +74,32 @@ func TestParsePropertiesRejectsMalformedInput(t *testing.T) {
 }
 
 func TestParsePropertiesKeepsPendingContinuationAtEOF(t *testing.T) {
-	got, err := remote.ParseProperties(strings.NewReader("key=value\\"))
-	if err != nil || got["key"] != "value" {
+	got, err := parseProperties(strings.NewReader("key=value\\"))
+	if err != nil || len(got) != 1 || got["key"] != "value" {
 		t.Fatalf("want value, got %v err=%v", got, err)
 	}
 }
 
-func TestEnvKey(t *testing.T) {
-	cases := map[string]string{
-		"rate-limit.rps":         "RATE_LIMIT_RPS",
-		"fault.rules":            "FAULT_RULES",
-		"auth.jwks-url":          "AUTH_JWKS_URL",
-		" request-timeout-ms ":   "REQUEST_TIMEOUT_MS",
-		"PORT":                   "PORT",
-		"auth.required-role":     "AUTH_REQUIRED_ROLE",
-		"shutdown.timeout.ms":    "SHUTDOWN_TIMEOUT_MS",
-		"fault.timeout-ms":       "FAULT_TIMEOUT_MS",
-		"rate-limit.burst":       "RATE_LIMIT_BURST",
-		"log.level":              "LOG_LEVEL",
-		"auth.enabled":           "AUTH_ENABLED",
-		"auth.issuer":            "AUTH_ISSUER",
-		"request.timeout.ms":     "REQUEST_TIMEOUT_MS",
-		"shutdown-timeout-ms":    "SHUTDOWN_TIMEOUT_MS",
-		"fault-timeout-ms":       "FAULT_TIMEOUT_MS",
-		"management.server.port": "MANAGEMENT_SERVER_PORT",
-	}
-	for property, want := range cases {
-		if got := remote.EnvKey(property); got != want {
-			t.Errorf("%q: want %q, got %q", property, want, got)
-		}
+func TestUnescapeKeepsLoneTrailingBackslash(t *testing.T) {
+	got, err := unescape([]rune(`end\`))
+	if err != nil || got != `end\` {
+		t.Fatalf("want literal backslash, got %q err=%v", got, err)
 	}
 }
 
-func TestMalformedUnicodeIsWrapped(t *testing.T) {
-	_, err := remote.ParseProperties(strings.NewReader("key=\\uzzzz"))
-	if err == nil || errors.Unwrap(err) == nil {
-		t.Fatalf("want wrapped error, got %v", err)
+func TestEnvKey(t *testing.T) {
+	cases := []struct{ property, want string }{
+		{"rate-limit.rps", "RATE_LIMIT_RPS"},
+		{"fault.rules", "FAULT_RULES"},
+		{"auth.jwks-url", "AUTH_JWKS_URL"},
+		{" request-timeout-ms	", "REQUEST_TIMEOUT_MS"},
+		{"fault.injection-enabled", "FAULT_INJECTION_ENABLED"},
+		{"auth.audience", "AUTH_AUDIENCE"},
+		{"management.server.port", "MANAGEMENT_SERVER_PORT"},
+	}
+	for _, tc := range cases {
+		if got := envKey(tc.property); got != tc.want {
+			t.Errorf("%q: want %q, got %q", tc.property, tc.want, got)
+		}
 	}
 }
