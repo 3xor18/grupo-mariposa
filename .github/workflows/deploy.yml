@@ -1,0 +1,54 @@
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        required: true
+      services:
+        description: Services to deploy (comma separated)
+        default: products-api,clients-api,order-processor,order-tracker
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      EKS_CLUSTER: ${{ vars.EKS_CLUSTER_NAME }}
+      ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+      NAMESPACE: grupo-mariposa
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assume deploy role with OIDC (no static AWS keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - uses: azure/setup-helm@v4
+      - name: Build, push and roll out
+        env:
+          SERVICES: ${{ inputs.services }}
+          TAG: ${{ github.sha }}
+        run: |
+          aws eks update-kubeconfig --name "$EKS_CLUSTER" --region "$AWS_REGION"
+          IFS=',' read -ra LIST <<< "$SERVICES"
+          for service in "${LIST[@]}"; do
+            image="$ECR_REGISTRY/grupo-mariposa/$service"
+            docker build -t "$image:$TAG" "$service"
+            docker push "$image:$TAG"
+            helm upgrade --install "$service" deploy/helm/mariposa-service \
+              --namespace "$NAMESPACE" --create-namespace \
+              -f "deploy/helm/values/$service.yaml" \
+              --set image.repository="$image" --set image.tag="$TAG" \
+              --atomic --wait --timeout 10m
+          done
