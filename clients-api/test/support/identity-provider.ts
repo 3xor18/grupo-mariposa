@@ -19,7 +19,8 @@ const KEY_ID = 'test-key';
 export interface TokenOptions {
   readonly roles?: readonly string[];
   readonly issuer?: string;
-  readonly audience?: string;
+  readonly audience?: string | string[];
+  readonly withoutAudience?: boolean;
   readonly expiresIn?: string;
   readonly expired?: boolean;
   readonly withoutExpiration?: boolean;
@@ -79,9 +80,11 @@ export class TestIdentityProvider {
     })
       .setProtectedHeader({ alg: 'RS256', kid: options.keyId ?? KEY_ID })
       .setIssuer(options.issuer ?? TEST_ISSUER)
-      .setAudience(options.audience ?? TEST_AUDIENCE)
       .setSubject('service-account-order-processor')
       .setIssuedAt(nowSeconds - 120);
+    if (options.withoutAudience !== true) {
+      jwt.setAudience(options.audience ?? TEST_AUDIENCE);
+    }
     if (options.notBefore !== undefined) {
       jwt.setNotBefore(options.notBefore);
     }

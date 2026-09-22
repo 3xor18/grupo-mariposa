@@ -17,10 +17,12 @@ describe('loadConfig', () => {
         issuer: AUTH_ENV.AUTH_ISSUER,
         jwksUrl: AUTH_ENV.AUTH_JWKS_URL,
         requiredRole: 'clients-reader',
+        audience: 'clients-api',
       },
       faultInjection: { enabled: false, rules: [], timeoutMs: 5000 },
       rateLimit: { requestsPerSecond: 200, burst: 400, maxTrackedCallers: 10_000 },
       shutdown: { drainMs: 5000, timeoutMs: 10_000 },
+      http: { apiDocsEnabled: false, trustProxy: false },
     });
   });
 
@@ -30,7 +32,9 @@ describe('loadConfig', () => {
       PORT: '8082',
       LOG_LEVEL: 'debug',
       AUTH_REQUIRED_ROLE: 'custom-role',
-      AUTH_AUDIENCE: 'clients-api',
+      AUTH_AUDIENCE: 'clients-api-v2',
+      API_DOCS_ENABLED: 'true',
+      TRUST_PROXY: '1',
       FAULT_INJECTION_ENABLED: 'true',
       FAULT_RULES: 'CLI-40001:503:2, CLI-40002:timeout',
       FAULT_TIMEOUT_MS: '250',
@@ -50,7 +54,7 @@ describe('loadConfig', () => {
         issuer: AUTH_ENV.AUTH_ISSUER,
         jwksUrl: AUTH_ENV.AUTH_JWKS_URL,
         requiredRole: 'custom-role',
-        audience: 'clients-api',
+        audience: 'clients-api-v2',
       },
       faultInjection: {
         enabled: true,
@@ -62,6 +66,7 @@ describe('loadConfig', () => {
       },
       rateLimit: { requestsPerSecond: 10, burst: 20, maxTrackedCallers: 50 },
       shutdown: { drainMs: 0, timeoutMs: 1500 },
+      http: { apiDocsEnabled: true, trustProxy: 1 },
     });
   });
 
@@ -81,13 +86,46 @@ describe('loadConfig', () => {
     );
   });
 
-  it('should_refuse_fault_injection_in_production', () => {
+  it('should_refuse_unsafe_switches_in_production', () => {
     expect(() =>
-      loadConfig({ ...AUTH_ENV, NODE_ENV: 'production', FAULT_INJECTION_ENABLED: 'true' }),
+      loadConfig({
+        NODE_ENV: 'production',
+        AUTH_ENABLED: 'false',
+        FAULT_INJECTION_ENABLED: 'true',
+        API_DOCS_ENABLED: 'true',
+      }),
     ).toThrow(
-      'Invalid configuration: FAULT_INJECTION_ENABLED: must not be true when NODE_ENV=production',
+      'Invalid configuration: AUTH_ENABLED=false is not allowed when NODE_ENV=production; ' +
+        'FAULT_INJECTION_ENABLED=true is not allowed when NODE_ENV=production; ' +
+        'API_DOCS_ENABLED=true is not allowed when NODE_ENV=production',
     );
-    expect(loadConfig({ ...AUTH_ENV, NODE_ENV: 'production' }).faultInjection.enabled).toBe(false);
+  });
+
+  it.each([
+    [{ AUTH_ENABLED: 'false' }, 'AUTH_ENABLED=false'],
+    [{ FAULT_INJECTION_ENABLED: 'true' }, 'FAULT_INJECTION_ENABLED=true'],
+    [{ API_DOCS_ENABLED: 'true' }, 'API_DOCS_ENABLED=true'],
+  ])('should_refuse_%j_in_production', (overrides, setting) => {
+    expect(() => loadConfig({ ...AUTH_ENV, NODE_ENV: 'production', ...overrides })).toThrow(
+      `Invalid configuration: ${setting} is not allowed when NODE_ENV=production`,
+    );
+  });
+
+  it('should_start_in_production_with_secure_defaults', () => {
+    const config = loadConfig({ ...AUTH_ENV, NODE_ENV: 'production' });
+
+    expect(config.auth).toMatchObject({ enabled: true, audience: 'clients-api' });
+    expect(config.faultInjection.enabled).toBe(false);
+    expect(config.http.apiDocsEnabled).toBe(false);
+  });
+
+  it.each([
+    ['true', true],
+    ['false', false],
+    ['2', 2],
+    ['loopback, 10.0.0.0/8', 'loopback, 10.0.0.0/8'],
+  ])('should_parse_trust_proxy_%s', (raw, expected) => {
+    expect(loadConfig({ ...AUTH_ENV, TRUST_PROXY: raw }).http.trustProxy).toEqual(expected);
   });
 
   it.each([
@@ -97,6 +135,9 @@ describe('loadConfig', () => {
     [{ AUTH_ENABLED: 'yes' }, 'AUTH_ENABLED: Invalid option: expected one of "true"|"false"'],
     [{ AUTH_ISSUER: 'not a url' }, 'AUTH_ISSUER: Invalid URL'],
     [{ AUTH_AUDIENCE: '' }, 'AUTH_AUDIENCE: Too small'],
+    [{ AUTH_AUDIENCE: '   ' }, 'AUTH_AUDIENCE: Too small'],
+    [{ TRUST_PROXY: ' ' }, 'TRUST_PROXY: Too small'],
+    [{ API_DOCS_ENABLED: 'yes' }, 'API_DOCS_ENABLED: Invalid option'],
     [
       { FAULT_RULES: 'CLI-1:418' },
       'FAULT_RULES: FaultRuleSyntaxError: Invalid fault rule "CLI-1:418"',

@@ -81,7 +81,7 @@ export class JoseAccessTokenVerifier implements AccessTokenVerifier {
       issuer: settings.issuer,
       algorithms: [...ACCEPTED_ALGORITHMS],
       requiredClaims: [...REQUIRED_CLAIMS],
-      ...(settings.audience === undefined ? {} : { audience: settings.audience }),
+      audience: settings.audience,
     };
   }
 
