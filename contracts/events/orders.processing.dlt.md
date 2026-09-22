@@ -22,6 +22,13 @@ message can still be inspected and replayed as-is.
 | `kafka_dlt-original-offset` | long | yes | Added by Spring Kafka |
 | `traceparent` | W3C | when available | Trace that failed |
 
+## Validation
+`order-processor` validates every `orders.created.v1` message against
+`events/orders.created.v1.schema.json` plus its business rules before any lookup. `clientId` must match
+`^CLI-[A-Z0-9]{1,20}$` and every `productId` must match `^PRD-[A-Z0-9]{1,20}$`, the same formats that
+`clients-api` and `products-api` accept. A violation is never retried: the message goes to this topic with
+`x-error-category=VALIDATION`.
+
 ## Replay
 Messages in `EXTERNAL_TRANSIENT`, `PERSISTENCE` and `UNEXPECTED` can be replayed to `orders.created.v1`
 without changes once the cause is fixed: the inbox dedup and the `TECHNICAL_FAILURE` retry rule make replay safe.

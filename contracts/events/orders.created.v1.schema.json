@@ -17,7 +17,11 @@
     "orderId": { "type": "string", "minLength": 1, "maxLength": 64 },
     "market": { "type": "string", "enum": ["MX", "CO", "PE"] },
     "currency": { "type": "string", "enum": ["MXN", "COP", "PEN"] },
-    "clientId": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "clientId": {
+      "type": "string",
+      "pattern": "^CLI-[A-Z0-9]{1,20}$",
+      "description": "Same format as clients-api GET /clients/{clientId}."
+    },
     "channel": { "type": "string", "maxLength": 32 },
     "items": {
       "type": "array",
@@ -27,15 +31,16 @@
         "type": "object",
         "required": ["productId", "quantity", "unitPrice"],
         "properties": {
-          "productId": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "productId": {
+            "type": "string",
+            "pattern": "^PRD-[A-Z0-9]{1,20}$",
+            "description": "Same format as products-api GET /products/{productId}."
+          },
           "quantity": { "type": "integer", "minimum": 1 },
           "unitPrice": { "type": "number", "minimum": 0 }
         }
       }
     }
   },
-  "x-business-rules": [
-    "productId must be unique within items",
-    "currency must match market: MX-MXN, CO-COP, PE-PEN"
-  ]
+  "$comment": "Business rules outside JSON Schema: productId must be unique within items; currency must match market (MX-MXN, CO-COP, PE-PEN). order-processor enforces this schema, including the productId and clientId patterns, and routes violations to orders.processing.dlt with x-error-category=VALIDATION."
 }

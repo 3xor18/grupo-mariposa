@@ -29,11 +29,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/Problem'
         '401':
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
         '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '500':
           $ref: '#/components/responses/Problem'
   /orders:
     get:
@@ -76,6 +82,10 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
 components:
   securitySchemes:
     bearerAuth:
@@ -91,6 +101,22 @@ components:
           schema:
             $ref: '../common/problem.schema.json'
   schemas:
+    Market:
+      type: string
+      enum: [MX, CO, PE]
+    Currency:
+      type: string
+      enum: [MXN, COP, PEN]
+    RejectionReason:
+      type: [string, 'null']
+      description: Primary rejection code, null unless the order is REJECTED.
+      enum:
+        - null
+        - CLIENT_NOT_FOUND
+        - CLIENT_NOT_ACTIVE
+        - CLIENT_MARKET_MISMATCH
+        - PRODUCT_NOT_FOUND
+        - PRODUCT_NOT_ACTIVE
     Money:
       type: number
       description: Monetary amount with two decimals, HALF_UP
@@ -119,9 +145,9 @@ components:
           type: string
           enum: [APPROVED, REJECTED, TECHNICAL_FAILURE]
         market:
-          type: string
+          $ref: '#/components/schemas/Market'
         currency:
-          type: string
+          $ref: '#/components/schemas/Currency'
         channel:
           type: [string, 'null']
         client:
@@ -133,7 +159,7 @@ components:
         totals:
           $ref: '#/components/schemas/Totals'
         reason:
-          type: [string, 'null']
+          $ref: '#/components/schemas/RejectionReason'
         violations:
           type: array
           items:
@@ -241,10 +267,11 @@ components:
           type: string
         status:
           type: string
+          enum: [APPROVED, REJECTED, TECHNICAL_FAILURE]
         market:
-          type: string
+          $ref: '#/components/schemas/Market'
         currency:
-          type: string
+          $ref: '#/components/schemas/Currency'
         clientId:
           type: string
         eventVersion:
@@ -252,7 +279,7 @@ components:
         grandTotal:
           $ref: '#/components/schemas/Money'
         reason:
-          type: [string, 'null']
+          $ref: '#/components/schemas/RejectionReason'
         processedAt:
           type: string
           format: date-time
