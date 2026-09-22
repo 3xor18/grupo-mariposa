@@ -1,4 +1,4 @@
-package com.grupomariposa.orders.infrastructure.kafka.dlt;
+package com.grupomariposa.orders.infrastructure.observability;
 
 import java.util.regex.Pattern;
 
@@ -9,6 +9,7 @@ public final class CauseSanitizer {
     private static final String UNKNOWN = "unknown";
     private static final String MASK = "[redacted]";
     private static final String SPACE = " ";
+    private static final String DESCRIPTION_SEPARATOR = ": ";
     private static final Pattern CONTROL = Pattern.compile("\\p{Cntrl}");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
     private static final Pattern BEARER = Pattern.compile("(?i)bearer\\s+[A-Za-z0-9._~+/=-]+");
@@ -27,6 +28,11 @@ public final class CauseSanitizer {
         cleaned = EMAIL.matcher(cleaned).replaceAll(MASK);
         cleaned = WHITESPACE.matcher(cleaned).replaceAll(SPACE).trim();
         return truncate(cleaned, MAX_CAUSE_LENGTH);
+    }
+
+    public String describe(final Throwable failure) {
+        return failure.getClass().getSimpleName() + DESCRIPTION_SEPARATOR
+                + cause(failure.getMessage());
     }
 
     public String identifier(final String raw) {

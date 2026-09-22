@@ -17,7 +17,7 @@ import com.grupomariposa.orders.infrastructure.persistence.document.OrderDocumen
 import com.grupomariposa.orders.infrastructure.persistence.document.OutboxDocument;
 import com.grupomariposa.orders.infrastructure.persistence.document.OutboxStatus;
 import com.grupomariposa.orders.infrastructure.persistence.mapping.OrderDocumentMapper;
-import com.grupomariposa.orders.infrastructure.persistence.outbox.OutboxPayloadFactory;
+import com.grupomariposa.orders.infrastructure.messaging.OutboxPayloadFactory;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -80,6 +80,7 @@ public final class MongoOrderStore implements OrderStore {
         final Query guard = query(where(Fields.ID).is(order.orderId()).orOperator(
                 where(Fields.EVENT_VERSION).lt(order.eventVersion()),
                 where(Fields.EVENT_VERSION).is(order.eventVersion())
+                        .and(Fields.SOURCE_EVENT_ID).is(order.sourceEventId())
                         .and(Fields.STATUS).is(OrderStatus.TECHNICAL_FAILURE.name())));
         try {
             mongo.findAndReplace(guard, mapper.toDocument(order),

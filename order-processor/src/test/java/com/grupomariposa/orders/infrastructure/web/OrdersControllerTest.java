@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.grupomariposa.orders.application.error.PersistenceException;
 import com.grupomariposa.orders.application.port.in.FindOrderQuery;
 import com.grupomariposa.orders.application.port.in.ListOrdersQuery;
 import com.grupomariposa.orders.application.query.OrderSearchCriteria;
@@ -17,6 +18,7 @@ import com.grupomariposa.orders.application.query.PageResult;
 import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.OrderStatus;
 import com.grupomariposa.orders.infrastructure.config.WebConfiguration;
+import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import com.grupomariposa.orders.infrastructure.observability.TraceContext;
 import com.grupomariposa.orders.infrastructure.persistence.PersistenceFixtures;
 import com.grupomariposa.orders.infrastructure.web.security.WebSecurityProperties;
@@ -46,8 +48,10 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
     "app.security.allowed-origins=http://localhost:8090",
     "app.security.reader-role=orders-reader",
     "app.security.admin-role=orders-admin",
+    "app.security.api-docs-enabled=false",
     "app.api.orders.default-page-size=20",
-    "app.api.orders.max-page-size=100"
+    "app.api.orders.max-page-size=100",
+    "app.api.orders.max-offset=10000"
 })
 class OrdersControllerTest {
 
@@ -154,6 +158,30 @@ class OrdersControllerTest {
     }
 
     @Test
+    void should_hide_api_docs_when_disabled() throws Exception {
+        mockMvc.perform(get("/v3/api-docs").with(jwt().authorities(
+                        new SimpleGrantedAuthority(READER))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_cap_deep_pagination() throws Exception {
+        mockMvc.perform(reader(get("/orders").param("page", "101").param("size", "100")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("page"));
+    }
+
+    @Test
+    void should_answer_503_when_store_is_unavailable() throws Exception {
+        when(findOrder.find("ORD-DOWN"))
+                .thenThrow(new PersistenceException("MongoDB read failed", null));
+
+        mockMvc.perform(reader(get("/orders/ORD-DOWN")))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("SERVICE_UNAVAILABLE"));
+    }
+
+    @Test
     void should_hide_unexpected_errors_behind_500() throws Exception {
         when(findOrder.find("ORD-BOOM")).thenThrow(new IllegalStateException("db password"));
 
@@ -186,6 +214,11 @@ class OrdersControllerTest {
         @Bean
         Clock clock() {
             return Clock.systemUTC();
+        }
+
+        @Bean
+        CauseSanitizer causeSanitizer() {
+            return new CauseSanitizer();
         }
     }
 }

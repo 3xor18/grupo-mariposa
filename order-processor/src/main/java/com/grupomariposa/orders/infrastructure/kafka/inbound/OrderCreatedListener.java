@@ -26,7 +26,7 @@ public final class OrderCreatedListener {
             "Version %d of the order was already decided by event %s";
 
     private final OrderMessageReader reader;
-    private final OrderMessageMapper mapper = new OrderMessageMapper();
+    private final OrderMessageMapper mapper;
     private final OrderCommandValidator validator;
     private final ProcessOrderUseCase useCase;
     private final ProcessingObserver observer;
@@ -35,6 +35,7 @@ public final class OrderCreatedListener {
     private final ProcessingMetrics metrics;
 
     public OrderCreatedListener(final OrderMessageReader reader,
+                                final OrderMessageMapper mapper,
                                 final OrderCommandValidator validator,
                                 final ProcessOrderUseCase useCase,
                                 final ProcessingObserver observer,
@@ -42,6 +43,7 @@ public final class OrderCreatedListener {
                                 final TraceContext traceContext,
                                 final ProcessingMetrics metrics) {
         this.reader = Objects.requireNonNull(reader, "reader");
+        this.mapper = Objects.requireNonNull(mapper, "mapper");
         this.validator = Objects.requireNonNull(validator, "validator");
         this.useCase = Objects.requireNonNull(useCase, "useCase");
         this.observer = Objects.requireNonNull(observer, "observer");

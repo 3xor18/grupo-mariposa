@@ -6,17 +6,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.grupomariposa.orders.application.command.OrderCommand;
-import com.grupomariposa.orders.application.command.Reception;
+import com.grupomariposa.orders.application.ApplicationFixtures;
 import com.grupomariposa.orders.application.outcome.ProcessingOutcome;
 import com.grupomariposa.orders.application.port.in.ProcessOrderUseCase;
-import com.grupomariposa.orders.domain.model.Currency;
-import com.grupomariposa.orders.domain.model.Market;
-import com.grupomariposa.orders.domain.model.RequestedItem;
 import com.grupomariposa.orders.support.Contracts;
 import com.grupomariposa.orders.support.IntegrationTest;
-import java.math.BigDecimal;
-import java.time.Instant;
+import com.grupomariposa.orders.support.JwtTokens;
+import com.grupomariposa.orders.support.OrderEvents;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -50,7 +46,7 @@ class OrdersApiIT extends IntegrationTest {
 
         assertThat(Contracts.validateOpenApiSchema(OPENAPI, "Order", body)).isEmpty();
         assertThat(body.at("/client/name").asText()).isEqualTo("Distribuidora Central");
-        assertThat(body.at("/totals/grandTotal").decimalValue()).isEqualByComparingTo("958.67");
+        assertThat(body.at("/totals/grandTotal").decimalValue()).isEqualByComparingTo("2100.11");
         assertThat(body.at("/lines/0/discountRate").decimalValue()).isEqualByComparingTo("0.03");
     }
 
@@ -87,12 +83,35 @@ class OrdersApiIT extends IntegrationTest {
     }
 
     @Test
+    void should_authorize_real_keycloak_style_tokens_by_realm_role_and_audience()
+            throws Exception {
+        JwtTokens.publishKeys(WIREMOCK);
+        final String orderId = seedApprovedOrder();
+        final String reader = JwtTokens.token(JwtTokens.AUDIENCE, List.of("orders-reader"));
+        final String admin = JwtTokens.token(JwtTokens.AUDIENCE, List.of("orders-admin"));
+        final String noRole = JwtTokens.token(JwtTokens.AUDIENCE, List.of("offline_access"));
+        final String foreign = JwtTokens.token("another-api", List.of("orders-reader"));
+
+        assertThat(status(get("/orders/" + orderId), reader)).isEqualTo(200);
+        assertThat(status(get("/orders/" + orderId), noRole)).isEqualTo(403);
+        assertThat(status(get("/orders/" + orderId), foreign)).isEqualTo(401);
+        assertThat(status(get("/actuator/metrics"), reader)).isEqualTo(403);
+        assertThat(status(get("/actuator/metrics"), admin)).isEqualTo(200);
+        assertThat(mockMvc.perform(get("/v3/api-docs")).andReturn().getResponse().getStatus())
+                .isEqualTo(401);
+    }
+
+    @Test
     void should_expose_public_health_and_metrics() throws Exception {
         seedApprovedOrder();
 
         assertThat(read(mockMvc.perform(get("/health/live")).andReturn(), 200)
                 .get("status").asText()).isEqualTo("UP");
         assertThat(read(mockMvc.perform(get("/health/ready")).andReturn(), 200)
+                .get("status").asText()).isEqualTo("UP");
+        assertThat(read(mockMvc.perform(get("/livez")).andReturn(), 200)
+                .get("status").asText()).isEqualTo("UP");
+        assertThat(read(mockMvc.perform(get("/readyz")).andReturn(), 200)
                 .get("status").asText()).isEqualTo("UP");
         final String metrics = mockMvc.perform(get("/actuator/prometheus")).andReturn()
                 .getResponse().getContentAsString();
@@ -101,14 +120,10 @@ class OrdersApiIT extends IntegrationTest {
     }
 
     private String seedApprovedOrder() {
-        stubs.goldenClient("CLI-99821");
-        stubs.product("PRD-001", "MX", "ACTIVE", "STANDARD");
-        final String orderId = "ORD-API-" + UUID.randomUUID();
-        final ProcessingOutcome outcome = useCase.process(new OrderCommand(
-                "EVT-" + UUID.randomUUID(), 1, orderId, Market.MX, Currency.MXN, "CLI-99821",
-                "C1", Instant.parse("2026-09-18T15:42:10Z"),
-                List.of(new RequestedItem("PRD-001", 24, new BigDecimal("35.5"))),
-                new Reception(Instant.now(), null)));
+        stubs.golden();
+        final String orderId = OrderEvents.freshOrderId("API");
+        final ProcessingOutcome outcome = useCase.process(
+                ApplicationFixtures.command(orderId, "EVT-" + UUID.randomUUID(), 1));
         assertThat(outcome).isInstanceOf(ProcessingOutcome.Processed.class);
         return orderId;
     }
@@ -119,6 +134,12 @@ class OrdersApiIT extends IntegrationTest {
                 .jwt(token -> token.claim("realm_access", Map.of("roles",
                         List.of("orders-reader"))))
                 .authorities(new SimpleGrantedAuthority("ROLE_orders-reader")));
+    }
+
+    private int status(final MockHttpServletRequestBuilder request, final String token)
+            throws Exception {
+        return mockMvc.perform(request.header("Authorization", "Bearer " + token)).andReturn()
+                .getResponse().getStatus();
     }
 
     private JsonNode read(final MvcResult result, final int status) throws Exception {

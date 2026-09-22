@@ -1,5 +1,7 @@
 package com.grupomariposa.orders.infrastructure.web;
 
+import com.grupomariposa.orders.application.error.PersistenceException;
+import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -20,11 +22,14 @@ public class ApiExceptionHandler {
     private static final String NOT_FOUND = "Resource does not exist";
     private static final String NOT_ALLOWED = "HTTP method is not supported for this resource";
     private static final String INTERNAL = "Unexpected error while processing the request";
+    private static final String UNAVAILABLE = "Orders are temporarily unavailable";
 
     private final ProblemFactory problems;
+    private final CauseSanitizer sanitizer;
 
-    public ApiExceptionHandler(final ProblemFactory problems) {
+    public ApiExceptionHandler(final ProblemFactory problems, final CauseSanitizer sanitizer) {
         this.problems = Objects.requireNonNull(problems, "problems");
+        this.sanitizer = Objects.requireNonNull(sanitizer, "sanitizer");
     }
 
     @ExceptionHandler(OrderNotFoundException.class)
@@ -39,6 +44,14 @@ public class ApiExceptionHandler {
                                                  final HttpServletRequest request) {
         return respond(problems.invalid(failure.violations(), failure.getMessage(),
                 request.getRequestURI()));
+    }
+
+    @ExceptionHandler(PersistenceException.class)
+    public ResponseEntity<ProblemDetail> unavailable(final PersistenceException failure,
+                                                     final HttpServletRequest request) {
+        LOG.warn("Order store unavailable serving {}", request.getRequestURI());
+        return respond(problems.create(HttpStatus.SERVICE_UNAVAILABLE,
+                ApiErrorCode.SERVICE_UNAVAILABLE, UNAVAILABLE, request.getRequestURI()));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
@@ -56,7 +69,8 @@ public class ApiExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> unexpected(final Exception failure,
                                                     final HttpServletRequest request) {
-        LOG.error("Unhandled error serving {}", request.getRequestURI(), failure);
+        LOG.error("Unhandled error serving {}: {}", request.getRequestURI(),
+                sanitizer.describe(failure));
         return respond(problems.create(HttpStatus.INTERNAL_SERVER_ERROR,
                 ApiErrorCode.INTERNAL_ERROR, INTERNAL, request.getRequestURI()));
     }

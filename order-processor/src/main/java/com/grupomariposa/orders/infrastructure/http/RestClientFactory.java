@@ -1,24 +1,26 @@
 package com.grupomariposa.orders.infrastructure.http;
 
 import java.net.http.HttpClient;
+import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
-public final class RestClientFactory {
+public final class RestClientFactory implements AutoCloseable {
 
     private final RestClient.Builder builder;
     private final HttpDependenciesProperties properties;
-    private final Optional<ClientHttpRequestInterceptor> authentication;
+    private final List<ClientHttpRequestInterceptor> interceptors;
+    private final List<HttpClient> createdClients = new CopyOnWriteArrayList<>();
 
     public RestClientFactory(final RestClient.Builder builder,
                              final HttpDependenciesProperties properties,
-                             final Optional<ClientHttpRequestInterceptor> authentication) {
+                             final List<ClientHttpRequestInterceptor> interceptors) {
         this.builder = Objects.requireNonNull(builder, "builder");
         this.properties = Objects.requireNonNull(properties, "properties");
-        this.authentication = Objects.requireNonNull(authentication, "authentication");
+        this.interceptors = List.copyOf(interceptors);
     }
 
     public RestClient create(final HttpDependenciesProperties.Endpoint endpoint) {
@@ -27,14 +29,20 @@ public final class RestClientFactory {
                 .version(HttpClient.Version.HTTP_1_1)
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
+        createdClients.add(httpClient);
         final JdkClientHttpRequestFactory requestFactory =
                 new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(properties.readTimeout());
-        final RestClient.Builder configured = builder.clone()
+        return builder.clone()
                 .baseUrl(endpoint.baseUrl().toString())
-                .requestFactory(requestFactory);
-        authentication.ifPresent(interceptor ->
-                configured.requestInterceptors(list -> list.add(interceptor)));
-        return configured.build();
+                .requestFactory(requestFactory)
+                .requestInterceptors(list -> list.addAll(interceptors))
+                .build();
+    }
+
+    @Override
+    public void close() {
+        createdClients.forEach(HttpClient::close);
+        createdClients.clear();
     }
 }

@@ -1,5 +1,6 @@
 package com.grupomariposa.orders.infrastructure.kafka.dlt;
 
+import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.grupomariposa.orders.application.error.ErrorCategory;
@@ -26,6 +27,12 @@ class DltSupportTest {
     void should_strip_control_characters_secrets_and_emails() {
         assertThat(sanitizer.cause("line1\nline2\tBearer abc.def.ghi token=xyz mail a@b.com"))
                 .isEqualTo("line1 line2 [redacted] [redacted] mail [redacted]");
+    }
+
+    @Test
+    void should_describe_failures_without_leaking_secrets() {
+        assertThat(sanitizer.describe(new IllegalStateException("password=hunter2")))
+                .isEqualTo("IllegalStateException: [redacted]");
     }
 
     @Test

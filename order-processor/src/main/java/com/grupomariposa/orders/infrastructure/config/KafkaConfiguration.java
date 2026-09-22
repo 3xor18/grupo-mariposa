@@ -1,5 +1,6 @@
 package com.grupomariposa.orders.infrastructure.config;
 
+import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import com.grupomariposa.orders.application.port.in.ProcessOrderUseCase;
 import com.grupomariposa.orders.application.port.in.PublishPendingEventsUseCase;
 import com.grupomariposa.orders.application.port.in.RecordTechnicalFailureUseCase;
@@ -7,18 +8,19 @@ import com.grupomariposa.orders.application.port.out.ProcessingObserver;
 import com.grupomariposa.orders.application.port.out.TimeProvider;
 import com.grupomariposa.orders.application.validation.OrderCommandValidator;
 import com.grupomariposa.orders.infrastructure.kafka.MessagingProperties;
-import com.grupomariposa.orders.infrastructure.kafka.dlt.CauseSanitizer;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.DeadLetterProducer;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.DeadLetterRecoverer;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.DltHeadersFactory;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.OrderDeadLetterPublisher;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderCreatedListener;
+import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderMessageMapper;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderMessageReader;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.RetryableRecordFailure;
 import com.grupomariposa.orders.infrastructure.kafka.outbound.KafkaEventPublisher;
 import com.grupomariposa.orders.infrastructure.kafka.outbound.OutboxRelayScheduler;
 import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
 import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.kafka.ConcurrentKafkaListenerContainerFactoryConfigurer;
@@ -62,11 +64,6 @@ public class KafkaConfiguration {
         return factory;
     }
 
-    @Bean
-    public CauseSanitizer causeSanitizer() {
-        return new CauseSanitizer();
-    }
-
     @Bean(destroyMethod = "close")
     public DeadLetterProducer deadLetterProducer(
             final ProducerFactory<Object, Object> kafkaProducerFactory) {
@@ -84,8 +81,8 @@ public class KafkaConfiguration {
                 new DltHeadersFactory(clock, sanitizer));
         final DefaultErrorHandler handler = new DefaultErrorHandler(
                 new DeadLetterRecoverer(deadLetters, technicalFailures, observer, metrics,
-                        sanitizer, properties.deadLetterRetryDelay()),
-                backOff(properties.recordRetry()));
+                        sanitizer), backOff(properties.recordRetry()));
+        handler.setResetStateOnRecoveryFailure(false);
         handler.defaultFalse();
         handler.addRetryableExceptions(RetryableRecordFailure.class);
         return handler;
@@ -98,7 +95,8 @@ public class KafkaConfiguration {
                                                      final TimeProvider timeProvider,
                                                      final TraceContext traceContext,
                                                      final ProcessingMetrics metrics) {
-        return new OrderCreatedListener(new OrderMessageReader(), validator, useCase, observer,
+        return new OrderCreatedListener(new OrderMessageReader(), new OrderMessageMapper(),
+                validator, useCase, observer,
                 timeProvider, traceContext, metrics);
     }
 
@@ -109,8 +107,10 @@ public class KafkaConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "app.outbox", name = "enabled", havingValue = "true")
-    public OutboxRelayScheduler outboxRelayScheduler(final PublishPendingEventsUseCase relay) {
-        return new OutboxRelayScheduler(relay);
+    public OutboxRelayScheduler outboxRelayScheduler(final PublishPendingEventsUseCase relay,
+                                                     final CauseSanitizer sanitizer,
+                                                     final MeterRegistry registry) {
+        return new OutboxRelayScheduler(relay, sanitizer, registry);
     }
 
     private static ExponentialBackOffWithMaxRetries backOff(

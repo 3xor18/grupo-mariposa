@@ -4,7 +4,9 @@ import static com.grupomariposa.orders.application.ApplicationFixtures.RECEPTION
 import static com.grupomariposa.orders.application.ApplicationFixtures.goldenCommand;
 import static com.grupomariposa.orders.application.ApplicationFixtures.goldenSubmission;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
+import com.grupomariposa.orders.application.ApplicationFixtures;
 import com.grupomariposa.orders.domain.DomainFixtures;
 import com.grupomariposa.orders.domain.model.Currency;
 import com.grupomariposa.orders.domain.model.Market;
@@ -14,10 +16,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.function.UnaryOperator;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -25,8 +29,7 @@ class OrderCommandValidatorTest {
 
     private static final String REQUIRED = "is required";
 
-    private final OrderCommandValidator validator =
-            new OrderCommandValidator(DomainFixtures.MARKETS);
+    private final OrderCommandValidator validator = ApplicationFixtures.validator();
 
     @Test
     void should_build_command_when_submission_is_valid() {
@@ -121,12 +124,69 @@ class OrderCommandValidatorTest {
     @Test
     void should_only_accept_configured_markets_and_currencies() {
         final OrderCommandValidator mexicoOnly = new OrderCommandValidator(
-                new MarketCurrencies(Map.of(Market.MX, Currency.MXN)));
+                new MarketCurrencies(Map.of(Market.MX, Currency.MXN)),
+                ApplicationFixtures.CONTRACT_RULES);
 
         assertThat(errors(mexicoOnly.validate(marketAndCurrency("CO", "COP"), RECEPTION)))
                 .containsExactly(new ValidationError("market", "must be one of [MX]"));
         assertThat(mexicoOnly.validate(goldenSubmission(), RECEPTION))
                 .isInstanceOf(ValidationResult.Valid.class);
+    }
+
+    @ParameterizedTest(name = "unitPrice {0} -> {1}")
+    @CsvSource(delimiter = '|', value = {
+        "1e999999999|must not exceed 1000000000000",
+        "1000000000000.01|must not exceed 1000000000000",
+        "0.00001|must have at most 4 decimal places",
+        "1234567890.12345678901234567890123456789|must have at most 4 decimal places",
+        "0.1234567890123456789012345678901234567|must have at most 4 decimal places",
+        "-0.01|must be greater than or equal to 0"
+    })
+    void should_bound_unit_price_magnitude_scale_and_precision(final String price,
+                                                               final String message) {
+        assertThat(errors(validator.validate(withItems(List.of(
+                new UnvalidatedItem("PRD-1", 1L, new BigDecimal(price)))), RECEPTION)))
+                .containsExactly(new ValidationError("items[0].unitPrice", message));
+    }
+
+    @Test
+    void should_bound_significant_digits() {
+        final OrderCommandValidator strict = new OrderCommandValidator(DomainFixtures.MARKETS,
+                new ContractRules(Pattern.compile(".*"), Pattern.compile(".*"), 5, 4,
+                        new BigDecimal("1000000000000")));
+
+        assertThat(errors(strict.validate(withItems(List.of(
+                new UnvalidatedItem("PRD-1", 1L, new BigDecimal("123456.5")))), RECEPTION)))
+                .containsExactly(new ValidationError("items[0].unitPrice",
+                        "must have at most 5 significant digits"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"35.5000", "1e3", "1000000000000", "0"})
+    void should_accept_prices_within_limits(final String price) {
+        assertThat(validator.validate(withItems(List.of(new UnvalidatedItem("PRD-1", 1L,
+                new BigDecimal(price)))), RECEPTION)).isInstanceOf(ValidationResult.Valid.class);
+    }
+
+    @Test
+    void should_enforce_contract_identifier_patterns() {
+        final ValidationResult result = validator.validate(new UnvalidatedOrder("E1", 1, null,
+                "O1", "MX", "MXN", "client-1", null, List.of(
+                new UnvalidatedItem("prd_1", 1L, BigDecimal.ONE))), RECEPTION);
+
+        assertThat(errors(result)).containsExactly(
+                new ValidationError("clientId", "must match ^CLI-[A-Z0-9]{1,20}$"),
+                new ValidationError("items[0].productId", "must match ^PRD-[A-Z0-9]{1,20}$"));
+    }
+
+    @Test
+    void should_reject_unsafe_contract_rules() {
+        assertThatIllegalArgumentException().isThrownBy(() -> new ContractRules(
+                Pattern.compile("x"), Pattern.compile("y"), 0, 4, BigDecimal.ONE));
+        assertThatIllegalArgumentException().isThrownBy(() -> new ContractRules(
+                Pattern.compile("x"), Pattern.compile("y"), 18, -1, BigDecimal.ONE));
+        assertThatIllegalArgumentException().isThrownBy(() -> new ContractRules(
+                Pattern.compile("x"), Pattern.compile("y"), 18, 4, BigDecimal.ZERO));
     }
 
     @Test

@@ -11,6 +11,8 @@ import java.util.Optional;
 public final class RetryAfterParser {
 
     private static final String DIGITS = "\\d+";
+    private static final int MAX_SAFE_DIGITS = 18;
+    private static final Duration LONGEST = Duration.ofSeconds(Long.MAX_VALUE);
 
     private final Clock clock;
 
@@ -24,7 +26,8 @@ public final class RetryAfterParser {
         }
         final String value = header.trim();
         if (value.matches(DIGITS)) {
-            return Optional.of(Duration.ofSeconds(Long.parseLong(value)));
+            return Optional.of(value.length() > MAX_SAFE_DIGITS
+                    ? LONGEST : Duration.ofSeconds(Long.parseLong(value)));
         }
         return parseDate(value);
     }

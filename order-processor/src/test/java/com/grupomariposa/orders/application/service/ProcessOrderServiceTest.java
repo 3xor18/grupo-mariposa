@@ -56,7 +56,7 @@ class ProcessOrderServiceTest {
     @BeforeEach
     void setUp() {
         service = new ProcessOrderService(enricher, evaluator(), new OrderAssembler(() -> NOW),
-                store, ids, observer);
+                store, ids, observer, new VersionArbiter());
         when(ids.newEventId()).thenReturn(OUTPUT_EVENT_ID);
         when(store.findState(ORDER_ID)).thenReturn(Optional.empty());
     }

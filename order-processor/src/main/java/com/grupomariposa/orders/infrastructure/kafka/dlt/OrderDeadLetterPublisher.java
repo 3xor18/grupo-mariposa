@@ -1,10 +1,8 @@
 package com.grupomariposa.orders.infrastructure.kafka.dlt;
 
-import java.nio.charset.StandardCharsets;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.Headers;
 import org.springframework.kafka.core.KafkaOperations;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
@@ -18,8 +16,7 @@ public final class OrderDeadLetterPublisher extends DeadLetterPublishingRecovere
                                     final DltHeadersFactory headersFactory) {
         super(template, (record, exception) -> new TopicPartition(topic, ANY_PARTITION));
         setHeadersFunction(headersFactory::create);
-        excludeHeader(HeaderNames.HeadersToAdd.EX_MSG,
-                HeaderNames.HeadersToAdd.EX_STACKTRACE);
+        excludeHeader(HeaderNames.HeadersToAdd.EX_MSG, HeaderNames.HeadersToAdd.EX_STACKTRACE);
     }
 
     @Override
@@ -31,11 +28,7 @@ public final class OrderDeadLetterPublisher extends DeadLetterPublishingRecovere
                 ? null : topicPartition.partition();
         final Long timestamp = record.timestamp() < 0 ? null : record.timestamp();
         return new ProducerRecord<>(topicPartition.topic(), partition, timestamp,
-                keyOf(record, headers), value == null ? record.value() : value, headers);
-    }
-
-    private static Object keyOf(final ConsumerRecord<?, ?> record, final Headers headers) {
-        final Header orderId = headers.lastHeader(DltHeaders.ORDER_ID);
-        return orderId == null ? record.key() : new String(orderId.value(), StandardCharsets.UTF_8);
+                key == null ? record.key() : key, value == null ? record.value() : value,
+                headers);
     }
 }

@@ -9,6 +9,8 @@ import static org.mockito.Mockito.when;
 
 import com.grupomariposa.orders.application.port.in.PublishPendingEventsUseCase;
 import com.grupomariposa.orders.application.port.out.PendingEvent;
+import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -45,11 +47,14 @@ class OutboundKafkaTest {
         final PublishPendingEventsUseCase relay = mock(PublishPendingEventsUseCase.class);
         when(relay.publishPending()).thenThrow(new IllegalStateException("mongo down"))
                 .thenReturn(1);
-        final OutboxRelayScheduler scheduler = new OutboxRelayScheduler(relay);
+        final SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        final OutboxRelayScheduler scheduler =
+                new OutboxRelayScheduler(relay, new CauseSanitizer(), registry);
 
         scheduler.relay();
         scheduler.relay();
 
         verify(relay, times(2)).publishPending();
+        assertThat(registry.counter(OutboxRelayScheduler.RELAY_FAILURES).count()).isOne();
     }
 }

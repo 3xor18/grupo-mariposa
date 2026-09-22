@@ -29,17 +29,19 @@ public final class ProcessOrderService implements ProcessOrderUseCase {
     private final OrderStore store;
     private final IdGenerator idGenerator;
     private final ProcessingObserver observer;
-    private final VersionArbiter arbiter = new VersionArbiter();
+    private final VersionArbiter arbiter;
 
     public ProcessOrderService(final OrderEnricher enricher, final OrderEvaluator evaluator,
                                final OrderAssembler assembler, final OrderStore store,
-                               final IdGenerator idGenerator, final ProcessingObserver observer) {
+                               final IdGenerator idGenerator, final ProcessingObserver observer,
+                               final VersionArbiter arbiter) {
         this.enricher = Objects.requireNonNull(enricher, "enricher");
         this.evaluator = Objects.requireNonNull(evaluator, "evaluator");
         this.assembler = Objects.requireNonNull(assembler, "assembler");
         this.store = Objects.requireNonNull(store, "store");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.observer = Objects.requireNonNull(observer, "observer");
+        this.arbiter = Objects.requireNonNull(arbiter, "arbiter");
     }
 
     @Override

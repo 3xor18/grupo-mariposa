@@ -1,6 +1,7 @@
 package com.grupomariposa.orders.infrastructure.config;
 
 import com.grupomariposa.orders.infrastructure.kafka.MessagingProperties;
+import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import com.grupomariposa.orders.infrastructure.observability.KafkaHealthIndicator;
 import com.grupomariposa.orders.infrastructure.observability.LoggingProcessingObserver;
 import com.grupomariposa.orders.infrastructure.observability.OutboxMetrics;
@@ -21,6 +22,11 @@ public class ObservabilityConfiguration {
     @Bean
     public LoggingProcessingObserver processingObserver(final MeterRegistry registry) {
         return new LoggingProcessingObserver(registry);
+    }
+
+    @Bean
+    public CauseSanitizer causeSanitizer() {
+        return new CauseSanitizer();
     }
 
     @Bean

@@ -45,13 +45,16 @@ public final class OrderCommandValidator {
     private static final String EMPTY_ITEMS = "must contain at least one item";
     private static final String TOO_MANY_ITEMS = "must contain at most %d items";
     private static final String POSITIVE_QUANTITY = "must be an integer greater than 0";
-    private static final String NON_NEGATIVE_PRICE = "must be greater than or equal to 0";
     private static final String DUPLICATED_PRODUCT = "is duplicated within the order";
 
     private final MarketCurrencies markets;
+    private final ContractRules rules;
+    private final PriceRule priceRule;
 
-    public OrderCommandValidator(final MarketCurrencies markets) {
+    public OrderCommandValidator(final MarketCurrencies markets, final ContractRules rules) {
         this.markets = Objects.requireNonNull(markets, "markets");
+        this.rules = Objects.requireNonNull(rules, "rules");
+        this.priceRule = new PriceRule(rules);
     }
 
     public ValidationResult validate(final UnvalidatedOrder order, final Reception reception) {
@@ -65,10 +68,11 @@ public final class OrderCommandValidator {
         return new ValidationResult.Valid(toCommand(order, reception));
     }
 
-    private static void validateHeader(final UnvalidatedOrder order, final ErrorCollector errors) {
+    private void validateHeader(final UnvalidatedOrder order, final ErrorCollector errors) {
         errors.requireText(EVENT_ID, order.eventId(), MAX_ID_LENGTH);
         errors.requireText(ORDER_ID, order.orderId(), MAX_ID_LENGTH);
-        errors.requireText(CLIENT_ID, order.clientId(), MAX_ID_LENGTH);
+        errors.requireIdentifier(CLIENT_ID, order.clientId(), MAX_ID_LENGTH,
+                rules.clientIdPattern());
         errors.limitLength(CHANNEL, order.channel(), MAX_CHANNEL_LENGTH);
         if (order.eventVersion() != null && order.eventVersion() < DEFAULT_EVENT_VERSION) {
             errors.add(EVENT_VERSION, MIN_VERSION);
@@ -80,31 +84,26 @@ public final class OrderCommandValidator {
 
     private void validateMarketAndCurrency(final UnvalidatedOrder order,
                                            final ErrorCollector errors) {
-        final Optional<Market> market = parseEnum(MARKET, order.market(),
-                Market.fromCode(order.market()).filter(markets::supports),
+        final Market market = Market.fromCode(order.market()).filter(markets::supports)
+                .orElse(null);
+        final Currency currency = currencyOf(order.currency()).orElse(null);
+        rejectUnknown(MARKET, order.market(), market,
                 markets.supportedMarkets().toArray(Market[]::new), errors);
-        final Optional<Currency> currency = parseEnum(CURRENCY, order.currency(),
-                currencyOf(order.currency()), Currency.values(), errors);
-        if (market.isPresent() && currency.isPresent()
-                && !markets.accepts(market.get(), currency.get())) {
-            errors.add(CURRENCY, CURRENCY_MISMATCH.formatted(market.get(),
-                    markets.currencyOf(market.get()).orElseThrow()));
+        rejectUnknown(CURRENCY, order.currency(), currency, Currency.values(), errors);
+        if (market != null && currency != null && !markets.accepts(market, currency)) {
+            errors.add(CURRENCY, CURRENCY_MISMATCH.formatted(market,
+                    markets.currencyOf(market).orElseThrow()));
         }
     }
 
-    private static <E extends Enum<E>> Optional<E> parseEnum(final String field,
-                                                             final String raw,
-                                                             final Optional<E> parsed,
-                                                             final E[] allowed,
-                                                             final ErrorCollector errors) {
-        if (errors.requirePresent(field, raw) && parsed.isEmpty()) {
+    private static void rejectUnknown(final String field, final String raw, final Enum<?> parsed,
+                                      final Enum<?>[] allowed, final ErrorCollector errors) {
+        if (errors.requirePresent(field, raw) && parsed == null) {
             errors.add(field, ONE_OF.formatted(Arrays.toString(allowed)));
         }
-        return parsed;
     }
 
-    private static void validateItems(final List<UnvalidatedItem> items,
-                                      final ErrorCollector errors) {
+    private void validateItems(final List<UnvalidatedItem> items, final ErrorCollector errors) {
         if (!errors.requirePresent(ITEMS, items)) {
             return;
         }
@@ -119,18 +118,19 @@ public final class OrderCommandValidator {
                 validateItem(index, items.get(index), seen, errors));
     }
 
-    private static void validateItem(final int index, final UnvalidatedItem item,
-                                     final Set<String> seen, final ErrorCollector errors) {
+    private void validateItem(final int index, final UnvalidatedItem item,
+                              final Set<String> seen, final ErrorCollector errors) {
         if (!errors.requirePresent(ITEM.formatted(index), item)) {
             return;
         }
         final String productField = ITEM_FIELD.formatted(index, PRODUCT_ID);
-        errors.requireText(productField, item.productId(), MAX_ID_LENGTH);
+        errors.requireIdentifier(productField, item.productId(), MAX_ID_LENGTH,
+                rules.productIdPattern());
         if (item.productId() != null && !seen.add(item.productId())) {
             errors.add(productField, DUPLICATED_PRODUCT);
         }
         validateQuantity(ITEM_FIELD.formatted(index, QUANTITY), item.quantity(), errors);
-        validatePrice(ITEM_FIELD.formatted(index, UNIT_PRICE), item, errors);
+        priceRule.check(ITEM_FIELD.formatted(index, UNIT_PRICE), item.unitPrice(), errors);
     }
 
     private static void validateQuantity(final String field, final Long quantity,
@@ -141,13 +141,6 @@ public final class OrderCommandValidator {
         }
     }
 
-    private static void validatePrice(final String field, final UnvalidatedItem item,
-                                      final ErrorCollector errors) {
-        if (errors.requirePresent(field, item.unitPrice()) && item.unitPrice().signum() < 0) {
-            errors.add(field, NON_NEGATIVE_PRICE);
-        }
-    }
-
     private static OrderCommand toCommand(final UnvalidatedOrder order,
                                           final Reception reception) {
         final int version = order.eventVersion() == null
@@ -155,8 +148,8 @@ public final class OrderCommandValidator {
         final Instant occurredAt = order.occurredAt() == null
                 ? null : parseInstant(order.occurredAt()).orElseThrow();
         final List<RequestedItem> items = order.items().stream()
-                .map(item -> new RequestedItem(item.productId(), item.quantity().intValue(),
-                        item.unitPrice()))
+                .map(item -> new RequestedItem(item.productId(),
+                        Math.toIntExact(item.quantity()), item.unitPrice()))
                 .toList();
         return new OrderCommand(order.eventId(), version, order.orderId(),
                 Market.fromCode(order.market()).orElseThrow(),

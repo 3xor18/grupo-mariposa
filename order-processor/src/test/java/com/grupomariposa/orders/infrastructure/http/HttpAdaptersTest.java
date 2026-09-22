@@ -23,15 +23,17 @@ import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.ProductProfile;
 import com.grupomariposa.orders.domain.model.ProductStatus;
 import com.grupomariposa.orders.domain.model.TaxCategory;
+import com.grupomariposa.orders.infrastructure.http.client.ClientResponseMapper;
 import com.grupomariposa.orders.infrastructure.http.client.HttpClientDirectory;
 import com.grupomariposa.orders.infrastructure.http.product.HttpProductCatalog;
+import com.grupomariposa.orders.infrastructure.http.product.ProductResponseMapper;
 import io.github.resilience4j.bulkhead.BulkheadRegistry;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryRegistry;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.Optional;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -65,14 +67,14 @@ class HttpAdaptersTest {
         final ResilienceFactory resilience = new ResilienceFactory(properties.resilience(),
                 retries, circuitBreakers, BulkheadRegistry.ofDefaults());
         final RestClientFactory restClients =
-                new RestClientFactory(RestClient.builder(), properties, Optional.empty());
+                new RestClientFactory(RestClient.builder(), properties, List.of());
         final RetryAfterParser retryAfter = new RetryAfterParser(Clock.systemUTC());
         clients = new HttpClientDirectory(restClients.create(properties.clients()),
                 new LookupExchange(Dependency.CLIENTS_API, retryAfter),
-                resilience.create(Dependency.CLIENTS_API));
+                resilience.create(Dependency.CLIENTS_API), new ClientResponseMapper());
         products = new HttpProductCatalog(restClients.create(properties.products()),
                 new LookupExchange(Dependency.PRODUCTS_API, retryAfter),
-                resilience.create(Dependency.PRODUCTS_API));
+                resilience.create(Dependency.PRODUCTS_API), new ProductResponseMapper());
     }
 
     @Test
@@ -109,8 +111,26 @@ class HttpAdaptersTest {
         API.verify(1, getRequestedFor(urlPathEqualTo("/clients/CLI-404")));
     }
 
+    @Test
+    void should_treat_any_2xx_with_body_as_found() {
+        API.stubFor(get("/clients/CLI-203").willReturn(aResponse().withStatus(203)
+                .withHeader("Content-Type", "application/json").withBody(CLIENT_BODY)));
+
+        assertThat(clients.findClient("CLI-203").value()).isPresent();
+    }
+
+    @Test
+    void should_close_created_http_clients() {
+        final RestClientFactory factory = new RestClientFactory(RestClient.builder(),
+                properties(), List.of());
+        factory.create(properties().clients());
+
+        factory.close();
+        factory.close();
+    }
+
     @ParameterizedTest
-    @ValueSource(ints = {429, 500, 502, 503, 504})
+    @ValueSource(ints = {408, 429, 500, 502, 503, 504})
     void should_retry_and_then_fail_transient_statuses(final int status) {
         API.stubFor(get("/clients/CLI-DOWN").willReturn(aResponse().withStatus(status)));
 
@@ -152,7 +172,7 @@ class HttpAdaptersTest {
     @Test
     void should_treat_timeouts_as_transient() {
         API.stubFor(get("/clients/CLI-SLOW").willReturn(okJson(CLIENT_BODY)
-                .withFixedDelay(600)));
+                .withFixedDelay(1500)));
 
         assertThatThrownBy(() -> clients.findClient("CLI-SLOW"))
                 .isInstanceOf(ExternalTransientException.class)
@@ -211,7 +231,7 @@ class HttpAdaptersTest {
         final HttpDependenciesProperties.Endpoint endpoint =
                 new HttpDependenciesProperties.Endpoint(URI.create(API.baseUrl()));
         return new HttpDependenciesProperties(endpoint, endpoint, Duration.ofMillis(500),
-                Duration.ofMillis(300), new HttpDependenciesProperties.OAuth(false, "test",
+                Duration.ofMillis(1000), new HttpDependenciesProperties.OAuth(false, "test",
                         URI.create(API.baseUrl()), "order-processor"),
                 new HttpDependenciesProperties.Resilience(3, Duration.ofMillis(5), 2.0, 0.5,
                         Duration.ofMillis(50), 20, 10, 50f, Duration.ofSeconds(10), 3, 32,

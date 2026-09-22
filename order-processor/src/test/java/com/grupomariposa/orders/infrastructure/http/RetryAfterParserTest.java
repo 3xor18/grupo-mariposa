@@ -22,6 +22,12 @@ class RetryAfterParserTest {
     }
 
     @Test
+    void should_not_overflow_on_huge_delays() {
+        assertThat(parser.parse("9".repeat(40)))
+                .contains(Duration.ofSeconds(Long.MAX_VALUE));
+    }
+
+    @Test
     void should_parse_http_dates() {
         assertThat(parser.parse("Tue, 22 Sep 2026 10:00:05 GMT")).contains(Duration.ofSeconds(5));
         assertThat(parser.parse("Tue, 22 Sep 2026 09:00:00 GMT")).contains(Duration.ZERO);

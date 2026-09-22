@@ -5,7 +5,6 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 public record TaxRateTable(Map<Market, Map<TaxCategory, Rate>> rates) {
 
@@ -30,10 +29,6 @@ public record TaxRateTable(Map<Market, Map<TaxCategory, Rate>> rates) {
             throw new IllegalArgumentException(UNKNOWN_MARKET.formatted(market));
         }
         return categories.get(category);
-    }
-
-    public boolean covers(final Set<Market> markets) {
-        return rates.keySet().containsAll(markets);
     }
 
     private static Map<TaxCategory, Rate> validated(final Market market,

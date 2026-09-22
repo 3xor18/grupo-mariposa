@@ -8,8 +8,12 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: http://issuer.test/realms/mariposa
+          audiences: order-processor
 
 management:
+  tracing:
+    sampling:
+      probability: 1.0
   otlp:
     tracing:
       export:
@@ -29,7 +33,8 @@ app:
     instance-id: integration-tests
   kafka:
     concurrency: 2
-    dead-letter-retry-delay: 200ms
+    create-topics: true
+    replication-factor: 1
     record-retry:
       initial-interval: 100ms
   http:
@@ -38,6 +43,8 @@ app:
       initial-backoff: 20ms
       sliding-window-size: 100
       minimum-number-of-calls: 100
+  persistence:
+    transaction-attempts: 10
   outbox:
     fixed-delay: 100ms
     initial-backoff: 200ms

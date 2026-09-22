@@ -16,6 +16,7 @@ import com.grupomariposa.orders.application.service.ProcessOrderService;
 import com.grupomariposa.orders.application.service.PublishPendingEventsService;
 import com.grupomariposa.orders.application.service.RecordTechnicalFailureService;
 import com.grupomariposa.orders.application.service.RelaySettings;
+import com.grupomariposa.orders.application.service.VersionArbiter;
 import com.grupomariposa.orders.application.validation.OrderCommandValidator;
 import com.grupomariposa.orders.domain.model.DiscountRule;
 import com.grupomariposa.orders.domain.model.MarketCurrencies;
@@ -82,8 +83,9 @@ public class ApplicationConfiguration {
     }
 
     @Bean
-    public OrderCommandValidator orderCommandValidator(final MarketCurrencies markets) {
-        return new OrderCommandValidator(markets);
+    public OrderCommandValidator orderCommandValidator(final MarketCurrencies markets,
+                                                       final ValidationProperties validation) {
+        return new OrderCommandValidator(markets, validation.rules());
     }
 
     @Bean
@@ -106,14 +108,20 @@ public class ApplicationConfiguration {
     }
 
     @Bean
+    public VersionArbiter versionArbiter() {
+        return new VersionArbiter();
+    }
+
+    @Bean
     public ProcessOrderService processOrderService(final OrderEnricher enricher,
                                                    final OrderEvaluator evaluator,
                                                    final OrderAssembler assembler,
                                                    final OrderStore store,
                                                    final IdGenerator idGenerator,
-                                                   final ProcessingObserver observer) {
+                                                   final ProcessingObserver observer,
+                                                   final VersionArbiter arbiter) {
         return new ProcessOrderService(enricher, evaluator, assembler, store, idGenerator,
-                observer);
+                observer, arbiter);
     }
 
     @Bean

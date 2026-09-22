@@ -31,6 +31,9 @@ public final class TransactionRunner {
             try {
                 return transactionTemplate.execute(work::apply);
             } catch (RuntimeException failure) {
+                if (!MongoErrors.isDatabaseFailure(failure)) {
+                    throw failure;
+                }
                 if (!MongoErrors.isTransient(failure) || attempt >= maxAttempts) {
                     throw translate(failure, attempt);
                 }
@@ -39,10 +42,7 @@ public final class TransactionRunner {
         }
     }
 
-    static RuntimeException translate(final RuntimeException failure, final int attempts) {
-        if (failure instanceof PersistenceException) {
-            return failure;
-        }
+    static PersistenceException translate(final RuntimeException failure, final int attempts) {
         final String message = attempts > 1
                 ? EXHAUSTED.formatted(attempts, MongoErrors.describe(failure))
                 : FAILED.formatted(MongoErrors.describe(failure));

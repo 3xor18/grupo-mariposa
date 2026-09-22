@@ -19,7 +19,6 @@ import com.grupomariposa.orders.infrastructure.web.dto.OrderSummaryResponse;
 import com.grupomariposa.orders.infrastructure.web.dto.TotalsResponse;
 import com.grupomariposa.orders.infrastructure.web.dto.ViolationResponse;
 import java.math.BigDecimal;
-import java.util.Optional;
 import java.util.function.Function;
 
 public final class OrderResponseMapper {
@@ -58,7 +57,7 @@ public final class OrderResponseMapper {
     }
 
     private static OrderLineResponse line(final OrderLine line) {
-        final Optional<LineAmounts> amounts = line.pricing();
+        final LineAmounts amounts = line.amounts();
         return new OrderLineResponse(line.productId(), line.name(), line.sku(),
                 name(line.taxCategory()), line.quantity(), line.unitPrice(),
                 money(amounts, LineAmounts::grossSubtotal),
@@ -74,14 +73,14 @@ public final class OrderResponseMapper {
                 totals.grandTotal().amount());
     }
 
-    private static BigDecimal money(final Optional<LineAmounts> amounts,
+    private static BigDecimal money(final LineAmounts amounts,
                                     final Function<LineAmounts, Money> field) {
-        return amounts.map(field).map(Money::amount).orElse(null);
+        return amounts == null ? null : field.apply(amounts).amount();
     }
 
-    private static BigDecimal rate(final Optional<LineAmounts> amounts,
+    private static BigDecimal rate(final LineAmounts amounts,
                                    final Function<LineAmounts, Rate> field) {
-        return amounts.map(field).map(Rate::value).orElse(null);
+        return amounts == null ? null : field.apply(amounts).value();
     }
 
     private static String name(final Enum<?> value) {

@@ -85,15 +85,28 @@ class ApplicationModelTest {
     @CsvSource({"0, 1", "1, 1", "2, 2", "3, 4", "7, 60", "40, 60"})
     void should_grow_relay_backoff_exponentially_up_to_cap(final int attempts,
                                                             final long seconds) {
-        final RelaySettings settings = new RelaySettings(1, Duration.ofSeconds(1),
+        final RelaySettings settings = new RelaySettings(1, Duration.ofSeconds(2),
                 Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(60), "n");
 
         assertThat(settings.backoffFor(attempts)).isEqualTo(Duration.ofSeconds(seconds));
     }
 
-    @Test
-    void should_reject_empty_relay_batches() {
-        assertThatIllegalArgumentException().isThrownBy(() -> new RelaySettings(0,
-                Duration.ZERO, Duration.ZERO, Duration.ZERO, Duration.ZERO, "n"));
+    @ParameterizedTest(name = "batch={0} lease={1}s send={2}s backoff={3}..{4}s owner={5}")
+    @CsvSource({
+        "0, 30, 10, 1, 60, n",
+        "1, 0, 10, 1, 60, n",
+        "1, 30, -1, 1, 60, n",
+        "1, 10, 10, 1, 60, n",
+        "1, 30, 10, 90, 60, n",
+        "1, 30, 10, 0, 60, n",
+        "1, 30, 10, 1, 0, n",
+        "1, 30, 10, 1, 60, ' '"
+    })
+    void should_reject_unsafe_relay_settings(final int batch, final long lease, final long send,
+                                             final long initial, final long max,
+                                             final String owner) {
+        assertThatIllegalArgumentException().isThrownBy(() -> new RelaySettings(batch,
+                Duration.ofSeconds(lease), Duration.ofSeconds(send), Duration.ofSeconds(initial),
+                Duration.ofSeconds(max), owner));
     }
 }

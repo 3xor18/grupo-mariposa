@@ -24,6 +24,7 @@ public final class OrderRequestParser {
     private static final String ONE_OF = "must be one of %s";
     private static final String MIN_PAGE = "must be an integer greater than or equal to 0";
     private static final String SIZE_RANGE = "must be an integer between 1 and %d";
+    private static final String OFFSET_TOO_DEEP = "page * size must not exceed %d";
     private static final int FIRST_PAGE = 0;
 
     private final OrdersApiProperties limits;
@@ -51,6 +52,9 @@ public final class OrderRequestParser {
                 .filter(value -> value >= 1 && value <= limits.maxPageSize())
                 .orElseGet(() -> invalid(SIZE, SIZE_RANGE.formatted(limits.maxPageSize()),
                         violations));
+        if (violations.isEmpty() && (long) parsedPage * parsedSize > limits.maxOffset()) {
+            violations.add(new FieldViolation(PAGE, OFFSET_TOO_DEEP.formatted(limits.maxOffset())));
+        }
         if (!violations.isEmpty()) {
             throw new InvalidRequestException(violations);
         }
