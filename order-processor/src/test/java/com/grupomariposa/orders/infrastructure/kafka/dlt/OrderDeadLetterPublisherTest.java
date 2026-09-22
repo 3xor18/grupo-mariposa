@@ -19,7 +19,7 @@ class OrderDeadLetterPublisherTest {
 
     private final OrderDeadLetterPublisher publisher = new OrderDeadLetterPublisher(
             mock(KafkaOperations.class), "orders.processing.dlt",
-            new DltHeadersFactory(Clock.systemUTC(), new CauseSanitizer()));
+            new DltHeadersFactory(Clock.systemUTC(), new CauseSanitizer(), "order-processor"));
     private final ConsumerRecord<String, byte[]> record =
             new ConsumerRecord<>("orders.created.v1", 2, 7L, "original-key", new byte[] {9, 8});
 

@@ -1,6 +1,6 @@
 package com.grupomariposa.orders.infrastructure.web;
 
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import java.net.URI;
 import java.time.Clock;
 import java.util.List;
@@ -21,13 +21,13 @@ public final class ProblemFactory {
 
     private final Clock clock;
     private final String typeBase;
-    private final TraceContext traceContext;
+    private final TraceIds traceIds;
 
-    public ProblemFactory(final Clock clock, final TraceContext traceContext,
+    public ProblemFactory(final Clock clock, final TraceIds traceIds,
                           final String typeBase) {
         this.typeBase = Objects.requireNonNull(typeBase, "typeBase");
         this.clock = Objects.requireNonNull(clock, "clock");
-        this.traceContext = Objects.requireNonNull(traceContext, "traceContext");
+        this.traceIds = Objects.requireNonNull(traceIds, "traceIds");
     }
 
     public ProblemDetail create(final HttpStatus status, final ApiErrorCode code,
@@ -37,7 +37,7 @@ public final class ProblemFactory {
         problem.setTitle(status.getReasonPhrase());
         problem.setInstance(instanceOf(path));
         problem.setProperty(CODE, code.name());
-        problem.setProperty(TRACE_ID, traceContext.currentTraceId().orElseGet(
+        problem.setProperty(TRACE_ID, traceIds.currentTraceId().orElseGet(
                 ProblemFactory::generatedTraceId));
         problem.setProperty(TIMESTAMP, clock.instant().toString());
         return problem;

@@ -9,7 +9,6 @@ public final class DltHeaders {
     public static final String COMPONENT = "x-component";
     public static final String ORDER_ID = "x-order-id";
     public static final String EVENT_ID = "x-event-id";
-    public static final String COMPONENT_NAME = "order-processor";
 
     private DltHeaders() {
     }

@@ -12,7 +12,7 @@ import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.Money;
 import com.grupomariposa.orders.domain.model.OrderStatus;
 import com.grupomariposa.orders.domain.model.RejectionCode;
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import com.grupomariposa.orders.infrastructure.persistence.PersistenceFixtures;
 import com.grupomariposa.orders.infrastructure.web.dto.OrderPageResponse;
 import com.grupomariposa.orders.infrastructure.web.dto.OrderResponse;
@@ -90,7 +90,7 @@ class WebSupportTest {
 
     @Test
     void should_build_problem_with_fallback_instance_and_generated_trace() {
-        final TraceContext traces = mock(TraceContext.class);
+        final TraceIds traces = mock(TraceIds.class);
         when(traces.currentTraceId()).thenReturn(Optional.empty());
         final ProblemFactory factory = new ProblemFactory(Clock.systemUTC(), traces,
                 "https://contracts.grupomariposa.dev/problems/");

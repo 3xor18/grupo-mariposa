@@ -27,7 +27,7 @@ public final class KafkaHealthIndicator implements HealthIndicator {
     public Health health() {
         try {
             final int nodes = adminClient.describeCluster(new DescribeClusterOptions()
-                            .timeoutMs((int) timeout.toMillis()))
+                            .timeoutMs(Math.toIntExact(timeout.toMillis())))
                     .nodes().get(timeout.toMillis(), TimeUnit.MILLISECONDS).size();
             return Health.up().withDetail(NODES, nodes).build();
         } catch (InterruptedException interrupted) {

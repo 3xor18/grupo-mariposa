@@ -1,7 +1,7 @@
 package com.grupomariposa.orders.infrastructure.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import com.grupomariposa.orders.infrastructure.web.OrderRequestParser;
 import com.grupomariposa.orders.infrastructure.web.OrderResponseMapper;
 import com.grupomariposa.orders.infrastructure.web.OrdersApiProperties;
@@ -57,9 +57,9 @@ public class WebConfiguration {
     }
 
     @Bean
-    public ProblemFactory problemFactory(final Clock clock, final TraceContext traceContext,
+    public ProblemFactory problemFactory(final Clock clock, final TraceIds traceIds,
                                          final ProblemProperties problems) {
-        return new ProblemFactory(clock, traceContext, problems.typeBase());
+        return new ProblemFactory(clock, traceIds, problems.typeBase());
     }
 
     @Bean

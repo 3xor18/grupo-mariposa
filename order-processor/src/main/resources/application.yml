@@ -4,7 +4,7 @@ server:
 
 spring:
   application:
-    name: order-processor
+    name: ${SERVICE_NAME:order-processor}
   config:
     import: "optional:configserver:${CONFIG_SERVER_URL:}"
   cloud:
@@ -94,7 +94,7 @@ management:
       enabled: false
   metrics:
     tags:
-      service: order-processor
+      service: ${spring.application.name}
     distribution:
       percentiles-histogram:
         http.server.requests: true

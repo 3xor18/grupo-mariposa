@@ -1,5 +1,7 @@
 package com.grupomariposa.orders.infrastructure.observability;
 
+import java.util.List;
+import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 
 public final class CauseSanitizer {
@@ -17,17 +19,22 @@ public final class CauseSanitizer {
     private static final Pattern EMAIL = Pattern.compile("[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+");
     private static final Pattern SECRET = Pattern.compile(
             "(?i)(password|secret|token|api[_-]?key)\\s*[=:]\\s*\\S+");
+    private static final List<UnaryOperator<String>> STEPS = List.of(
+            value -> CONTROL.matcher(value).replaceAll(SPACE),
+            value -> BEARER.matcher(value).replaceAll(MASK),
+            value -> SECRET.matcher(value).replaceAll(MASK),
+            value -> EMAIL.matcher(value).replaceAll(MASK),
+            value -> WHITESPACE.matcher(value).replaceAll(SPACE).trim());
     private static final Pattern UNSAFE_ID = Pattern.compile("[^A-Za-z0-9._:-]");
 
     public String cause(final String raw) {
         if (raw == null || raw.isBlank()) {
             return UNKNOWN;
         }
-        String cleaned = CONTROL.matcher(raw).replaceAll(SPACE);
-        cleaned = BEARER.matcher(cleaned).replaceAll(MASK);
-        cleaned = SECRET.matcher(cleaned).replaceAll(MASK);
-        cleaned = EMAIL.matcher(cleaned).replaceAll(MASK);
-        cleaned = WHITESPACE.matcher(cleaned).replaceAll(SPACE).trim();
+        String cleaned = raw;
+        for (final UnaryOperator<String> step : STEPS) {
+            cleaned = step.apply(cleaned);
+        }
         return truncate(cleaned, MAX_CAUSE_LENGTH);
     }
 

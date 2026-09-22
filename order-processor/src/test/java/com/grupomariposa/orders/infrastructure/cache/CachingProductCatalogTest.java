@@ -90,6 +90,14 @@ class CachingProductCatalogTest {
     }
 
     @Test
+    void should_ignore_incomplete_entries() {
+        when(values.get(KEY)).thenReturn("{\"productId\":\"PRD-001\"}");
+        when(delegate.findProduct("PRD-001", Market.MX)).thenReturn(Lookup.found(PRODUCT));
+
+        assertThat(catalog.findProduct("PRD-001", Market.MX)).isEqualTo(Lookup.found(PRODUCT));
+    }
+
+    @Test
     void should_ignore_corrupted_entries() {
         when(values.get(KEY)).thenReturn("{corrupted");
         when(delegate.findProduct("PRD-001", Market.MX)).thenReturn(Lookup.found(PRODUCT));

@@ -19,7 +19,7 @@ import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.OrderStatus;
 import com.grupomariposa.orders.infrastructure.config.WebConfiguration;
 import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import com.grupomariposa.orders.infrastructure.persistence.PersistenceFixtures;
 import com.grupomariposa.orders.infrastructure.web.security.WebSecurityProperties;
 import java.time.Clock;
@@ -74,11 +74,11 @@ class OrdersControllerTest {
     private JwtDecoder jwtDecoder;
 
     @MockitoBean
-    private TraceContext traceContext;
+    private TraceIds traceIds;
 
     @BeforeEach
     void setUp() {
-        when(traceContext.currentTraceId()).thenReturn(Optional.of("4bf92f3577b34da6"));
+        when(traceIds.currentTraceId()).thenReturn(Optional.of("4bf92f3577b34da6"));
     }
 
     @Test

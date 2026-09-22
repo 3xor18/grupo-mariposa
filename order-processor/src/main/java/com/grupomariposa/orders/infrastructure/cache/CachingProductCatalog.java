@@ -67,7 +67,7 @@ public final class CachingProductCatalog implements ProductCatalog {
 
     private Optional<ProductProfile> read(final String key) {
         try {
-            return Optional.ofNullable(redis.opsForValue().get(key)).map(this::decode);
+            return Optional.ofNullable(redis.opsForValue().get(key)).flatMap(this::decode);
         } catch (DataAccessException | JsonConversionFailure unavailable) {
             readErrors.increment();
             LOG.warn("Product cache read degraded: {}", unavailable.getClass().getSimpleName());
@@ -84,10 +84,12 @@ public final class CachingProductCatalog implements ProductCatalog {
         }
     }
 
-    private ProductProfile decode(final String json) {
+    private Optional<ProductProfile> decode(final String json) {
         try {
-            return objectMapper.readValue(json, CachedProduct.class).toProfile();
-        } catch (JsonProcessingException | RuntimeException invalid) {
+            return Optional.of(objectMapper.readValue(json, CachedProduct.class))
+                    .filter(CachedProduct::isComplete)
+                    .map(CachedProduct::toProfile);
+        } catch (JsonProcessingException invalid) {
             throw new JsonConversionFailure(invalid);
         }
     }

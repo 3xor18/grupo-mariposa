@@ -6,6 +6,8 @@ import static org.mockito.Mockito.when;
 
 import com.grupomariposa.orders.application.outcome.ProcessingOutcome;
 import com.grupomariposa.orders.application.port.out.PendingEvent;
+import com.grupomariposa.orders.application.port.out.ProcessingObserver;
+import com.grupomariposa.orders.application.port.out.ProcessingStage;
 import com.grupomariposa.orders.infrastructure.persistence.MongoOutboxStore;
 import com.grupomariposa.orders.infrastructure.persistence.PersistenceFixtures;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -15,6 +17,7 @@ import io.micrometer.tracing.Tracer;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
@@ -23,7 +26,9 @@ import org.springframework.dao.DataAccessResourceFailureException;
 class ObservabilityTest {
 
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    private final LoggingProcessingObserver observer = new LoggingProcessingObserver(registry);
+    private final ProcessingObserver observer = new CompositeProcessingObserver(List.of(
+            new MetricsProcessingObserver(registry),
+            new LoggingProcessingObserver(new CauseSanitizer())));
 
     @Test
     void should_count_every_outcome_kind() {
@@ -34,14 +39,24 @@ class ObservabilityTest {
         observer.outcome(new ProcessingOutcome.VersionConflict("O", "E", 1, "W"));
         observer.outcome(new ProcessingOutcome.TechnicalFailure("O", "E", "PERSISTENCE", true));
 
-        assertThat(count(LoggingProcessingObserver.PROCESSED, "status", "APPROVED")).isOne();
-        assertThat(count(LoggingProcessingObserver.REJECTED, "reason", "CLIENT_NOT_FOUND"))
+        assertThat(count(MetricsProcessingObserver.PROCESSED, "status", "APPROVED")).isOne();
+        assertThat(count(MetricsProcessingObserver.REJECTED, "reason", "CLIENT_NOT_FOUND"))
                 .isOne();
-        assertThat(registry.counter(LoggingProcessingObserver.DUPLICATES).count()).isOne();
-        assertThat(registry.counter(LoggingProcessingObserver.STALE).count()).isOne();
-        assertThat(registry.counter(LoggingProcessingObserver.CONFLICTS).count()).isOne();
-        assertThat(count(LoggingProcessingObserver.TECHNICAL_FAILURES, "category",
+        assertThat(registry.counter(MetricsProcessingObserver.DUPLICATES).count()).isOne();
+        assertThat(registry.counter(MetricsProcessingObserver.STALE).count()).isOne();
+        assertThat(registry.counter(MetricsProcessingObserver.CONFLICTS).count()).isOne();
+        assertThat(count(MetricsProcessingObserver.TECHNICAL_FAILURES, "category",
                 "PERSISTENCE")).isOne();
+    }
+
+    @Test
+    void should_count_every_stage_and_classify_terminal_ones() {
+        observer.stage(ProcessingStage.RECEIVED, "O", "E");
+        observer.stage(ProcessingStage.SENT_TO_DLT, "O", "E");
+
+        assertThat(count(ProcessingMetrics.STAGES, ProcessingMetrics.STAGE, "RECEIVED")).isOne();
+        assertThat(ProcessingStage.RECEIVED.isTerminal()).isFalse();
+        assertThat(ProcessingStage.SENT_TO_DLT.isTerminal()).isTrue();
     }
 
     @Test
@@ -52,9 +67,9 @@ class ObservabilityTest {
         observer.publicationFailed(event, new IllegalStateException());
         observer.leaseLost(event);
 
-        assertThat(registry.counter(LoggingProcessingObserver.OUTBOX_PUBLISHED).count()).isOne();
-        assertThat(registry.counter(LoggingProcessingObserver.OUTBOX_FAILURES).count()).isOne();
-        assertThat(registry.counter(LoggingProcessingObserver.OUTBOX_LEASE_LOST).count()).isOne();
+        assertThat(registry.counter(MetricsProcessingObserver.OUTBOX_PUBLISHED).count()).isOne();
+        assertThat(registry.counter(MetricsProcessingObserver.OUTBOX_FAILURES).count()).isOne();
+        assertThat(registry.counter(MetricsProcessingObserver.OUTBOX_LEASE_LOST).count()).isOne();
     }
 
     @Test
@@ -103,8 +118,7 @@ class ObservabilityTest {
         when(tracer.currentSpan()).thenReturn(null, span, span);
         when(span.context()).thenReturn(context);
         when(context.traceId()).thenReturn("abc", "");
-        final com.grupomariposa.orders.infrastructure.observability.TraceContext traces =
-                new com.grupomariposa.orders.infrastructure.observability.TraceContext(tracer);
+        final TraceIds traces = new TraceIds(tracer);
 
         assertThat(traces.currentTraceId()).isEmpty();
         assertThat(traces.currentTraceId()).contains("abc");

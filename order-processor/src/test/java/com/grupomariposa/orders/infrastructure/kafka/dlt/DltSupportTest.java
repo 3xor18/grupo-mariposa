@@ -21,7 +21,8 @@ class DltSupportTest {
 
     private final CauseSanitizer sanitizer = new CauseSanitizer();
     private final DltHeadersFactory headers = new DltHeadersFactory(
-            Clock.fixed(Instant.parse("2026-09-22T10:00:00Z"), ZoneOffset.UTC), sanitizer);
+            Clock.fixed(Instant.parse("2026-09-22T10:00:00Z"), ZoneOffset.UTC), sanitizer,
+            "order-processor");
 
     @Test
     void should_strip_control_characters_secrets_and_emails() {

@@ -13,7 +13,7 @@ import com.grupomariposa.orders.application.validation.OrderCommandValidator;
 import com.grupomariposa.orders.application.validation.ValidationResult;
 import com.grupomariposa.orders.infrastructure.observability.LogContext;
 import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import io.micrometer.core.instrument.Timer;
 import java.util.Objects;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -31,7 +31,7 @@ public final class OrderCreatedListener {
     private final ProcessOrderUseCase useCase;
     private final ProcessingObserver observer;
     private final TimeProvider timeProvider;
-    private final TraceContext traceContext;
+    private final TraceIds traceIds;
     private final ProcessingMetrics metrics;
 
     public OrderCreatedListener(final OrderMessageReader reader,
@@ -40,7 +40,7 @@ public final class OrderCreatedListener {
                                 final ProcessOrderUseCase useCase,
                                 final ProcessingObserver observer,
                                 final TimeProvider timeProvider,
-                                final TraceContext traceContext,
+                                final TraceIds traceIds,
                                 final ProcessingMetrics metrics) {
         this.reader = Objects.requireNonNull(reader, "reader");
         this.mapper = Objects.requireNonNull(mapper, "mapper");
@@ -48,7 +48,7 @@ public final class OrderCreatedListener {
         this.useCase = Objects.requireNonNull(useCase, "useCase");
         this.observer = Objects.requireNonNull(observer, "observer");
         this.timeProvider = Objects.requireNonNull(timeProvider, "timeProvider");
-        this.traceContext = Objects.requireNonNull(traceContext, "traceContext");
+        this.traceIds = Objects.requireNonNull(traceIds, "traceIds");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
@@ -65,7 +65,7 @@ public final class OrderCreatedListener {
 
     private void handle(final ConsumerRecord<String, byte[]> record) {
         final Reception reception = new Reception(timeProvider.now(),
-                traceContext.currentTraceId().orElse(null));
+                traceIds.currentTraceId().orElse(null));
         final OrderCreatedMessage message = reader.read(record.value());
         final MessageIds ids = new MessageIds(message.orderId(), message.eventId());
         try (LogContext ignored = LogContext.bind(message.orderId(), message.eventId())) {

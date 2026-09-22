@@ -10,7 +10,7 @@ import com.grupomariposa.orders.application.port.in.FindOrderQuery;
 import com.grupomariposa.orders.application.port.in.ListOrdersQuery;
 import com.grupomariposa.orders.application.query.PageResult;
 import com.grupomariposa.orders.infrastructure.config.WebConfiguration;
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -55,11 +55,11 @@ class OpenSecurityTest {
     private JwtDecoder jwtDecoder;
 
     @MockitoBean
-    private TraceContext traceContext;
+    private TraceIds traceIds;
 
     @Test
     void should_allow_anonymous_reads_when_auth_is_disabled() throws Exception {
-        when(traceContext.currentTraceId()).thenReturn(Optional.empty());
+        when(traceIds.currentTraceId()).thenReturn(Optional.empty());
         when(listOrders.list(any())).thenReturn(new PageResult<>(List.of(), 0, 20, 0));
 
         mockMvc.perform(get("/orders")).andExpect(status().isOk());

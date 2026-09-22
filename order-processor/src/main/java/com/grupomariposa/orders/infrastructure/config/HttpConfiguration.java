@@ -17,6 +17,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,7 +41,7 @@ import org.springframework.web.client.RestClient;
 @Configuration(proxyBeanMethods = false)
 public class HttpConfiguration {
 
-    private static final String SERVICE_PRINCIPAL = "order-processor";
+    private static final String APPLICATION_NAME = "${spring.application.name}";
     private static final String SERVICE_ROLE = "ROLE_SERVICE";
 
     @Bean
@@ -60,7 +61,8 @@ public class HttpConfiguration {
     @Bean
     @ConditionalOnProperty(prefix = "app.http.oauth", name = "enabled", havingValue = "true")
     public OAuth2ClientHttpRequestInterceptor serviceTokenInterceptor(
-            final HttpDependenciesProperties properties, final EnvironmentSecrets secrets) {
+            final HttpDependenciesProperties properties, final EnvironmentSecrets secrets,
+            @Value(APPLICATION_NAME) final String applicationName) {
         final HttpDependenciesProperties.OAuth oauth = properties.oauth();
         final ClientRegistrationRepository registrations =
                 new InMemoryClientRegistrationRepository(
@@ -78,7 +80,8 @@ public class HttpConfiguration {
                         authorizedClients);
         manager.setAuthorizedClientProvider(OAuth2AuthorizedClientProviderBuilder.builder()
                 .clientCredentials().build());
-        return oauthInterceptor(manager, authorizedClients, oauth.registrationId());
+        return oauthInterceptor(manager, authorizedClients, oauth.registrationId(),
+                applicationName);
     }
 
     @Bean(destroyMethod = "close")
@@ -119,11 +122,12 @@ public class HttpConfiguration {
 
     private static OAuth2ClientHttpRequestInterceptor oauthInterceptor(
             final OAuth2AuthorizedClientManager manager,
-            final OAuth2AuthorizedClientService authorizedClients, final String registrationId) {
+            final OAuth2AuthorizedClientService authorizedClients, final String registrationId,
+            final String principalName) {
         final OAuth2ClientHttpRequestInterceptor interceptor =
                 new OAuth2ClientHttpRequestInterceptor(manager);
-        final Authentication principal = new AnonymousAuthenticationToken(SERVICE_PRINCIPAL,
-                SERVICE_PRINCIPAL, AuthorityUtils.createAuthorityList(SERVICE_ROLE));
+        final Authentication principal = new AnonymousAuthenticationToken(principalName,
+                principalName, AuthorityUtils.createAuthorityList(SERVICE_ROLE));
         interceptor.setClientRegistrationIdResolver(request -> registrationId);
         interceptor.setPrincipalResolver(request -> principal);
         interceptor.setAuthorizationFailureHandler(

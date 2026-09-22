@@ -20,7 +20,7 @@ import com.grupomariposa.orders.application.port.in.ProcessOrderUseCase;
 import com.grupomariposa.orders.application.port.out.ProcessingObserver;
 import com.grupomariposa.orders.application.port.out.ProcessingStage;
 import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import com.grupomariposa.orders.support.Contracts;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.charset.StandardCharsets;
@@ -38,17 +38,17 @@ class OrderCreatedListenerTest {
 
     private final ProcessOrderUseCase useCase = mock(ProcessOrderUseCase.class);
     private final ProcessingObserver observer = mock(ProcessingObserver.class);
-    private final TraceContext traceContext = mock(TraceContext.class);
+    private final TraceIds traceIds = mock(TraceIds.class);
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private OrderCreatedListener listener;
 
     @BeforeEach
     void setUp() {
-        when(traceContext.currentTraceId()).thenReturn(Optional.of("trace-9"));
+        when(traceIds.currentTraceId()).thenReturn(Optional.of("trace-9"));
         listener = new OrderCreatedListener(new OrderMessageReader(), new OrderMessageMapper(),
                 ApplicationFixtures.validator(), useCase, observer,
                 () -> Instant.EPOCH,
-                traceContext, new ProcessingMetrics(registry));
+                traceIds, new ProcessingMetrics(registry));
     }
 
     @Test

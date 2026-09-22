@@ -19,9 +19,10 @@ import com.grupomariposa.orders.infrastructure.kafka.inbound.RetryableRecordFail
 import com.grupomariposa.orders.infrastructure.kafka.outbound.KafkaEventPublisher;
 import com.grupomariposa.orders.infrastructure.kafka.outbound.OutboxRelayScheduler;
 import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.kafka.ConcurrentKafkaListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
@@ -37,6 +38,8 @@ import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 
 @Configuration(proxyBeanMethods = false)
 public class KafkaConfiguration {
+
+    private static final String APPLICATION_NAME = "${spring.application.name}";
 
     @Bean
     @ConditionalOnProperty(prefix = "app.kafka", name = "create-topics", havingValue = "true")
@@ -71,14 +74,19 @@ public class KafkaConfiguration {
     }
 
     @Bean
+    public DltHeadersFactory dltHeadersFactory(final Clock clock, final CauseSanitizer sanitizer,
+                                               @Value(APPLICATION_NAME) final String name) {
+        return new DltHeadersFactory(clock, sanitizer, name);
+    }
+
+    @Bean
     public DefaultErrorHandler kafkaErrorHandler(
             final DeadLetterProducer deadLetterProducer,
-            final MessagingProperties properties, final Clock clock,
+            final MessagingProperties properties, final DltHeadersFactory dltHeaders,
             final CauseSanitizer sanitizer, final RecordTechnicalFailureUseCase technicalFailures,
             final ProcessingObserver observer, final ProcessingMetrics metrics) {
         final OrderDeadLetterPublisher deadLetters = new OrderDeadLetterPublisher(
-                deadLetterProducer.template(), properties.topics().deadLetter(),
-                new DltHeadersFactory(clock, sanitizer));
+                deadLetterProducer.template(), properties.topics().deadLetter(), dltHeaders);
         final DefaultErrorHandler handler = new DefaultErrorHandler(
                 new DeadLetterRecoverer(deadLetters, technicalFailures, observer, metrics,
                         sanitizer), backOff(properties.recordRetry()));
@@ -93,11 +101,11 @@ public class KafkaConfiguration {
                                                      final ProcessOrderUseCase useCase,
                                                      final ProcessingObserver observer,
                                                      final TimeProvider timeProvider,
-                                                     final TraceContext traceContext,
+                                                     final TraceIds traceIds,
                                                      final ProcessingMetrics metrics) {
         return new OrderCreatedListener(new OrderMessageReader(), new OrderMessageMapper(),
                 validator, useCase, observer,
-                timeProvider, traceContext, metrics);
+                timeProvider, traceIds, metrics);
     }
 
     @Bean

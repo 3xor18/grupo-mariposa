@@ -12,8 +12,11 @@ public final class DltHeadersFactory {
 
     private final Clock clock;
     private final CauseSanitizer sanitizer;
+    private final String componentName;
 
-    public DltHeadersFactory(final Clock clock, final CauseSanitizer sanitizer) {
+    public DltHeadersFactory(final Clock clock, final CauseSanitizer sanitizer,
+                             final String componentName) {
+        this.componentName = Objects.requireNonNull(componentName, "componentName");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.sanitizer = Objects.requireNonNull(sanitizer, "sanitizer");
     }
@@ -29,7 +32,7 @@ public final class DltHeadersFactory {
         add(headers, DltHeaders.ERROR_CAUSE, sanitizer.cause(failure.cause()));
         add(headers, DltHeaders.ATTEMPTS, String.valueOf(DeliveryAttempts.of(consumerRecord)));
         add(headers, DltHeaders.FAILED_AT, clock.instant().toString());
-        add(headers, DltHeaders.COMPONENT, DltHeaders.COMPONENT_NAME);
+        add(headers, DltHeaders.COMPONENT, componentName);
         addIdentifier(headers, DltHeaders.ORDER_ID, failure.ids().orderId());
         addIdentifier(headers, DltHeaders.EVENT_ID, failure.ids().eventId());
         return headers;
