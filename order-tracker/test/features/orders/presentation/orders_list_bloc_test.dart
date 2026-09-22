@@ -66,6 +66,14 @@ void main() {
     expect(const OrdersListState(status: loaded).isEmpty, isTrue);
     expect(loadedState().canLoadMore, isTrue);
     expect(loadedState(hasMore: false).canLoadMore, isFalse);
+    expect(loadedState().copyWith(isRefreshing: true).canLoadMore, isFalse);
+    expect(loadedState().copyWith(isLoadingMore: true).canLoadMore, isFalse);
+  });
+
+  test('should keep failures unless an update is given', () {
+    final failed = loadedState().copyWith(nextPageFailure: () => const NetworkFailure());
+    expect(failed.copyWith(page: 3).nextPageFailure, const NetworkFailure());
+    expect(failed.copyWith(nextPageFailure: OrdersListState.clearFailure).nextPageFailure, isNull);
   });
 
   blocTest<OrdersListBloc, OrdersListState>(
@@ -75,7 +83,7 @@ void main() {
     act: (bloc) => bloc.add(const OrdersListRequested()),
     expect: () => [
       const OrdersListState(status: OrdersListStatus.loading, generation: 1),
-      loadedState(),
+      loadedState(generation: 2),
     ],
   );
 
@@ -99,11 +107,13 @@ void main() {
     setUp: () => answer((_, _) => Ok(firstPage)),
     build: buildBloc,
     seed: loadedState,
-    act: (bloc) => bloc
-      ..add(const OrdersListStatusToggled(OrderStatus.rejected))
-      ..add(const OrdersListMarketToggled(Market.co))
-      ..add(const OrdersListStatusToggled(OrderStatus.rejected)),
-    wait: const Duration(milliseconds: 10),
+    act: (bloc) async {
+      bloc
+        ..add(const OrdersListStatusToggled(OrderStatus.rejected))
+        ..add(const OrdersListMarketToggled(Market.co))
+        ..add(const OrdersListStatusToggled(OrderStatus.rejected));
+      await pumpEventQueue();
+    },
     verify: (bloc) {
       expect(bloc.state.filter, const OrdersFilter(market: Market.co));
       expect(bloc.state.status, loaded);
@@ -132,6 +142,30 @@ void main() {
   );
 
   blocTest<OrdersListBloc, OrdersListState>(
+    'should not repeat orders that shifted into the next page',
+    setUp: () => answer(
+      (_, _) => Ok(
+        orderPage(items: [summary('B'), summary('C'), summary('C')], page: 1, totalPages: 2),
+      ),
+    ),
+    build: buildBloc,
+    seed: loadedState,
+    act: (bloc) => bloc.add(const OrdersListNextPageRequested()),
+    verify: (bloc) => expect(
+      bloc.state.items.map((item) => item.orderId),
+      ['A', 'B', 'C'],
+    ),
+  );
+
+  blocTest<OrdersListBloc, OrdersListState>(
+    'should ignore next page requests while refreshing',
+    build: buildBloc,
+    seed: () => loadedState().copyWith(isRefreshing: true),
+    act: (bloc) => bloc.add(const OrdersListNextPageRequested()),
+    expect: () => const <OrdersListState>[],
+  );
+
+  blocTest<OrdersListBloc, OrdersListState>(
     'should ignore next page requests when there are no more pages',
     build: buildBloc,
     seed: () => loadedState(hasMore: false),
@@ -147,7 +181,7 @@ void main() {
     act: (bloc) => bloc.add(const OrdersListNextPageRequested()),
     expect: () => [
       loadedState().copyWith(isLoadingMore: true),
-      loadedState().copyWith(nextPageFailure: const ServerFailure(statusCode: 503)),
+      loadedState().copyWith(nextPageFailure: () => const ServerFailure(statusCode: 503)),
     ],
   );
 
@@ -165,7 +199,7 @@ void main() {
         generation: 2,
         isRefreshing: true,
       ),
-      loadedState(items: [summary('Z')], hasMore: false, generation: 2),
+      loadedState(items: [summary('Z')], hasMore: false, generation: 3),
     ],
   );
 
@@ -177,7 +211,7 @@ void main() {
     act: (bloc) => bloc.add(const OrdersListRefreshed()),
     skip: 1,
     expect: () => [
-      loadedState(generation: 2).copyWith(refreshFailure: const NetworkFailure()),
+      loadedState(generation: 2).copyWith(refreshFailure: () => const NetworkFailure()),
     ],
   );
 
@@ -189,7 +223,7 @@ void main() {
     act: (bloc) => bloc.add(const OrdersListRefreshed()),
     expect: () => [
       const OrdersListState(status: OrdersListStatus.loading, generation: 1),
-      loadedState(),
+      loadedState(generation: 2),
     ],
   );
 
@@ -242,7 +276,7 @@ void main() {
       verify: (bloc) {
         expect(bloc.state.items, firstPage.items);
         expect(bloc.state.isLoadingMore, isFalse);
-        expect(bloc.state.generation, 2);
+        expect(bloc.state.generation, 3);
       },
     );
   });

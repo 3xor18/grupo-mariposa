@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:order_tracker/core/error/app_failure.dart';
 import 'package:order_tracker/core/l10n/app_strings.dart';
 import 'package:order_tracker/core/theme/app_tokens.dart';
 import 'package:order_tracker/core/widgets/failure_messages.dart';
@@ -24,17 +25,15 @@ class OrdersListBody extends StatelessWidget {
       listenWhen: (previous, current) =>
           current.refreshFailure != null && previous.refreshFailure != current.refreshFailure,
       listener: _showRefreshFailure,
-      builder: (context, state) => switch (state.status) {
-        OrdersListStatus.initial || OrdersListStatus.loading => const LoadingView(
-          key: OrdersKeys.ordersLoading,
-          label: AppStrings.loadingOrders,
-        ),
-        OrdersListStatus.failure => FailureView(
+      builder: (context, state) => switch (state) {
+        OrdersListState(status: OrdersListStatus.initial || OrdersListStatus.loading) =>
+          const LoadingView(key: OrdersKeys.ordersLoading, label: AppStrings.loadingOrders),
+        OrdersListState(status: OrdersListStatus.failure, :final failure) => FailureView(
           key: OrdersKeys.ordersFailure,
-          failure: state.failure!,
+          failure: failure ?? const UnexpectedResponseFailure(),
           onRetry: () => context.read<OrdersListBloc>().add(const OrdersListRequested()),
         ),
-        OrdersListStatus.success => _RefreshableList(
+        OrdersListState(status: OrdersListStatus.success) => _RefreshableList(
           state: state,
           selectedOrderId: selectedOrderId,
           onSelected: onSelected,
@@ -44,12 +43,16 @@ class OrdersListBody extends StatelessWidget {
   }
 
   void _showRefreshFailure(BuildContext context, OrdersListState state) {
+    final failure = state.refreshFailure;
+    if (failure == null) {
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           AppStrings.joinDetails([
             AppStrings.refreshFailed,
-            FailureMessages.of(state.refreshFailure!),
+            FailureMessages.of(failure),
           ]),
         ),
       ),
@@ -70,7 +73,7 @@ class _RefreshableList extends StatelessWidget {
 
   Future<void> _refresh(OrdersListBloc bloc) async {
     bloc.add(const OrdersListRefreshed());
-    await bloc.stream.firstWhere((state) => !state.isRefreshing);
+    await bloc.stream.firstWhere((state) => !state.isRefreshing, orElse: () => bloc.state);
   }
 
   @override
@@ -106,7 +109,6 @@ class _ListFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bloc = context.read<OrdersListBloc>();
-    final nextPageFailure = state.nextPageFailure;
     if (state.items.isEmpty) {
       return const StateMessage(
         key: OrdersKeys.ordersEmpty,
@@ -119,8 +121,8 @@ class _ListFooter extends StatelessWidget {
       OrdersListState(isLoadingMore: true) => const CircularProgressIndicator(
         key: OrdersKeys.loadMoreProgress,
       ),
-      OrdersListState(nextPageFailure: != null) => _NextPageFailure(
-        message: FailureMessages.of(nextPageFailure!),
+      OrdersListState(nextPageFailure: final AppFailure failure) => _NextPageFailure(
+        message: FailureMessages.of(failure),
         onRetry: () => bloc.add(const OrdersListNextPageRequested()),
       ),
       OrdersListState(hasMore: true) => OutlinedButton.icon(
@@ -129,7 +131,7 @@ class _ListFooter extends StatelessWidget {
         icon: const Icon(Icons.expand_more),
         label: const Text(AppStrings.loadMore),
       ),
-      _ => null,
+      OrdersListState(hasMore: false) => null,
     };
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.md),
