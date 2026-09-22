@@ -42,9 +42,16 @@ public final class OrderEnricher {
                 .map(item -> lookup(() -> new ResolvedItem(item,
                         productCatalog.findProduct(item.productId(), command.market()))))
                 .toList();
-        final Lookup<ClientProfile> resolvedClient = await(client);
-        final List<ResolvedItem> resolvedItems = items.stream().map(OrderEnricher::await).toList();
-        return new EvaluationInput(command.market(), resolvedClient, resolvedItems);
+        try {
+            final Lookup<ClientProfile> resolvedClient = await(client);
+            final List<ResolvedItem> resolvedItems =
+                    items.stream().map(OrderEnricher::await).toList();
+            return new EvaluationInput(command.market(), resolvedClient, resolvedItems);
+        } catch (RuntimeException failure) {
+            client.cancel(true);
+            items.forEach(item -> item.cancel(true));
+            throw failure;
+        }
     }
 
     private <T> CompletableFuture<T> lookup(final Supplier<T> call) {
