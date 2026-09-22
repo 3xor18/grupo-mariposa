@@ -3,6 +3,12 @@ import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@
 import { FaultInjectionKey } from '../../shared/fault-injection/fault-injection-key.decorator';
 import { ApiProblemResponses } from '../../shared/errors/problem.dto';
 import { BEARER_AUTH_SCHEME } from '../../shared/auth/bearer-auth.scheme';
+import {
+  OPENAPI_TYPES,
+  OPERATIONS,
+  RESPONSE_DESCRIPTIONS,
+} from '../../shared/constants/openapi.constants';
+import { ROUTES } from '../../shared/constants/routes.constants';
 import { GetClientUseCase } from '../application/get-client.use-case';
 import { ClientResponse } from './client.response';
 import { toClientResponse } from './client-response.mapper';
@@ -13,24 +19,22 @@ import {
   GetClientParams,
 } from './get-client.params';
 
-export const CLIENTS_ROUTE = 'clients';
-
-@ApiTags(CLIENTS_ROUTE)
+@ApiTags(ROUTES.CLIENTS)
 @ApiBearerAuth(BEARER_AUTH_SCHEME)
-@Controller(CLIENTS_ROUTE)
+@Controller(ROUTES.CLIENTS)
 export class ClientsController {
   constructor(private readonly getClient: GetClientUseCase) {}
 
   @Get(`:${CLIENT_ID_PARAM}`)
   @FaultInjectionKey(CLIENT_ID_PARAM)
-  @ApiOperation({ operationId: 'getClient', summary: 'Get a client by id' })
+  @ApiOperation(OPERATIONS.getClient)
   @ApiParam({
     name: CLIENT_ID_PARAM,
     required: true,
-    schema: { type: 'string', pattern: CLIENT_ID_PATTERN.source },
+    schema: { type: OPENAPI_TYPES.STRING, pattern: CLIENT_ID_PATTERN.source },
     example: CLIENT_ID_EXAMPLE,
   })
-  @ApiOkResponse({ description: 'Client found', type: ClientResponse })
+  @ApiOkResponse({ description: RESPONSE_DESCRIPTIONS.clientFound, type: ClientResponse })
   @ApiProblemResponses(
     HttpStatus.BAD_REQUEST,
     HttpStatus.UNAUTHORIZED,
