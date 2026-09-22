@@ -3,6 +3,5 @@
 build
 coverage
 e2e
-nginx/*.md
 Dockerfile
 .dockerignore

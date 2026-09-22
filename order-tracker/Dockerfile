@@ -20,19 +20,27 @@ COPY web web
 RUN flutter build web --release --no-web-resources-cdn --no-wasm-dry-run --no-source-maps \
     && find build/web -name '*.symbols' -delete
 
+FROM ${NGINX_IMAGE} AS runtime-config-test
+USER 0
+RUN apk add --no-cache shellcheck
+WORKDIR /nginx
+COPY nginx/ ./
+RUN shellcheck order-tracker-config.sh 10-order-tracker-config.envsh tests/*.sh \
+    && sh tests/order-tracker-config.test.sh order-tracker-config.sh \
+    && touch /tmp/runtime-config-tests.passed
+
 FROM ${NGINX_IMAGE} AS runtime
-ENV ORDERS_API_URL=http://order-processor:8080 \
-    API_BASE_URL=/api \
-    KEYCLOAK_URL=http://localhost:8180 \
-    KEYCLOAK_REALM=mariposa \
-    KEYCLOAK_CLIENT_ID=order-tracker \
-    NGINX_RESOLVER=127.0.0.11 \
-    NGINX_ENVSUBST_FILTER="^(ORDERS_API_URL|KEYCLOAK_URL|NGINX_RESOLVER)$"
+ENV NGINX_ENVSUBST_FILTER="^(ORDERS_API_URL|KEYCLOAK_URL|NGINX_RESOLVER)$" \
+    CONFIG_APP_NAME=order-tracker \
+    CONFIG_PROFILE=default \
+    CONFIG_SERVER_FAIL_FAST=false
+COPY --from=runtime-config-test /tmp/runtime-config-tests.passed /etc/order-tracker/
 COPY --from=build /app/build/web /usr/share/nginx/html
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY nginx/config.json.template /etc/order-tracker/config.json.template
-COPY --chmod=0755 nginx/40-order-tracker-runtime-config.sh /docker-entrypoint.d/
+COPY --chmod=0755 nginx/order-tracker-config.sh /usr/local/bin/order-tracker-config
+COPY --chmod=0755 nginx/10-order-tracker-config.envsh /docker-entrypoint.d/
 USER 101
 EXPOSE 8080
-HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
     CMD wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1
