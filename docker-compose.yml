@@ -187,23 +187,13 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       CONFIG_SERVER_URL: http://config-server:8888
+      CONFIG_SERVER_FAIL_FAST: "true"
       SPRING_CLOUD_CONFIG_USERNAME: ${CONFIG_SERVER_USERNAME}
       SPRING_CLOUD_CONFIG_PASSWORD: ${CONFIG_SERVER_PASSWORD}
-      AUTH_ISSUER: ${KEYCLOAK_PUBLIC_URL}/realms/mariposa
-      AUTH_JWKS_URL: http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs
       MONGODB_URI: mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongo:27017/orders?replicaSet=rs0&authSource=orders
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      PRODUCTS_API_URL: http://products-api:8081
-      CLIENTS_API_URL: http://clients-api:3000
-      OAUTH_TOKEN_URI: http://keycloak:8080/realms/mariposa/protocol/openid-connect/token
-      OAUTH_CLIENT_ID: order-processor
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       OAUTH_CLIENT_SECRET: ${ORDER_PROCESSOR_CLIENT_SECRET}
       PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY}
-      ALLOWED_ORIGINS: http://localhost:8090
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       DATADOG_ENABLED: ${DATADOG_ENABLED:-false}
       DD_API_KEY: ${DD_API_KEY:-}
     ports:
