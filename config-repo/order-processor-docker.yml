@@ -10,3 +10,4 @@ AUTH_ISSUER: http://localhost:8180/realms/mariposa
 AUTH_JWKS_URL: http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs
 ALLOWED_ORIGINS: http://localhost:8090,http://localhost:8080
 OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+KAFKA_LISTENER_CONCURRENCY: 6
