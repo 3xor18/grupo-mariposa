@@ -1,9 +1,11 @@
 # syntax=docker/dockerfile:1.7
 
-ARG FLUTTER_IMAGE=ghcr.io/cirruslabs/flutter:stable
-ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:alpine
+ARG FLUTTER_TAG=3.44.0
+ARG FLUTTER_DIGEST=sha256:46691e311715845de03a3ba4753a475476936805b29431b1f00f1816981033f8
+ARG NGINX_TAG=1.31.6-alpine3.24
+ARG NGINX_DIGEST=sha256:e75f89810bf5bfbcf58a1cfb32a1a11de55b7623d732e67735d513b720d7436a
 
-FROM ${FLUTTER_IMAGE} AS dependencies
+FROM ghcr.io/cirruslabs/flutter:${FLUTTER_TAG}@${FLUTTER_DIGEST} AS dependencies
 WORKDIR /app
 COPY pubspec.yaml pubspec.lock analysis_options.yaml ./
 RUN flutter pub get --enforce-lockfile
@@ -20,7 +22,7 @@ COPY web web
 RUN flutter build web --release --no-web-resources-cdn --no-wasm-dry-run --no-source-maps \
     && find build/web -name '*.symbols' -delete
 
-FROM ${NGINX_IMAGE} AS runtime-config-test
+FROM nginxinc/nginx-unprivileged:${NGINX_TAG}@${NGINX_DIGEST} AS runtime-config-test
 USER 0
 RUN apk add --no-cache shellcheck
 WORKDIR /nginx
@@ -29,7 +31,7 @@ RUN shellcheck order-tracker-config.sh 10-order-tracker-config.envsh tests/*.sh 
     && sh tests/order-tracker-config.test.sh order-tracker-config.sh \
     && touch /tmp/runtime-config-tests.passed
 
-FROM ${NGINX_IMAGE} AS runtime
+FROM nginxinc/nginx-unprivileged:${NGINX_TAG}@${NGINX_DIGEST} AS runtime
 ENV NGINX_ENVSUBST_FILTER="^(ORDERS_API_URL|KEYCLOAK_URL|NGINX_RESOLVER)$" \
     CONFIG_APP_NAME=order-tracker \
     CONFIG_PROFILE=default \
