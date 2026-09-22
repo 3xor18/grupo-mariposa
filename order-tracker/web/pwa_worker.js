@@ -1,8 +1,9 @@
 'use strict';
 
-const SHELL_CACHE = 'order-tracker-shell-v2';
+const SHELL_CACHE = 'order-tracker-shell-v3';
 const CONFIG_PATH = 'config.json';
 const DEFAULT_API_BASE = '/api/';
+const HTML_CONTENT_TYPE = 'text/html';
 const SHELL_FILES = [
   './',
   'index.html',
@@ -84,11 +85,19 @@ function runtimeApiBase() {
   return apiBasePromise;
 }
 
+function isCacheable(request, response) {
+  if (!response.ok) {
+    return false;
+  }
+  const contentType = response.headers.get('Content-Type') ?? '';
+  return request.mode !== 'navigate' || contentType.startsWith(HTML_CONTENT_TYPE);
+}
+
 async function networkFirst(request, key) {
   const cache = await caches.open(SHELL_CACHE);
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    if (isCacheable(request, response)) {
       await cache.put(key, response.clone());
     }
     return response;
