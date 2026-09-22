@@ -40,8 +40,6 @@ var (
 
 var idPattern = regexp.MustCompile(`^PRD-[A-Z0-9]{1,20}$`)
 
-var markets = map[Market]struct{}{MarketMX: {}, MarketCO: {}, MarketPE: {}}
-
 type Product struct {
 	ID          ID
 	Name        string
@@ -63,10 +61,12 @@ func ParseID(raw string) (ID, error) {
 
 func ParseMarket(raw string) (Market, error) {
 	market := Market(raw)
-	if _, ok := markets[market]; !ok {
+	switch market {
+	case MarketMX, MarketCO, MarketPE:
+		return market, nil
+	default:
 		return "", fmt.Errorf("%w: %q", ErrInvalidMarket, raw)
 	}
-	return market, nil
 }
 
 func Markets() []Market {

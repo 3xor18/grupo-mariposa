@@ -7,30 +7,30 @@ import (
 	"github.com/grupomariposa/platform/products-api/internal/product"
 )
 
-type Listing struct {
+type listing struct {
 	Product product.Product
 	Markets []product.Market
 }
 
 type Repository struct {
-	listings map[product.ID]listing
+	listings map[product.ID]entry
 }
 
-type listing struct {
+type entry struct {
 	product product.Product
 	markets map[product.Market]struct{}
 }
 
-func NewRepository(listings []Listing) *Repository {
-	indexed := make(map[product.ID]listing, len(listings))
+func newRepository(listings []listing) *Repository {
+	indexed := make(map[product.ID]entry, len(listings))
 	for _, l := range listings {
-		indexed[l.Product.ID] = listing{product: l.Product, markets: toSet(l.Markets)}
+		indexed[l.Product.ID] = entry{product: l.Product, markets: toSet(l.Markets)}
 	}
 	return &Repository{listings: indexed}
 }
 
 func NewSeededRepository() *Repository {
-	return NewRepository(Seed())
+	return newRepository(seed())
 }
 
 func (r *Repository) FindByIDInMarket(

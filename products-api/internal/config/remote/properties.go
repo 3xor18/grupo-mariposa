@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"unicode"
+	"unicode/utf16"
 )
 
 const (
@@ -18,22 +19,19 @@ const (
 	commentHash      = "#"
 	commentBang      = "!"
 	envWordSeparator = "_"
+	oddCount         = 1
+	pairLength       = 2
 )
 
-var (
-	errBadUnicodeEscape = errors.New("malformed unicode escape")
-	keySeparators       = map[rune]bool{'=': true, ':': true}
-	simpleEscapes       = map[rune]rune{'t': '\t', 'n': '\n', 'r': '\r', 'f': '\f'}
-	envKeyReplacer      = strings.NewReplacer(".", envWordSeparator, "-", envWordSeparator)
-)
+var errBadUnicodeEscape = errors.New("malformed unicode escape")
 
-func ParseProperties(r io.Reader) (map[string]string, error) {
-	properties := map[string]string{}
+func parseProperties(r io.Reader) (map[string]string, error) {
 	scanner := bufio.NewScanner(r)
 	lines := logicalLines(scanner)
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("read properties: %w", err)
 	}
+	properties := make(map[string]string, len(lines))
 	for _, line := range lines {
 		key, value, err := splitEntry(line)
 		if err != nil {
@@ -44,15 +42,24 @@ func ParseProperties(r io.Reader) (map[string]string, error) {
 	return properties, nil
 }
 
-func EnvKey(property string) string {
-	return strings.ToUpper(envKeyReplacer.Replace(strings.TrimSpace(property)))
+func envKey(property string) string {
+	replacer := strings.NewReplacer(".", envWordSeparator, "-", envWordSeparator)
+	return strings.ToUpper(replacer.Replace(strings.TrimFunc(property, isBlank)))
+}
+
+func isBlank(r rune) bool {
+	return r == ' ' || r == '\t' || r == '\f'
+}
+
+func isSeparator(r rune) bool {
+	return r == '=' || r == ':'
 }
 
 func logicalLines(scanner *bufio.Scanner) []string {
 	var lines []string
 	var pending strings.Builder
 	for scanner.Scan() {
-		line := strings.TrimLeftFunc(scanner.Text(), unicode.IsSpace)
+		line := strings.TrimLeftFunc(scanner.Text(), isBlank)
 		if pending.Len() == 0 && isSkippable(line) {
 			continue
 		}
@@ -75,8 +82,15 @@ func isSkippable(line string) bool {
 }
 
 func continues(line string) bool {
-	trailing := len(line) - len(strings.TrimRight(line, string(escapeChar)))
-	return trailing%2 == 1
+	return trailingEscapes([]rune(line), len([]rune(line)))%pairLength == oddCount
+}
+
+func trailingEscapes(runes []rune, end int) int {
+	count := 0
+	for i := end - 1; i >= 0 && runes[i] == escapeChar; i-- {
+		count++
+	}
+	return count
 }
 
 func splitEntry(line string) (string, string, error) {
@@ -86,11 +100,11 @@ func splitEntry(line string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("property key %q: %w", string(runes[:end]), err)
 	}
-	value, err := unescape(skipSeparator(runes[end:]))
+	value, err := unescape(trimTrailingBlanks(skipSeparator(runes[end:])))
 	if err != nil {
 		return "", "", fmt.Errorf("property %q value: %w", key, err)
 	}
-	return key, strings.TrimSpace(value), nil
+	return key, value, nil
 }
 
 func separatorIndex(runes []rune) int {
@@ -98,7 +112,7 @@ func separatorIndex(runes []rune) int {
 		switch {
 		case runes[i] == escapeChar:
 			i++
-		case keySeparators[runes[i]] || unicode.IsSpace(runes[i]):
+		case isSeparator(runes[i]) || isBlank(runes[i]):
 			return i
 		}
 	}
@@ -106,25 +120,33 @@ func separatorIndex(runes []rune) int {
 }
 
 func skipSeparator(rest []rune) []rune {
-	rest = trimLeadingSpace(rest)
-	if len(rest) > 0 && keySeparators[rest[0]] {
-		rest = trimLeadingSpace(rest[1:])
+	rest = trimLeadingBlanks(rest)
+	if len(rest) > 0 && isSeparator(rest[0]) {
+		rest = trimLeadingBlanks(rest[1:])
 	}
 	return rest
 }
 
-func trimLeadingSpace(runes []rune) []rune {
-	for len(runes) > 0 && unicode.IsSpace(runes[0]) {
+func trimLeadingBlanks(runes []rune) []rune {
+	for len(runes) > 0 && isBlank(runes[0]) {
 		runes = runes[1:]
 	}
 	return runes
 }
 
+func trimTrailingBlanks(runes []rune) []rune {
+	end := len(runes)
+	for end > 0 && isBlank(runes[end-1]) && trailingEscapes(runes, end-1)%pairLength == 0 {
+		end--
+	}
+	return runes[:end]
+}
+
 func unescape(runes []rune) (string, error) {
-	var out strings.Builder
+	out := make([]rune, 0, len(runes))
 	for i := 0; i < len(runes); i++ {
 		if runes[i] != escapeChar || i+1 == len(runes) {
-			out.WriteRune(runes[i])
+			out = append(out, runes[i])
 			continue
 		}
 		i++
@@ -132,25 +154,51 @@ func unescape(runes []rune) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		out.WriteRune(decoded)
+		out = append(out, decoded)
 		i += consumed
 	}
-	return out.String(), nil
+	return string(combineSurrogates(out)), nil
 }
 
 func decodeEscape(runes []rune) (rune, int, error) {
-	if mapped, ok := simpleEscapes[runes[0]]; ok {
-		return mapped, 0, nil
-	}
-	if runes[0] != unicodeEscape {
+	switch runes[0] {
+	case 't':
+		return '\t', 0, nil
+	case 'n':
+		return '\n', 0, nil
+	case 'r':
+		return '\r', 0, nil
+	case 'f':
+		return '\f', 0, nil
+	case unicodeEscape:
+		return decodeUnicode(runes[1:])
+	default:
 		return runes[0], 0, nil
 	}
-	if len(runes) <= unicodeDigits {
+}
+
+func decodeUnicode(digits []rune) (rune, int, error) {
+	if len(digits) < unicodeDigits {
 		return 0, 0, errBadUnicodeEscape
 	}
-	decoded, err := hex.DecodeString(string(runes[1 : 1+unicodeDigits]))
+	decoded, err := hex.DecodeString(string(digits[:unicodeDigits]))
 	if err != nil {
 		return 0, 0, fmt.Errorf("%w: %w", errBadUnicodeEscape, err)
 	}
 	return rune(decoded[0])<<bitsPerByte | rune(decoded[1]), unicodeDigits, nil
+}
+
+func combineSurrogates(runes []rune) []rune {
+	out := make([]rune, 0, len(runes))
+	for i := 0; i < len(runes); i++ {
+		if i+1 < len(runes) && utf16.IsSurrogate(runes[i]) {
+			if pair := utf16.DecodeRune(runes[i], runes[i+1]); pair != unicode.ReplacementChar {
+				out = append(out, pair)
+				i++
+				continue
+			}
+		}
+		out = append(out, runes[i])
+	}
+	return out
 }

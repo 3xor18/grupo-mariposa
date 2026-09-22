@@ -1,15 +1,17 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,312 +19,329 @@ import (
 	"github.com/grupomariposa/platform/products-api/internal/auth/authtest"
 	"github.com/grupomariposa/platform/products-api/internal/config"
 	"github.com/grupomariposa/platform/products-api/internal/config/remote"
-	"github.com/grupomariposa/platform/products-api/internal/fault"
 )
 
 const (
-	slowProduct  = "PRD-013"
-	slowHold     = 300 * time.Millisecond
-	waitDeadline = 5 * time.Second
+	waitLimit    = 5 * time.Second
 	pollInterval = 10 * time.Millisecond
+	slowProduct  = "/products/PRD-013?market=MX"
+	logListening = "http server listening"
+	logDraining  = "draining before shutdown"
+	logFault     = "fault injected"
 )
 
-func testConfig() config.Config {
-	return config.Config{
-		RequestTimeout:  time.Second,
-		ShutdownTimeout: waitDeadline,
-		RateLimit:       config.RateLimit{RPS: 1000, Burst: 1000},
-		Faults: config.Faults{
-			Rules:   []fault.Rule{{ID: slowProduct, Kind: fault.KindTimeout}},
-			Timeout: slowHold,
-		},
+type logWatcher struct {
+	mu     sync.Mutex
+	buf    bytes.Buffer
+	notify chan struct{}
+}
+
+func newLogWatcher() *logWatcher {
+	return &logWatcher{notify: make(chan struct{}, 1)}
+}
+
+func (l *logWatcher) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n, err := l.buf.Write(p)
+	select {
+	case l.notify <- struct{}{}:
+	default:
+	}
+	return n, err
+}
+
+func (l *logWatcher) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
+
+func (l *logWatcher) await(t *testing.T, message string) {
+	t.Helper()
+	deadline := time.After(waitLimit)
+	for !strings.Contains(l.String(), `"message":"`+message+`"`) {
+		select {
+		case <-l.notify:
+		case <-deadline:
+			t.Fatalf("log %q not seen in time; logs:\n%s", message, l.String())
+		}
 	}
 }
 
-func discardLogger() *slog.Logger {
-	return slog.New(slog.NewJSONHandler(io.Discard, nil))
-}
-
-type running struct {
-	app    *app.App
+type instance struct {
 	url    string
+	port   string
+	logs   *logWatcher
 	cancel context.CancelFunc
-	done   chan error
+	exit   chan int
 }
 
-func start(t *testing.T, cfg config.Config) running {
-	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
-	application, err := app.New(ctx, cfg, discardLogger())
-	if err != nil {
-		t.Fatalf("new app: %v", err)
-	}
-	listener := listen(t, "127.0.0.1:0")
-	done := make(chan error, 1)
-	go func() { done <- application.Serve(ctx, listener) }()
-	r := running{app: application, url: "http://" + listener.Addr().String(), cancel: cancel,
-		done: done}
-	waitUntil(t, func() bool {
-		return app.CheckHealth(context.Background(), r.url+"/health/live") == nil
-	})
-	return r
-}
-
-func waitUntil(t *testing.T, condition func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(waitDeadline)
-	for !condition() {
-		if time.Now().After(deadline) {
-			t.Fatal("condition not met in time")
-		}
-		time.Sleep(pollInterval)
-	}
-}
-
-func TestServeReportsReadinessAndServesProducts(t *testing.T) {
-	r := start(t, testConfig())
-	defer r.cancel()
-	if !r.app.Ready() {
-		t.Fatal("app must be ready while serving")
-	}
-	if code := status(t, r.url+"/products/PRD-001?market=CO"); code != http.StatusOK {
-		t.Fatalf("want 200, got %d", code)
-	}
-	if err := app.CheckHealth(context.Background(), r.url+"/health/ready"); err != nil {
-		t.Fatalf("want ready, got %v", err)
-	}
-}
-
-func TestGracefulShutdownDrainsInFlightRequests(t *testing.T) {
-	r := start(t, testConfig())
-	inFlight := make(chan int, 1)
-	go func() {
-		inFlight <- status(t, r.url+"/products/"+slowProduct+"?market=MX")
-	}()
-	time.Sleep(slowHold / 3)
-	r.cancel()
-	if err := <-r.done; err != nil {
-		t.Fatalf("want clean shutdown, got %v", err)
-	}
-	if status := <-inFlight; status != http.StatusOK {
-		t.Fatalf("in-flight request must complete, got %d", status)
-	}
-	if r.app.Ready() {
-		t.Fatal("app must not be ready after shutdown")
-	}
-}
-
-func TestShutdownTimeoutForcesClose(t *testing.T) {
-	cfg := testConfig()
-	cfg.ShutdownTimeout = time.Millisecond
-	cfg.Faults.Timeout = waitDeadline
-	r := start(t, cfg)
-	go fireAndForget(r.url + "/products/" + slowProduct + "?market=MX")
-	time.Sleep(slowHold / 3)
-	r.cancel()
-	if err := <-r.done; !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("want deadline exceeded, got %v", err)
-	}
-}
-
-func TestServeFailsWhenListenerClosed(t *testing.T) {
-	application, err := app.New(context.Background(), testConfig(), discardLogger())
-	if err != nil {
-		t.Fatalf("new app: %v", err)
-	}
-	listener := listen(t, "127.0.0.1:0")
-	_ = listener.Close()
-	if err := application.Serve(context.Background(), listener); err == nil {
-		t.Fatal("want serve error")
-	}
-	if application.Ready() || application.Handler() == nil {
-		t.Fatal("unexpected state after failure")
-	}
-}
-
-func TestNewWithAuthentication(t *testing.T) {
-	issuer := authtest.NewIssuer(t)
-	cfg := testConfig()
-	cfg.Auth = config.Auth{Enabled: true, Issuer: authtest.IssuerURL, JWKSURL: issuer.JWKSURL,
-		RequiredRole: authtest.RequiredRole}
-	r := start(t, cfg)
-	defer r.cancel()
-	if code := status(t, r.url+"/products/PRD-001?market=MX"); code != http.StatusUnauthorized {
-		t.Fatalf("want 401 without token, got %d", code)
-	}
-	cfg.Auth.JWKSURL = "://bad"
-	if _, err := app.New(context.Background(), cfg, discardLogger()); err == nil {
-		t.Fatal("want error for invalid jwks url")
-	}
-}
-
-func TestRunFailsWhenPortBusy(t *testing.T) {
-	listener := listen(t, ":0")
-	defer func() { _ = listener.Close() }()
-	cfg := testConfig()
-	cfg.Port = listener.Addr().(*net.TCPAddr).Port
-	if err := app.Run(context.Background(), cfg, discardLogger()); err == nil {
-		t.Fatal("want listen error")
-	}
-	cfg.Auth = config.Auth{Enabled: true, JWKSURL: "://bad"}
-	if err := app.Run(context.Background(), cfg, discardLogger()); err == nil {
-		t.Fatal("want configuration error")
-	}
-}
-
-func TestCheckHealth(t *testing.T) {
-	unhealthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer unhealthy.Close()
-	for _, url := range []string{unhealthy.URL, "http://127.0.0.1:1/health/live", "::bad"} {
-		if err := app.CheckHealth(context.Background(), url); err == nil {
-			t.Fatalf("%s: want error", url)
-		}
-	}
-}
-
-func status(t *testing.T, url string) int {
-	t.Helper()
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Errorf("request: %v", err)
-		return 0
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Errorf("get %s: %v", url, err)
-		return 0
-	}
-	defer func() { _ = resp.Body.Close() }()
-	return resp.StatusCode
-}
-
-func fireAndForget(url string) {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
-	if err != nil {
-		return
-	}
-	if resp, err := http.DefaultClient.Do(req); err == nil {
-		_ = resp.Body.Close()
-	}
-}
-
-func listen(t *testing.T, address string) net.Listener {
+func listenOn(t *testing.T) (net.Listener, app.ListenFunc) {
 	t.Helper()
 	var lc net.ListenConfig
-	listener, err := lc.Listen(context.Background(), "tcp", address)
+	listener, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	return listener
+	t.Cleanup(func() { _ = listener.Close() })
+	return listener, func(context.Context, string, string) (net.Listener, error) {
+		return listener, nil
+	}
 }
 
-func freePort(t *testing.T) int {
-	t.Helper()
-	listener := listen(t, "127.0.0.1:0")
-	port := listener.Addr().(*net.TCPAddr).Port
-	_ = listener.Close()
-	return port
+func baseEnv(extra ...string) map[string]string {
+	env := map[string]string{
+		config.EnvAuthEnabled:          "false",
+		config.EnvShutdownDrainDelayMS: "0",
+	}
+	for i := 0; i+1 < len(extra); i += 2 {
+		env[extra[i]] = extra[i+1]
+	}
+	return env
 }
 
-func env(values map[string]string) config.LookupFunc {
+func lookup(values map[string]string) config.LookupFunc {
 	return func(key string) (string, bool) {
 		value, ok := values[key]
 		return value, ok
 	}
 }
 
-func baseEnv(port int) map[string]string {
-	return map[string]string{
-		config.EnvPort:        strconv.Itoa(port),
-		config.EnvAuthEnabled: "false",
+func start(t *testing.T, env map[string]string) *instance {
+	t.Helper()
+	listener, listen := listenOn(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	_, port, _ := net.SplitHostPort(listener.Addr().String())
+	inst := &instance{url: "http://" + listener.Addr().String(), port: port,
+		logs: newLogWatcher(), cancel: cancel, exit: make(chan int, 1)}
+	rt := app.Runtime{Env: lookup(env), Out: inst.logs, Listen: listen}
+	go func() { inst.exit <- app.Main(ctx, nil, rt) }()
+	t.Cleanup(func() {
+		cancel()
+		<-inst.exit
+	})
+	inst.logs.await(t, logListening)
+	return inst
+}
+
+func (i *instance) stop(t *testing.T) int {
+	t.Helper()
+	i.cancel()
+	select {
+	case code := <-i.exit:
+		i.exit <- code
+		return code
+	case <-time.After(waitLimit):
+		t.Fatal("service did not stop in time")
+		return app.ExitFailure
 	}
 }
 
-func withEnv(env map[string]string, pairs ...string) map[string]string {
-	for i := 0; i+1 < len(pairs); i += 2 {
-		env[pairs[i]] = pairs[i+1]
+func get(t *testing.T, url string, headers ...string) (int, string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		t.Errorf("request: %v", err)
+		return 0, ""
 	}
-	return env
+	for i := 0; i+1 < len(headers); i += 2 {
+		req.Header.Set(headers[i], headers[i+1])
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err.Error()
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body)
 }
 
-func TestMainLoadsConfigServer(t *testing.T) {
-	port := freePort(t)
+func healthStatus(t *testing.T, url string) string {
+	t.Helper()
+	_, body := get(t, url)
+	var health struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal([]byte(body), &health)
+	return health.Status
+}
+
+func TestServesProductsAndReadiness(t *testing.T) {
+	inst := start(t, baseEnv())
+	if code, _ := get(t, inst.url+"/products/PRD-001?market=CO"); code != http.StatusOK {
+		t.Fatalf("want 200, got %d", code)
+	}
+	if status := healthStatus(t, inst.url+"/health/ready"); status != "UP" {
+		t.Fatalf("want ready UP, got %q", status)
+	}
+	if code := inst.stop(t); code != app.ExitOK {
+		t.Fatalf("want clean exit, got %d", code)
+	}
+}
+
+func TestFaultInjectionIsGated(t *testing.T) {
+	rules := []string{config.EnvFaultRules, "PRD-012:503"}
+	disabled := start(t, baseEnv(rules...))
+	if code, _ := get(t, disabled.url+"/products/PRD-012?market=MX"); code != http.StatusOK {
+		t.Fatalf("faults must be off by default, got %d", code)
+	}
+	enabled := start(t, baseEnv(append(rules, config.EnvFaultInjectionEnabled, "true")...))
+	if code, _ := get(t, enabled.url+"/products/PRD-012?market=MX"); code != 503 {
+		t.Fatalf("enabled fault must apply, got %d", code)
+	}
+}
+
+func TestGracefulShutdownDrainsWhileNotReady(t *testing.T) {
+	inst := start(t, baseEnv(
+		config.EnvFaultInjectionEnabled, "true", config.EnvFaultRules, "PRD-013:timeout",
+		config.EnvFaultTimeoutMS, "300", config.EnvShutdownDrainDelayMS, "1000"))
+	inFlight := make(chan int, 1)
+	go func() {
+		code, _ := get(t, inst.url+slowProduct)
+		inFlight <- code
+	}()
+	inst.logs.await(t, logFault)
+	inst.cancel()
+	inst.logs.await(t, logDraining)
+	if status := healthStatus(t, inst.url+"/health/ready"); status != "DOWN" {
+		t.Fatalf("want readiness DOWN while draining, got %q", status)
+	}
+	if code := <-inFlight; code != http.StatusOK {
+		t.Fatalf("in-flight request must complete, got %d", code)
+	}
+	if code := inst.stop(t); code != app.ExitOK {
+		t.Fatalf("want clean exit, got %d", code)
+	}
+}
+
+func TestShutdownTimeoutForcesClose(t *testing.T) {
+	inst := start(t, baseEnv(
+		config.EnvFaultInjectionEnabled, "true", config.EnvFaultRules, "PRD-013:timeout",
+		config.EnvFaultTimeoutMS, "10000", config.EnvRequestTimeoutMS, "20000",
+		config.EnvHTTPWriteTimeoutMS, "30000", config.EnvShutdownTimeoutMS, "1"))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		get(t, inst.url+slowProduct)
+	}()
+	inst.logs.await(t, logFault)
+	if code := inst.stop(t); code != app.ExitFailure {
+		t.Fatalf("want failure exit after forced close, got %d", code)
+	}
+	<-done
+	if !strings.Contains(inst.logs.String(), "graceful shutdown") {
+		t.Fatalf("want shutdown error logged, got %s", inst.logs.String())
+	}
+}
+
+func TestReadinessWaitsForJWKSWarmUp(t *testing.T) {
+	issuer := authtest.NewIssuer(t)
+	issuer.SetAvailable(false)
+	inst := start(t, baseEnv(config.EnvAuthEnabled, "true",
+		config.EnvAuthIssuer, authtest.IssuerURL, config.EnvAuthJWKSURL, issuer.JWKSURL,
+		config.EnvAuthAudience, authtest.Audience, config.EnvAuthJWKSMinRefreshMS, "10"))
+	if status := healthStatus(t, inst.url+"/health/ready"); status != "DOWN" {
+		t.Fatalf("want DOWN before jwks warm-up, got %q", status)
+	}
+	if status := healthStatus(t, inst.url+"/health/live"); status != "UP" {
+		t.Fatalf("liveness must not depend on jwks, got %q", status)
+	}
+	token := issuer.Token(t, authtest.ValidClaims())
+	if code, _ := get(t, inst.url+slowProduct, "Authorization", "Bearer "+token); code != 503 {
+		t.Fatalf("want 503 while jwks is down, got %d", code)
+	}
+	issuer.SetAvailable(true)
+	deadline := time.Now().Add(waitLimit)
+	for healthStatus(t, inst.url+"/health/ready") != "UP" {
+		if time.Now().After(deadline) {
+			t.Fatal("readiness never came up after jwks recovered")
+		}
+		time.Sleep(pollInterval)
+	}
+	if code, _ := get(t, inst.url+slowProduct, "Authorization", "Bearer "+token); code != 200 {
+		t.Fatalf("want 200 after warm-up, got %d", code)
+	}
+}
+
+func TestMainLoadsConfigServerButKeepsPortFromEnvironment(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, "port: "+strconv.Itoa(port)+"\nauth.enabled: false\n")
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = io.WriteString(w, "port: 1\nfault.injection-enabled: true\n"+
+			"fault.rules: PRD-001:502\n")
 	}))
 	defer server.Close()
-	remoteEnv := env(map[string]string{remote.EnvURL: server.URL})
-	ctx, cancel := context.WithCancel(context.Background())
-	exit := make(chan int, 1)
-	go func() { exit <- app.Main(ctx, nil, remoteEnv, io.Discard) }()
-	liveURL := "http://127.0.0.1:" + strconv.Itoa(port) + "/health/live"
-	waitUntil(t, func() bool { return app.CheckHealth(context.Background(), liveURL) == nil })
-	cancel()
-	if code := <-exit; code != app.ExitOK {
-		t.Fatalf("want exit 0, got %d", code)
+	inst := start(t, baseEnv(remote.EnvURL, server.URL))
+	if code, _ := get(t, inst.url+"/products/PRD-001?market=MX"); code != 502 {
+		t.Fatalf("remote fault rule must apply, got %d", code)
+	}
+	if !strings.Contains(inst.logs.String(), `"keys":["FAULT_INJECTION_ENABLED","FAULT_RULES"]`) {
+		t.Fatalf("remote PORT must be ignored and keys logged, got %s", inst.logs.String())
 	}
 }
 
-func TestHealthcheckIgnoresFullConfiguration(t *testing.T) {
-	r := start(t, testConfig())
-	defer r.cancel()
-	_, port, err := net.SplitHostPort(strings.TrimPrefix(r.url, "http://"))
-	if err != nil {
-		t.Fatalf("split address: %v", err)
-	}
-	probeEnv := env(map[string]string{
-		config.EnvPort: port, config.EnvAuthJWKSURL: "not-a-url",
+func TestHealthcheckModeOnlyNeedsPort(t *testing.T) {
+	inst := start(t, baseEnv())
+	env := map[string]string{
+		config.EnvPort: inst.port, config.EnvAuthJWKSURL: "not-a-url",
 		remote.EnvURL: "http://127.0.0.1:1", remote.EnvFailFast: "true",
-	})
-	code := app.Main(context.Background(), []string{"-healthcheck"}, probeEnv, io.Discard)
-	if code != app.ExitOK {
-		t.Fatalf("want healthy probe without auth settings, got exit %d", code)
 	}
-	invalidPort := env(map[string]string{config.EnvPort: "x"})
-	code = app.Main(context.Background(), []string{"-healthcheck"}, invalidPort, io.Discard)
-	if code != app.ExitFailure {
-		t.Fatalf("want failure for invalid port, got %d", code)
+	rt := app.Runtime{Env: lookup(env), Out: io.Discard}
+	if code := app.Main(context.Background(), []string{"-healthcheck"}, rt); code != app.ExitOK {
+		t.Fatalf("want healthy probe, got %d", code)
 	}
 }
 
-func TestMainRunsAndHealthchecks(t *testing.T) {
-	port := freePort(t)
-	lookup := env(baseEnv(port))
-	ctx, cancel := context.WithCancel(context.Background())
-	exit := make(chan int, 1)
-	go func() { exit <- app.Main(ctx, nil, lookup, io.Discard) }()
-	waitUntil(t, func() bool {
-		return app.Main(context.Background(), []string{"-healthcheck"}, lookup, io.Discard) == 0
-	})
-	cancel()
-	if code := <-exit; code != app.ExitOK {
-		t.Fatalf("want exit 0, got %d", code)
+func TestHealthcheckModeFailures(t *testing.T) {
+	unhealthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer unhealthy.Close()
+	_, port, _ := net.SplitHostPort(strings.TrimPrefix(unhealthy.URL, "http://"))
+	for _, env := range []map[string]string{{config.EnvPort: port}, {config.EnvPort: "x"}} {
+		rt := app.Runtime{Env: lookup(env), Out: io.Discard}
+		if code := app.Main(context.Background(), []string{"-healthcheck"}, rt); code == 0 {
+			t.Fatalf("env %v: want failure", env)
+		}
 	}
 }
 
 func TestMainFailures(t *testing.T) {
-	busy := listen(t, ":0")
-	defer func() { _ = busy.Close() }()
+	closed, closedListen := listenOn(t)
+	_ = closed.Close()
+	failingListen := func(context.Context, string, string) (net.Listener, error) {
+		return nil, errors.New("address in use")
+	}
 	cases := map[string]struct {
-		args []string
-		env  map[string]string
+		args   []string
+		env    map[string]string
+		listen app.ListenFunc
 	}{
-		"unknown_flag":       {args: []string{"-nope"}, env: baseEnv(freePort(t))},
-		"invalid_config":     {env: map[string]string{config.EnvPort: "x"}},
-		"healthcheck_down":   {args: []string{"-healthcheck"}, env: baseEnv(freePort(t))},
-		"port_already_taken": {env: baseEnv(busy.Addr().(*net.TCPAddr).Port)},
-		"config_server_down": {env: withEnv(baseEnv(freePort(t)),
-			remote.EnvURL, "http://127.0.0.1:1", remote.EnvRetries, "0",
-			remote.EnvFailFast, "true")},
+		"unknown_flag":       {args: []string{"-nope"}, env: baseEnv()},
+		"invalid_config":     {env: baseEnv(config.EnvPort, "x")},
+		"listen_error":       {env: baseEnv(), listen: failingListen},
+		"closed_listener":    {env: baseEnv(), listen: closedListen},
+		"invalid_remote_url": {env: baseEnv(remote.EnvURL, "nope")},
+		"config_server_down": {env: baseEnv(remote.EnvURL, "http://127.0.0.1:1",
+			remote.EnvRetries, "0", remote.EnvFailFast, "true")},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			code := app.Main(context.Background(), tc.args, env(tc.env), io.Discard)
-			if code != app.ExitFailure {
+			rt := app.Runtime{Env: lookup(tc.env), Out: io.Discard, Listen: tc.listen}
+			if code := app.Main(context.Background(), tc.args, rt); code != app.ExitFailure {
 				t.Fatalf("want exit %d, got %d", app.ExitFailure, code)
 			}
 		})
+	}
+}
+
+func TestDefaultListen(t *testing.T) {
+	listener, err := app.DefaultListen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = listener.Close() }()
+	if port := listener.Addr().(*net.TCPAddr).Port; port == 0 {
+		t.Fatalf("want an assigned port, got %s", strconv.Itoa(port))
 	}
 }

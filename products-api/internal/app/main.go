@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
-	"time"
 
 	"github.com/grupomariposa/platform/products-api/internal/config"
 	"github.com/grupomariposa/platform/products-api/internal/config/remote"
@@ -16,62 +16,71 @@ import (
 )
 
 const (
-	ExitOK             = 0
-	ExitFailure        = 1
-	flagHealthcheck    = "healthcheck"
-	usageHealthcheck   = "probe GET /health/live on the local server and exit"
-	liveURLFormat      = "http://127.0.0.1:%d/health/live"
-	healthcheckTimeout = 2 * time.Second
-	logInvalidConfig   = "invalid configuration"
-	logRunFailed       = "service failed"
-	logHealthFailed    = "healthcheck failed"
-	logKeyError        = "error"
+	ExitOK           = 0
+	ExitFailure      = 1
+	flagHealthcheck  = "healthcheck"
+	usageHealthcheck = "probe GET /health/live on the local server and exit"
+	liveURLFormat    = "http://127.0.0.1:%d/health/live"
+	logInvalidConfig = "invalid configuration"
+	logRunFailed     = "service failed"
+	logHealthFailed  = "healthcheck failed"
+	logKeyError      = "error"
 )
 
 var errUnhealthy = errors.New("unhealthy status")
 
-func Main(ctx context.Context, args []string, env config.LookupFunc, out io.Writer) int {
+type Runtime struct {
+	Env    config.LookupFunc
+	Out    io.Writer
+	Listen ListenFunc
+}
+
+func DefaultListen(ctx context.Context, network, address string) (net.Listener, error) {
+	var lc net.ListenConfig
+	return lc.Listen(ctx, network, address)
+}
+
+func Main(ctx context.Context, args []string, rt Runtime) int {
 	flags := flag.NewFlagSet(telemetry.ServiceName, flag.ContinueOnError)
-	flags.SetOutput(out)
+	flags.SetOutput(rt.Out)
 	healthcheck := flags.Bool(flagHealthcheck, false, usageHealthcheck)
 	if err := flags.Parse(args); err != nil {
 		return ExitFailure
 	}
-	bootstrap := telemetry.NewLogger(out, slog.LevelInfo)
+	bootstrap := telemetry.NewLogger(rt.Out, slog.LevelInfo)
 	if *healthcheck {
-		return report(ctx, bootstrap, probe(ctx, env), logHealthFailed)
+		return report(ctx, bootstrap, probe(ctx, rt.Env), logHealthFailed)
 	}
-	lookup, err := remote.Resolve(ctx, env, bootstrap)
+	lookup, err := remote.Resolve(ctx, rt.Env, bootstrap)
 	if err != nil {
 		return report(ctx, bootstrap, err, logInvalidConfig)
 	}
 	cfg, err := config.Load(lookup)
-	logger := telemetry.NewLogger(out, cfg.LogLevel)
-	slog.SetDefault(logger)
 	if err != nil {
-		return report(ctx, logger, err, logInvalidConfig)
+		return report(ctx, bootstrap, err, logInvalidConfig)
 	}
-	return report(ctx, logger, Run(ctx, cfg, logger), logRunFailed)
-}
-
-func probe(ctx context.Context, env config.LookupFunc) error {
-	port, err := config.LoadPort(env)
-	if err != nil {
-		return err
-	}
-	return CheckHealth(ctx, fmt.Sprintf(liveURLFormat, port))
+	logger := telemetry.NewLogger(rt.Out, cfg.LogLevel)
+	return report(ctx, logger, run(ctx, cfg, logger, rt.Listen), logRunFailed)
 }
 
 func report(ctx context.Context, logger *slog.Logger, err error, message string) int {
 	if err == nil {
 		return ExitOK
 	}
-	logger.ErrorContext(ctx, message, logKeyError, err)
+	logger.ErrorContext(ctx, message, logKeyError, err.Error())
 	return ExitFailure
 }
 
-func CheckHealth(ctx context.Context, url string) error {
-	ctx, cancel := context.WithTimeout(ctx, healthcheckTimeout)
+func probe(ctx context.Context, env config.LookupFunc) error {
+	settings, err := config.LoadProbe(env)
+	if err != nil {
+		return err
+	}
+	return checkHealth(ctx, fmt.Sprintf(liveURLFormat, settings.Port), settings)
+}
+
+func checkHealth(ctx context.Context, url string, settings config.Probe) error {
+	ctx, cancel := context.WithTimeout(ctx, settings.Timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

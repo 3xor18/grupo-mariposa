@@ -1,8 +1,9 @@
-package remote_test
+package remote
 
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -15,7 +16,6 @@ import (
 	"time"
 
 	"github.com/grupomariposa/platform/products-api/internal/config"
-	"github.com/grupomariposa/platform/products-api/internal/config/remote"
 )
 
 const (
@@ -23,6 +23,7 @@ const (
 	testPassword = "s3cr3t-pass"
 	testSecret   = "super-secret-token-value"
 	fastBackoff  = "1"
+	plainText    = "text/plain;charset=UTF-8"
 	remoteBody   = "rate-limit.rps: 50\n" +
 		"fault.rules: PRD-012:503:2\n" +
 		"auth.jwks-url: http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs\n" +
@@ -33,31 +34,34 @@ const (
 
 type configServer struct {
 	*httptest.Server
-	calls    atomic.Int32
-	failures int32
-	status   int
-	path     atomic.Value
-	auth     atomic.Value
+	calls       atomic.Int32
+	failures    int32
+	status      int
+	contentType string
+	body        string
+	path        atomic.Value
+	auth        atomic.Value
 }
 
 func newConfigServer(t *testing.T, failures int32, status int) *configServer {
 	t.Helper()
-	s := &configServer{failures: failures, status: status}
+	s := &configServer{failures: failures, status: status, contentType: plainText,
+		body: remoteBody}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.serve))
 	t.Cleanup(s.Close)
 	return s
 }
 
 func (s *configServer) serve(w http.ResponseWriter, r *http.Request) {
-	s.path.Store(r.URL.Path)
+	s.path.Store(r.URL.EscapedPath())
 	user, pass, _ := r.BasicAuth()
 	s.auth.Store(user + ":" + pass)
 	if s.calls.Add(1) <= s.failures {
 		w.WriteHeader(s.status)
 		return
 	}
-	w.Header().Set("Content-Type", "text/plain")
-	_, _ = io.WriteString(w, remoteBody)
+	w.Header().Set("Content-Type", s.contentType)
+	_, _ = io.WriteString(w, s.body)
 }
 
 func envOf(values map[string]string) config.LookupFunc {
@@ -69,11 +73,11 @@ func envOf(values map[string]string) config.LookupFunc {
 
 func serverEnv(url string, extra ...string) map[string]string {
 	env := map[string]string{
-		remote.EnvURL:       url + "/",
-		remote.EnvProfile:   "docker",
-		remote.EnvUsername:  testUser,
-		remote.EnvPassword:  testPassword,
-		remote.EnvBackoffMS: fastBackoff,
+		EnvURL:       url + "/",
+		EnvProfile:   "docker",
+		EnvUsername:  testUser,
+		EnvPassword:  testPassword,
+		EnvBackoffMS: fastBackoff,
 	}
 	for i := 0; i+1 < len(extra); i += 2 {
 		env[extra[i]] = extra[i+1]
@@ -86,10 +90,14 @@ func bufferLogger() (*slog.Logger, *bytes.Buffer) {
 	return slog.New(slog.NewJSONHandler(&buf, nil)), &buf
 }
 
+func discard() *slog.Logger {
+	return slog.New(slog.DiscardHandler)
+}
+
 func TestResolveLoadsRemotePropertiesWithBasicAuth(t *testing.T) {
 	server := newConfigServer(t, 0, 0)
 	logger, logs := bufferLogger()
-	lookup, err := remote.Resolve(context.Background(), envOf(serverEnv(server.URL)), logger)
+	lookup, err := Resolve(context.Background(), envOf(serverEnv(server.URL)), logger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -103,16 +111,37 @@ func TestResolveLoadsRemotePropertiesWithBasicAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if cfg.RateLimit.RPS != 50 || cfg.Port != 9999 || len(cfg.Faults.Rules) != 1 {
-		t.Fatalf("remote values not applied: %+v", cfg)
+	if cfg.RateLimit.RPS != 50 || len(cfg.Faults.Rules) != 1 || cfg.Port != 8081 {
+		t.Fatalf("remote values not applied or port leaked: %+v", cfg)
 	}
-	assertNoSecrets(t, logs.String())
+	assertLoggedKeysOnly(t, logs.Bytes())
 }
 
-func TestResolveEnvironmentWinsOverRemote(t *testing.T) {
+func assertLoggedKeysOnly(t *testing.T, logs []byte) {
+	t.Helper()
+	var entry struct {
+		Keys  []string `json:"keys"`
+		Count int      `json:"count"`
+	}
+	if err := json.Unmarshal(logs, &entry); err != nil {
+		t.Fatalf("decode log: %v", err)
+	}
+	want := []string{"AUTH_CLIENT_SECRET", "AUTH_ISSUER", "AUTH_JWKS_URL", "FAULT_RULES",
+		"RATE_LIMIT_RPS"}
+	if entry.Count != len(want) || strings.Join(entry.Keys, ",") != strings.Join(want, ",") {
+		t.Fatalf("want keys %v, got %+v", want, entry)
+	}
+	for _, value := range []string{testPassword, testSecret, "PRD-012", "keycloak:8080"} {
+		if bytes.Contains(logs, []byte(value)) {
+			t.Fatalf("value %q leaked into logs: %s", value, logs)
+		}
+	}
+}
+
+func TestResolvePrecedence(t *testing.T) {
 	server := newConfigServer(t, 0, 0)
-	env := serverEnv(server.URL, config.EnvRateLimitRPS, "7", config.EnvPort, " ")
-	lookup, err := remote.Resolve(context.Background(), envOf(env), slog.New(slog.DiscardHandler))
+	env := serverEnv(server.URL, config.EnvRateLimitRPS, "7", config.EnvFaultRules, "")
+	lookup, err := Resolve(context.Background(), envOf(env), discard())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -120,8 +149,11 @@ func TestResolveEnvironmentWinsOverRemote(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if cfg.RateLimit.RPS != 7 || cfg.Port != 9999 || cfg.RateLimit.Burst != 400 {
-		t.Fatalf("precedence env > remote > default broken: %+v", cfg.RateLimit)
+	if cfg.RateLimit.RPS != 7 || len(cfg.Faults.Rules) != 0 || cfg.RateLimit.Burst != 400 {
+		t.Fatalf("precedence env (even empty) > remote > default broken: %+v", cfg)
+	}
+	if value, ok := lookup(config.EnvAuthIssuer); !ok || value == "" {
+		t.Fatal("unset env must fall through to remote")
 	}
 	if _, ok := lookup("UNKNOWN_KEY"); ok {
 		t.Fatal("unknown keys must be absent")
@@ -130,8 +162,7 @@ func TestResolveEnvironmentWinsOverRemote(t *testing.T) {
 
 func TestResolveRetriesThenSucceeds(t *testing.T) {
 	server := newConfigServer(t, 2, http.StatusServiceUnavailable)
-	lookup, err := remote.Resolve(context.Background(), envOf(serverEnv(server.URL)),
-		slog.New(slog.DiscardHandler))
+	lookup, err := Resolve(context.Background(), envOf(serverEnv(server.URL)), discard())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -142,55 +173,72 @@ func TestResolveRetriesThenSucceeds(t *testing.T) {
 
 func TestResolveUnavailable(t *testing.T) {
 	cases := []struct {
-		name     string
-		failures int32
-		status   int
-		wantCall int32
+		name        string
+		status      int
+		contentType string
+		body        string
+		wantCalls   int32
 	}{
-		{name: "should_retry_server_errors", failures: 99, status: 500, wantCall: 4},
-		{name: "should_retry_throttling", failures: 99, status: 429, wantCall: 4},
-		{name: "should_not_retry_unauthorized", failures: 99, status: 401, wantCall: 1},
-		{name: "should_not_retry_not_found", failures: 99, status: 404, wantCall: 1},
+		{name: "should_retry_server_errors", status: 500, wantCalls: 4},
+		{name: "should_retry_throttling", status: 429, wantCalls: 4},
+		{name: "should_not_retry_unauthorized", status: 401, wantCalls: 1},
+		{name: "should_not_retry_not_found", status: 404, wantCalls: 1},
+		{name: "should_reject_json", contentType: "application/json", wantCalls: 1},
+		{name: "should_reject_missing_type", contentType: ";", wantCalls: 1},
+		{name: "should_reject_malformed_body", body: "key=\\uzz", wantCalls: 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			server := newConfigServer(t, tc.failures, tc.status)
-			env := serverEnv(server.URL, remote.EnvFailFast, "true")
-			_, err := remote.Resolve(context.Background(), envOf(env), slog.New(slog.DiscardHandler))
-			if !errors.Is(err, remote.ErrUnavailable) || server.calls.Load() != tc.wantCall {
+			failures := int32(0)
+			if tc.status != 0 {
+				failures = 99
+			}
+			server := newConfigServer(t, failures, tc.status)
+			server.contentType = cmpOr(tc.contentType, plainText)
+			server.body = cmpOr(tc.body, remoteBody)
+			env := serverEnv(server.URL, EnvFailFast, "true")
+			_, err := Resolve(context.Background(), envOf(env), discard())
+			if !errors.Is(err, ErrUnavailable) || server.calls.Load() != tc.wantCalls {
 				t.Fatalf("want unavailable after %d calls, got %v after %d",
-					tc.wantCall, err, server.calls.Load())
+					tc.wantCalls, err, server.calls.Load())
 			}
 		})
 	}
+}
+
+func cmpOr(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func TestResolveUnreachable(t *testing.T) {
 	server := newConfigServer(t, 0, 0)
 	url := server.URL
 	server.Close()
-	env := serverEnv(url, remote.EnvRetries, "1", config.EnvPort, "8085")
+	env := serverEnv(url, EnvRetries, "1", config.EnvPort, "8085")
 	logger, logs := bufferLogger()
-	lookup, err := remote.Resolve(context.Background(), envOf(env), logger)
+	lookup, err := Resolve(context.Background(), envOf(env), logger)
 	if err != nil {
 		t.Fatalf("want fallback without fail-fast, got %v", err)
 	}
 	if value, _ := lookup(config.EnvPort); value != "8085" {
 		t.Fatalf("want env value on fallback, got %q", value)
 	}
-	if !strings.Contains(logs.String(), `"level":"WARN"`) {
-		t.Fatalf("want warning log, got %s", logs.String())
+	if !strings.Contains(logs.String(), `"level":"WARN"`) ||
+		strings.Contains(logs.String(), testPassword) {
+		t.Fatalf("want warning without secrets, got %s", logs.String())
 	}
-	assertNoSecrets(t, logs.String())
-	env[remote.EnvFailFast] = "true"
-	if _, err := remote.Resolve(context.Background(), envOf(env), logger); err == nil {
-		t.Fatal("want error with fail-fast")
+	env[EnvFailFast] = "true"
+	if _, err := Resolve(context.Background(), envOf(env), logger); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("want unavailable with fail-fast, got %v", err)
 	}
 }
 
 func TestResolveSkipsWithoutURL(t *testing.T) {
 	logger, logs := bufferLogger()
-	lookup, err := remote.Resolve(context.Background(),
+	lookup, err := Resolve(context.Background(),
 		envOf(map[string]string{config.EnvPort: "1234"}), logger)
 	if err != nil || logs.Len() != 0 {
 		t.Fatalf("want silent skip, got err=%v logs=%s", err, logs.String())
@@ -201,50 +249,54 @@ func TestResolveSkipsWithoutURL(t *testing.T) {
 }
 
 func TestResolveRejectsInvalidSettings(t *testing.T) {
-	_, err := remote.Resolve(context.Background(),
-		envOf(map[string]string{remote.EnvURL: "not-a-url"}), slog.New(slog.DiscardHandler))
-	if !errors.Is(err, remote.ErrInvalidSettings) {
-		t.Fatalf("want ErrInvalidSettings, got %v", err)
+	_, err := Resolve(context.Background(), envOf(map[string]string{EnvURL: "not-a-url"}),
+		discard())
+	if !errors.Is(err, config.ErrInvalid) {
+		t.Fatalf("want ErrInvalid, got %v", err)
 	}
 }
 
 func TestResolveHonoursCancellationDuringBackoff(t *testing.T) {
 	server := newConfigServer(t, 99, http.StatusBadGateway)
-	env := serverEnv(server.URL, remote.EnvBackoffMS, strconv.Itoa(int(time.Hour/time.Millisecond)),
-		remote.EnvFailFast, "true")
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-	_, err := remote.Resolve(ctx, envOf(env), slog.New(slog.DiscardHandler))
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("want deadline exceeded, got %v", err)
+	hour := strconv.Itoa(int(time.Hour / time.Millisecond))
+	env := serverEnv(server.URL, EnvBackoffMS, hour, EnvBackoffMaxMS, hour, EnvFailFast, "true")
+	ctx, cancel := context.WithCancel(context.Background())
+	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		cancel()
+		w.WriteHeader(http.StatusBadGateway)
+	})
+	_, err := Resolve(ctx, envOf(env), discard())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("want canceled, got %v", err)
 	}
 }
 
-func TestFetchRejectsMalformedBody(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, "key=\\uzz")
-	}))
-	defer server.Close()
-	client := remote.NewClient(remote.Settings{BaseURL: server.URL, AppName: "a", Profile: "p",
-		Timeout: time.Second, Retries: 3, Backoff: time.Millisecond})
-	if _, err := client.Fetch(context.Background()); !errors.Is(err, remote.ErrUnavailable) {
-		t.Fatalf("want unavailable, got %v", err)
+func TestLoadSettings(t *testing.T) {
+	s, err := loadSettings(envOf(map[string]string{}))
+	want := settings{appName: "products-api", profile: "default", timeout: 3 * time.Second,
+		retries: 3, backoff: 200 * time.Millisecond, backoffMax: 2 * time.Second}
+	if err != nil || s != want || s.enabled() {
+		t.Fatalf("want %+v, got %+v err=%v", want, s, err)
+	}
+	s, err = loadSettings(envOf(map[string]string{EnvURL: "http://config:8888//",
+		EnvRetries: "0", EnvFailFast: "true", EnvPassword: " raw "}))
+	if err != nil || s.baseURL != "http://config:8888" || s.retries != 0 || !s.failFast ||
+		s.password != " raw " || !s.enabled() {
+		t.Fatalf("overrides not applied: %+v err=%v", s, err)
 	}
 }
 
-func TestFetchRejectsUnbuildableURL(t *testing.T) {
-	client := remote.NewClient(remote.Settings{BaseURL: "http://host", AppName: "%zz",
-		Timeout: time.Second, Backoff: time.Millisecond})
-	if _, err := client.Fetch(context.Background()); err == nil {
-		t.Fatal("want request build error")
+func TestLoadSettingsRejectsInvalid(t *testing.T) {
+	cases := map[string]string{
+		EnvURL: "/relative", EnvTimeoutMS: "0", EnvRetries: "11",
+		EnvBackoffMS: "abc", EnvBackoffMaxMS: "-5", EnvFailFast: "maybe",
 	}
-}
-
-func assertNoSecrets(t *testing.T, logs string) {
-	t.Helper()
-	for _, secret := range []string{testPassword, testSecret} {
-		if strings.Contains(logs, secret) {
-			t.Fatalf("secret %q leaked into logs: %s", secret, logs)
-		}
+	for key, value := range cases {
+		t.Run(key, func(t *testing.T) {
+			_, err := loadSettings(envOf(map[string]string{key: value}))
+			if !errors.Is(err, config.ErrInvalid) || !strings.Contains(err.Error(), key) {
+				t.Fatalf("want invalid %s, got %v", key, err)
+			}
+		})
 	}
 }

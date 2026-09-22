@@ -2,8 +2,8 @@ package memory
 
 import "github.com/grupomariposa/platform/products-api/internal/product"
 
-func Seed() []Listing {
-	return []Listing{
+func seed() []listing {
+	return []listing{
 		listed("PRD-001", "Bebida 600 ml", "BEB-600-PET", product.StatusActive, product.TaxStandard,
 			product.MarketMX, product.MarketCO, product.MarketPE),
 		mx("PRD-002", "Agua natural 1 L", "AGU-1000-PET", product.StatusActive, product.TaxExempt),
@@ -24,22 +24,22 @@ func Seed() []Listing {
 	}
 }
 
-func mx(id, name, sku string, status product.Status, tax product.TaxCategory) Listing {
+func mx(id, name, sku string, status product.Status, tax product.TaxCategory) listing {
 	return listed(id, name, sku, status, tax, product.MarketMX)
 }
 
-func co(id, name, sku string, status product.Status, tax product.TaxCategory) Listing {
+func co(id, name, sku string, status product.Status, tax product.TaxCategory) listing {
 	return listed(id, name, sku, status, tax, product.MarketCO)
 }
 
-func pe(id, name, sku string, status product.Status, tax product.TaxCategory) Listing {
+func pe(id, name, sku string, status product.Status, tax product.TaxCategory) listing {
 	return listed(id, name, sku, status, tax, product.MarketPE)
 }
 
 func listed(
 	id, name, sku string, status product.Status, tax product.TaxCategory, markets ...product.Market,
-) Listing {
-	return Listing{
+) listing {
+	return listing{
 		Product: product.Product{
 			ID: product.ID(id), Name: name, SKU: sku, Status: status, TaxCategory: tax,
 		},

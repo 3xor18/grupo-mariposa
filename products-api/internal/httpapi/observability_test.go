@@ -53,13 +53,15 @@ func TestInvalidTraceparentIsReplaced(t *testing.T) {
 
 func TestRequestIDIsEchoedWhenValid(t *testing.T) {
 	h := newHarness(t)
-	rec := h.get(t, "/health/live", "X-Request-Id", "req-123")
-	if rec.Header().Get("X-Request-Id") != "req-123" {
-		t.Fatal("valid request id must be echoed")
+	if got := h.get(t, "/health/live", "X-Request-Id", "req-123").Header().Get(
+		"X-Request-Id"); got != "req-123" {
+		t.Fatalf("valid request id must be echoed, got %q", got)
 	}
-	rec = h.get(t, "/health/live", "X-Request-Id", "bad id\n")
-	if !traceIDPattern.MatchString(rec.Header().Get("X-Request-Id")) {
-		t.Fatal("invalid request id must be replaced")
+	for _, invalid := range []string{"bad id\n", strings.Repeat("a", 129)} {
+		got := h.get(t, "/health/live", "X-Request-Id", invalid).Header().Get("X-Request-Id")
+		if !traceIDPattern.MatchString(got) {
+			t.Fatalf("invalid request id must be replaced, got %q", got)
+		}
 	}
 }
 
@@ -67,17 +69,53 @@ func TestAccessLogAndMetrics(t *testing.T) {
 	h := newHarness(t)
 	h.get(t, productPath, "traceparent", "00-"+incomingTraceID+"-00f067aa0ba902b7-01")
 	got := h.recorder.last()
-	if got.method != http.MethodGet || got.route != httpapi.RouteProduct || got.status != 200 {
-		t.Fatalf("unexpected observation %+v", got)
+	want := observation{method: http.MethodGet, route: httpapi.RouteProduct, status: 200}
+	if got != want {
+		t.Fatalf("want observation %+v, got %+v", want, got)
 	}
 	entry := lastLogEntry(t, h.logs.String())
-	for _, key := range []string{"service", "traceId", "method", "path", "status", "durationMs"} {
-		if _, ok := entry[key]; !ok {
-			t.Fatalf("access log missing %q: %v", key, entry)
+	wantFields := map[string]any{
+		"service": "products-api", "traceId": incomingTraceID, "method": "GET",
+		"path": "/products/PRD-001", "route": httpapi.RouteProduct, "status": float64(200),
+		"message": "request served", "requestId": incomingTraceID,
+	}
+	for key, value := range wantFields {
+		if entry[key] != value {
+			t.Fatalf("access log %s: want %v, got %v", key, value, entry[key])
 		}
 	}
-	if entry["traceId"] != incomingTraceID || entry["path"] != "/products/PRD-001" {
-		t.Fatalf("unexpected access log %v", entry)
+	if _, ok := entry["durationMs"].(float64); !ok {
+		t.Fatalf("access log must include a numeric duration: %v", entry)
+	}
+}
+
+func TestMethodIsNormalizedForMetricsAndLogs(t *testing.T) {
+	h := newHarness(t)
+	cases := map[string]string{
+		http.MethodGet: http.MethodGet, http.MethodPost: http.MethodPost,
+		http.MethodPut: http.MethodPut, http.MethodPatch: http.MethodPatch,
+		http.MethodDelete: http.MethodDelete, http.MethodOptions: http.MethodOptions,
+		http.MethodHead: http.MethodHead, "BREW": "OTHER", "get": "OTHER",
+		"X" + strings.Repeat("Y", 64): "OTHER",
+	}
+	for method, want := range cases {
+		h.do(t, newRequest(t, method, "/health/live"))
+		if got := h.recorder.last().method; got != want {
+			t.Fatalf("%q: want metric method %q, got %q", method, want, got)
+		}
+		if got := lastLogEntry(t, h.logs.String())["method"]; got != want {
+			t.Fatalf("%q: want logged method %q, got %v", method, want, got)
+		}
+	}
+}
+
+func TestSecurityHeadersOnEveryResponse(t *testing.T) {
+	h := newHarness(t)
+	for _, target := range []string{productPath, "/products/PRD-999?market=MX", "/health/live",
+		"/metrics", "/unknown"} {
+		if got := h.get(t, target).Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Fatalf("%s: want nosniff, got %q", target, got)
+		}
 	}
 }
 
@@ -98,8 +136,10 @@ func TestHealthEndpoints(t *testing.T) {
 			h := newHarness(t, func(d *httpapi.Dependencies) { d.Readiness = readiness{tc.ready} })
 			rec := h.get(t, tc.target)
 			var body map[string]string
-			_ = json.Unmarshal(rec.Body.Bytes(), &body)
-			if rec.Code != tc.status || body["status"] != tc.body {
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if rec.Code != tc.status || body["status"] != tc.body || len(body) != 1 {
 				t.Fatalf("want %d %s, got %d %v", tc.status, tc.body, rec.Code, body)
 			}
 		})

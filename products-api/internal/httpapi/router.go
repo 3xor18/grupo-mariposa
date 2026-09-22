@@ -7,43 +7,66 @@ import (
 )
 
 const (
-	RouteProduct = "GET /products/{productId}"
-	RouteLive    = "GET /health/live"
-	RouteReady   = "GET /health/ready"
-	RouteMetrics = "GET /metrics"
-	routeAny     = "/"
+	pathProduct = "/products/{productId}"
+	pathLive    = "/health/live"
+	pathReady   = "/health/ready"
+	pathMetrics = "/metrics"
+	pathAny     = "/"
 )
 
 type Dependencies struct {
-	Products       ProductFinder
-	Verifier       TokenVerifier
-	Faults         FaultInjector
-	FaultHold      time.Duration
-	RateLimit      RateLimit
-	RequestTimeout time.Duration
-	Readiness      Readiness
-	Recorder       RequestRecorder
-	MetricsHandler http.Handler
-	Logger         *slog.Logger
-	Clock          func() time.Time
+	Products         ProductFinder
+	Verifier         TokenVerifier
+	Faults           FaultInjector
+	FaultHold        time.Duration
+	ClientLimiter    KeyedLimiter
+	PrincipalLimiter KeyedLimiter
+	RequestTimeout   time.Duration
+	Readiness        Readiness
+	Recorder         RequestRecorder
+	MetricsHandler   http.Handler
+	Logger           *slog.Logger
+	Clock            func() time.Time
+	ProblemTypeBase  string
+}
+
+type route struct {
+	path    string
+	handler http.Handler
 }
 
 func NewHandler(deps Dependencies) http.Handler {
-	rs := responder{clock: deps.Clock, logger: deps.Logger}
+	rs := responder{clock: deps.Clock, logger: deps.Logger, typeBase: deps.ProblemTypeBase}
 	mux := http.NewServeMux()
-	mux.Handle(RouteProduct, chain(productHandler{finder: deps.Products, responder: rs},
-		productGuards(rs, deps)...))
-	mux.HandleFunc(RouteLive, rs.live)
-	mux.Handle(RouteReady, rs.ready(deps.Readiness))
-	mux.Handle(RouteMetrics, deps.MetricsHandler)
-	mux.HandleFunc(routeAny, rs.noRoute)
-	return chain(mux, traceContext, rs.observe(deps.Recorder), rs.recoverPanic)
+	for _, rt := range routes(rs, deps) {
+		mux.Handle(http.MethodGet+" "+rt.path, rt.handler)
+		mux.Handle(rt.path, rs.methodNotAllowed(http.MethodGet, http.MethodHead))
+	}
+	mux.HandleFunc(pathAny, rs.noRoute)
+	return chain(mux, traceContext, secureHeaders, rs.observe(deps.Recorder), rs.recoverPanic)
 }
 
-func productGuards(rs responder, deps Dependencies) []Middleware {
-	guards := []Middleware{rs.rateLimit(deps.RateLimit)}
-	if deps.Verifier != nil {
-		guards = append(guards, rs.authenticate(deps.Verifier))
+func routes(rs responder, deps Dependencies) []route {
+	products := productHandler{finder: deps.Products, responder: rs}
+	return []route{
+		{path: pathProduct, handler: chain(products, productGuards(rs, deps)...)},
+		{path: pathLive, handler: http.HandlerFunc(rs.live)},
+		{path: pathReady, handler: rs.ready(deps.Readiness)},
+		{path: pathMetrics, handler: deps.MetricsHandler},
 	}
-	return append(guards, rs.injectFault(deps.Faults, deps.FaultHold), deadline(deps.RequestTimeout))
+}
+
+func productGuards(rs responder, deps Dependencies) []middleware {
+	guards := []middleware{
+		rs.limitBy(deps.ClientLimiter, clientAddress),
+		deadline(deps.RequestTimeout),
+	}
+	if deps.Verifier != nil {
+		guards = append(guards, rs.authenticate(deps.Verifier),
+			rs.limitBy(deps.PrincipalLimiter, principalOf))
+	}
+	if deps.Faults != nil {
+		guards = append(guards, rs.injectFault(deps.Faults, deps.FaultHold))
+	}
+	return guards
 }

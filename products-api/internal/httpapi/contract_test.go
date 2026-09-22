@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -15,8 +16,8 @@ import (
 	"github.com/getkin/kin-openapi/routers/gorillamux"
 
 	"github.com/grupomariposa/platform/products-api/internal/auth"
-	"github.com/grupomariposa/platform/products-api/internal/fault"
 	"github.com/grupomariposa/platform/products-api/internal/httpapi"
+	"github.com/grupomariposa/platform/products-api/internal/ratelimit"
 )
 
 const (
@@ -102,7 +103,7 @@ func contractRequest(t *testing.T, target string) *http.Request {
 func TestContractProductResponses(t *testing.T) {
 	c := loadContract(t)
 	h := newHarness(t, func(d *httpapi.Dependencies) {
-		d.RateLimit = httpapi.RateLimit{RPS: 1e-3, Burst: 1}
+		d.ClientLimiter = ratelimit.NewKeyed(1e-3, 1, limiterCapacity)
 	})
 	for _, want := range []int{http.StatusOK, http.StatusTooManyRequests} {
 		if got := c.validate(t, h.handler, contractRequest(t, productPath)); got != want {
@@ -113,7 +114,7 @@ func TestContractProductResponses(t *testing.T) {
 
 func TestContractProblemResponses(t *testing.T) {
 	c := loadContract(t)
-	h := newHarness(t, withFaults(t, "PRD-003:500,PRD-008:503"))
+	h := newHarness(t, withFaults(t, "PRD-003:500,PRD-008:503", time.Second))
 	cases := map[string]int{
 		"/products/PRD-999?market=MX": http.StatusNotFound,
 		"/products/PRD-002?market=PE": http.StatusNotFound,
@@ -135,39 +136,47 @@ func TestContractAuthProblems(t *testing.T) {
 	if got := c.validate(t, h.handler, contractRequest(t, productPath)); got != 401 {
 		t.Fatalf("want 401, got %d", got)
 	}
-	forbidden := newHarness(t, func(d *httpapi.Dependencies) {
-		d.Verifier = verifierFunc(func(context.Context, string) error { return auth.ErrForbidden })
-	})
-	if got := c.validate(t, forbidden.handler, contractRequest(t, productPath)); got != 403 {
-		t.Fatalf("want 403, got %d", got)
+	cases := map[error]int{auth.ErrForbidden: 403, auth.ErrUnavailable: 503}
+	for err, want := range cases {
+		failing := newHarness(t, func(d *httpapi.Dependencies) { d.Verifier = failingVerifier(err) })
+		if got := c.validate(t, failing.handler, contractRequest(t, productPath)); got != want {
+			t.Fatalf("want %d, got %d", want, got)
+		}
 	}
 }
 
 func TestContractHealthResponses(t *testing.T) {
 	c := loadContract(t)
-	for _, ready := range []bool{true, false} {
+	cases := map[bool]int{true: http.StatusOK, false: http.StatusServiceUnavailable}
+	for ready, want := range cases {
 		h := newHarness(t, func(d *httpapi.Dependencies) { d.Readiness = readiness{ready} })
-		c.validate(t, h.handler, contractRequest(t, "/health/live"))
-		c.validate(t, h.handler, contractRequest(t, "/health/ready"))
+		if got := c.validate(t, h.handler, contractRequest(t, "/health/live")); got != 200 {
+			t.Fatalf("live: want 200, got %d", got)
+		}
+		if got := c.validate(t, h.handler, contractRequest(t, "/health/ready")); got != want {
+			t.Fatalf("ready=%v: want %d, got %d", ready, want, got)
+		}
 	}
 }
 
 func TestContractProblemsOutsideOpenAPIStatuses(t *testing.T) {
 	c := loadContract(t)
-	h := newHarness(t, withFaults(t, "PRD-004:502"))
-	for _, target := range []string{"/products/PRD-004?market=MX", "/unknown"} {
-		rec := h.get(t, target)
+	h := newHarness(t, withFaults(t, "PRD-004:502", time.Second))
+	cases := []struct {
+		method, target string
+		status         int
+	}{
+		{http.MethodGet, "/products/PRD-004?market=MX", http.StatusBadGateway},
+		{http.MethodGet, "/unknown", http.StatusNotFound},
+		{http.MethodPost, productPath, http.StatusMethodNotAllowed},
+	}
+	for _, tc := range cases {
+		rec := h.do(t, newRequest(t, tc.method, tc.target))
+		if rec.Code != tc.status {
+			t.Fatalf("%s %s: want %d, got %d", tc.method, tc.target, tc.status, rec.Code)
+		}
 		c.validateProblem(t, rec.Body.Bytes())
 	}
-}
-
-func withFaults(t *testing.T, raw string) func(*httpapi.Dependencies) {
-	t.Helper()
-	rules, err := fault.ParseRules(raw)
-	if err != nil {
-		t.Fatalf("rules: %v", err)
-	}
-	return func(d *httpapi.Dependencies) { d.Faults = fault.NewInjector(rules) }
 }
 
 func TestContractDetectsViolations(t *testing.T) {

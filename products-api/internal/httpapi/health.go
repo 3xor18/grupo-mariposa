@@ -1,14 +1,16 @@
 package httpapi
 
 import (
-	"fmt"
 	"net/http"
+	"strings"
 )
 
 const (
-	statusUp      = "UP"
-	statusDown    = "DOWN"
-	detailNoRoute = "No resource matches %s %s."
+	statusUp               = "UP"
+	statusDown             = "DOWN"
+	detailNoRoute          = "No resource matches the requested path."
+	detailMethodNotAllowed = "The requested method is not supported by this resource."
+	allowSeparator         = ", "
 )
 
 type Readiness interface {
@@ -34,5 +36,13 @@ func (rs responder) ready(readiness Readiness) http.HandlerFunc {
 }
 
 func (rs responder) noRoute(w http.ResponseWriter, r *http.Request) {
-	rs.problem(w, r, kindNoRoute, fmt.Sprintf(detailNoRoute, r.Method, r.URL.Path))
+	rs.problem(w, r, kindNoRoute, detailNoRoute)
+}
+
+func (rs responder) methodNotAllowed(allowed ...string) http.HandlerFunc {
+	allow := strings.Join(allowed, allowSeparator)
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(headerAllow, allow)
+		rs.problem(w, r, kindMethodNotAllowed, detailMethodNotAllowed)
+	}
 }
