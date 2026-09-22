@@ -1,0 +1,9 @@
+env:
+  CONFIG_PROFILE: production
+  KEYCLOAK_URL: https://auth.production.example.com
+  REDIRECT_URI: https://tracker.production.example.com/
+ingress:
+  host: tracker.production.example.com
+networkPolicy:
+  allowedCidrs:
+    - 10.0.0.0/16

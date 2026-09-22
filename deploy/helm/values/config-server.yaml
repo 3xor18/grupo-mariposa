@@ -1,0 +1,49 @@
+image:
+  repository: grupo-mariposa/config-server
+containerPort: 8888
+podSecurityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+probes:
+  liveness: /actuator/health/liveness
+  readiness: /actuator/health/readiness
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  failureThreshold: 3
+  startup:
+    path: /actuator/health/liveness
+    periodSeconds: 5
+    failureThreshold: 24
+metrics:
+  enabled: false
+replicaCount: 2
+autoscaling:
+  enabled: false
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    memory: 512Mi
+env:
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=65 -XX:+ExitOnOutOfMemoryError
+  CONFIG_BACKEND: git
+  CONFIG_GIT_URI: https://github.com/3xor18/grupo-mariposa.git
+  CONFIG_GIT_LABEL: main
+  CONFIG_GIT_SEARCH_PATHS: config-repo
+  CONFIG_SERVER_USERNAME: config-reader
+externalSecret:
+  enabled: true
+  remoteKey: grupo-mariposa/config-server
+  keys:
+    - CONFIG_SERVER_PASSWORD
+    - CONFIG_GIT_USERNAME
+    - CONFIG_GIT_PASSWORD
+networkPolicy:
+  enabled: true
+  allowedFrom:
+    - products-api
+    - clients-api
+    - order-processor
+    - order-tracker

@@ -1,38 +1,56 @@
 image:
-  repository: 000000000000.dkr.ecr.us-east-1.amazonaws.com/grupo-mariposa/order-processor
+  repository: grupo-mariposa/order-processor
 containerPort: 8080
+podSecurityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+terminationGracePeriodSeconds: 45
+lifecycle:
+  preStopSleepSeconds: 10
 probes:
   liveness: /actuator/health/liveness
   readiness: /actuator/health/readiness
-  initialDelaySeconds: 30
+  initialDelaySeconds: 0
   periodSeconds: 10
   failureThreshold: 3
+  startup:
+    path: /actuator/health/liveness
+    periodSeconds: 5
+    failureThreshold: 30
 metrics:
   enabled: true
   path: /actuator/prometheus
 resources:
   requests:
     cpu: 250m
-    memory: 512Mi
+    memory: 1Gi
   limits:
-    memory: 768Mi
+    memory: 1Gi
 autoscaling:
   enabled: true
   minReplicas: 2
-  maxReplicas: 6
+  maxReplicas: 2
   targetCPUUtilizationPercentage: 70
 env:
-  KAFKA_BOOTSTRAP_SERVERS: b-1.mariposa-msk.kafka.us-east-1.amazonaws.com:9098
-  PRODUCTS_API_URL: http://products-api
-  CLIENTS_API_URL: http://clients-api
-  AUTH_ISSUER: https://auth.grupomariposa.dev/realms/mariposa
-  AUTH_JWKS_URL: https://auth.grupomariposa.dev/realms/mariposa/protocol/openid-connect/certs
-  OAUTH_TOKEN_URI: https://auth.grupomariposa.dev/realms/mariposa/protocol/openid-connect/token
+  JAVA_TOOL_OPTIONS: >-
+    -XX:MaxRAMPercentage=65 -XX:InitialRAMPercentage=50 -XX:+ExitOnOutOfMemoryError
+    -XX:+UseZGC -XX:+ZGenerational
+  SHUTDOWN_TIMEOUT: 25s
+  CONFIG_SERVER_URL: http://config-server.grupo-mariposa.svc.cluster.local
+  CONFIG_SERVER_FAIL_FAST: "true"
+  SPRING_CLOUD_CONFIG_USERNAME: config-reader
+  PRODUCTS_API_URL: http://products-api.grupo-mariposa.svc.cluster.local
+  CLIENTS_API_URL: http://clients-api.grupo-mariposa.svc.cluster.local
   OAUTH_CLIENT_ID: order-processor
-  REDIS_HOST: mariposa-cache.xxxxxx.use1.cache.amazonaws.com
+  AUTH_AUDIENCE: order-processor
+  KAFKA_CREATE_TOPICS: "false"
+  KAFKA_REPLICATION_FACTOR: "3"
+  KAFKA_LISTENER_CONCURRENCY: "3"
+  SPRING_KAFKA_SECURITY_PROTOCOL: SSL
   REDIS_PORT: "6379"
-  ALLOWED_ORIGINS: https://tracker.grupomariposa.dev
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://datadog-agent.monitoring:4318
+  SPRING_DATA_REDIS_SSL_ENABLED: "true"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://datadog-agent.monitoring.svc.cluster.local:4318/v1/traces
   DATADOG_ENABLED: "false"
 externalSecret:
   enabled: true
@@ -40,10 +58,11 @@ externalSecret:
   keys:
     - MONGODB_URI
     - OAUTH_CLIENT_SECRET
-    - REDIS_PASSWORD
+    - SPRING_DATA_REDIS_PASSWORD
     - PII_ENCRYPTION_KEY
-serviceAccount:
-  roleArn: arn:aws:iam::000000000000:role/mariposa-order-processor
+    - secretKey: SPRING_CLOUD_CONFIG_PASSWORD
+      remoteKey: grupo-mariposa/config-server
+      property: CONFIG_SERVER_PASSWORD
 networkPolicy:
   enabled: true
   allowedFrom:

@@ -1,0 +1,4 @@
+env:
+  CONFIG_PROFILE: production
+  AUTH_ISSUER: https://auth.production.example.com/realms/mariposa
+  AUTH_JWKS_URL: https://auth.production.example.com/realms/mariposa/protocol/openid-connect/certs

@@ -1,6 +1,10 @@
 image:
-  repository: 000000000000.dkr.ecr.us-east-1.amazonaws.com/grupo-mariposa/products-api
+  repository: grupo-mariposa/products-api
 containerPort: 8081
+podSecurityContext:
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
 resources:
   requests:
     cpu: 50m
@@ -10,12 +14,18 @@ resources:
 env:
   PORT: "8081"
   AUTH_ENABLED: "true"
-  AUTH_ISSUER: https://auth.grupomariposa.dev/realms/mariposa
-  AUTH_JWKS_URL: https://auth.grupomariposa.dev/realms/mariposa/protocol/openid-connect/certs
   AUTH_REQUIRED_ROLE: products-reader
-  FAULT_RULES: ""
-  RATE_LIMIT_RPS: "500"
-  RATE_LIMIT_BURST: "1000"
+  AUTH_AUDIENCE: products-api
+  FAULT_INJECTION_ENABLED: "false"
+  CONFIG_SERVER_URL: http://config-server.grupo-mariposa.svc.cluster.local
+  CONFIG_APP_NAME: products-api
+  CONFIG_SERVER_USERNAME: config-reader
+  CONFIG_SERVER_FAIL_FAST: "true"
+externalSecret:
+  enabled: true
+  remoteKey: grupo-mariposa/config-server
+  keys:
+    - CONFIG_SERVER_PASSWORD
 networkPolicy:
   enabled: true
   allowedFrom:
