@@ -50,9 +50,11 @@ class ObservabilityTest {
 
         observer.published(event);
         observer.publicationFailed(event, new IllegalStateException());
+        observer.leaseLost(event);
 
         assertThat(registry.counter(LoggingProcessingObserver.OUTBOX_PUBLISHED).count()).isOne();
         assertThat(registry.counter(LoggingProcessingObserver.OUTBOX_FAILURES).count()).isOne();
+        assertThat(registry.counter(LoggingProcessingObserver.OUTBOX_LEASE_LOST).count()).isOne();
     }
 
     @Test

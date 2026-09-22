@@ -7,7 +7,7 @@ public interface OutboxStore {
 
     List<PendingEvent> claim(int limit, Instant now, Instant leaseUntil, String owner);
 
-    void markPublished(String eventId, Instant publishedAt);
+    boolean markPublished(String eventId, String owner, Instant publishedAt);
 
-    void release(String eventId, int attempts, Instant availableAt);
+    boolean release(String eventId, String owner, int attempts, Instant availableAt);
 }

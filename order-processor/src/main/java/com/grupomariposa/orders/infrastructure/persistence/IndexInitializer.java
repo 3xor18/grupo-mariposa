@@ -19,6 +19,7 @@ public final class IndexInitializer implements SmartInitializingSingleton {
     private static final String INBOX_TTL = "inbox_received_ttl";
     private static final String OUTBOX_PENDING = "outbox_status_created";
     private static final String OUTBOX_TTL = "outbox_published_ttl";
+    private static final String OUTBOX_BY_ORDER = "outbox_order_version";
     private static final String ORDERS_BY_STATUS = "orders_status_processed";
     private static final String ORDERS_BY_MARKET = "orders_market_processed";
     private static final String ORDERS_BY_CLIENT = "orders_client";
@@ -42,6 +43,8 @@ public final class IndexInitializer implements SmartInitializingSingleton {
         final IndexOperations outbox = mongo.indexOps(OutboxDocument.class);
         outbox.createIndex(new Index().on(Fields.STATUS, Sort.Direction.ASC)
                 .on(Fields.CREATED_AT, Sort.Direction.ASC).named(OUTBOX_PENDING));
+        outbox.createIndex(new Index().on(Fields.ORDER_ID, Sort.Direction.ASC)
+                .on(Fields.EVENT_VERSION, Sort.Direction.ASC).named(OUTBOX_BY_ORDER));
         outbox.createIndex(new Index().on(Fields.PUBLISHED_AT, Sort.Direction.ASC)
                 .expire(properties.outboxRetention()).named(OUTBOX_TTL));
         LOG.info("MongoDB indexes verified");

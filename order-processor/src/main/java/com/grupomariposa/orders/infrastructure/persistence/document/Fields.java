@@ -16,6 +16,7 @@ public final class Fields {
     public static final String LEASE_UNTIL = "leaseUntil";
     public static final String LEASE_OWNER = "leaseOwner";
     public static final String ATTEMPTS = "attempts";
+    public static final String ORDER_ID = "orderId";
 
     private Fields() {
     }

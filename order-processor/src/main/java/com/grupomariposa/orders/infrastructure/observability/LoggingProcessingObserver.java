@@ -19,6 +19,7 @@ public final class LoggingProcessingObserver implements ProcessingObserver {
     public static final String TECHNICAL_FAILURES = "orders.technical_failures";
     public static final String OUTBOX_PUBLISHED = "orders.outbox.published";
     public static final String OUTBOX_FAILURES = "orders.outbox.failures";
+    public static final String OUTBOX_LEASE_LOST = "orders.outbox.lease_lost";
     private static final String STATUS = "status";
     private static final String REASON = "reason";
     private static final String CATEGORY = "category";
@@ -65,6 +66,15 @@ public final class LoggingProcessingObserver implements ProcessingObserver {
         try (LogContext ignored = LogContext.bind(event.orderId(), event.eventId())) {
             LOG.atWarn().addKeyValue(STAGE_KEY, ProcessingStage.PUBLICATION_FAILED)
                     .log("Outbox publication failed: {}", cause.getClass().getSimpleName());
+        }
+    }
+
+    @Override
+    public void leaseLost(final PendingEvent event) {
+        registry.counter(OUTBOX_LEASE_LOST).increment();
+        try (LogContext ignored = LogContext.bind(event.orderId(), event.eventId())) {
+            LOG.atWarn().addKeyValue(STAGE_KEY, ProcessingStage.PUBLICATION_FAILED)
+                    .log("Outbox lease was taken over by another relay");
         }
     }
 

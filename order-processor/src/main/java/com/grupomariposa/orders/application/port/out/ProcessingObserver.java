@@ -11,4 +11,6 @@ public interface ProcessingObserver {
     void published(PendingEvent event);
 
     void publicationFailed(PendingEvent event, Throwable cause);
+
+    void leaseLost(PendingEvent event);
 }
