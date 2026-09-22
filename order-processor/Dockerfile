@@ -11,13 +11,13 @@ RUN cp target/order-processor-*.jar target/application.jar \
        --destination target/extracted
 
 FROM eclipse-temurin:21-jre-alpine
-RUN addgroup -S orders && adduser -S -G orders -H -s /sbin/nologin orders
+RUN addgroup -S -g 10001 orders && adduser -S -u 10001 -G orders -H -s /sbin/nologin orders
 WORKDIR /app
-COPY --from=build --chown=orders:orders /workspace/target/extracted/dependencies/ ./
-COPY --from=build --chown=orders:orders /workspace/target/extracted/spring-boot-loader/ ./
-COPY --from=build --chown=orders:orders /workspace/target/extracted/snapshot-dependencies/ ./
-COPY --from=build --chown=orders:orders /workspace/target/extracted/application/ ./
-USER orders:orders
+COPY --from=build --chown=10001:10001 /workspace/target/extracted/dependencies/ ./
+COPY --from=build --chown=10001:10001 /workspace/target/extracted/spring-boot-loader/ ./
+COPY --from=build --chown=10001:10001 /workspace/target/extracted/snapshot-dependencies/ ./
+COPY --from=build --chown=10001:10001 /workspace/target/extracted/application/ ./
+USER 10001:10001
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=50 -XX:+ExitOnOutOfMemoryError -XX:+UseZGC -Djava.security.egd=file:/dev/./urandom"
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=3s --start-period=60s --retries=3 \
