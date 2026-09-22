@@ -6,6 +6,12 @@
   "registrationAllowed": false,
   "loginWithEmailAllowed": false,
   "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 10,
+  "waitIncrementSeconds": 30,
+  "maxFailureWaitSeconds": 300,
+  "quickLoginCheckMilliSeconds": 1,
+  "minimumQuickLoginWaitSeconds": 5,
   "accessTokenLifespan": 300,
   "ssoSessionIdleTimeout": 1800,
   "roles": {
