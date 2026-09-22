@@ -42,6 +42,7 @@ export class ClientsController {
     HttpStatus.NOT_FOUND,
     HttpStatus.TOO_MANY_REQUESTS,
     HttpStatus.INTERNAL_SERVER_ERROR,
+    HttpStatus.BAD_GATEWAY,
     HttpStatus.SERVICE_UNAVAILABLE,
   )
   async findById(@Param() params: GetClientParams): Promise<ClientResponse> {
