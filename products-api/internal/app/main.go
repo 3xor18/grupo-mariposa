@@ -38,6 +38,7 @@ func Main(ctx context.Context, args []string, lookup config.LookupFunc, out io.W
 	}
 	cfg, err := config.Load(lookup)
 	logger := telemetry.NewLogger(out, cfg.LogLevel)
+	slog.SetDefault(logger)
 	if err != nil {
 		return report(ctx, logger, err, logInvalidConfig)
 	}
