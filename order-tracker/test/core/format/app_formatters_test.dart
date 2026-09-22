@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:order_tracker/core/format/app_formatters.dart';
 import 'package:order_tracker/core/money/money.dart';
+import 'package:order_tracker/core/money/unit_price.dart';
 
 void main() {
   late AppFormatters formatters;
@@ -37,6 +38,20 @@ void main() {
       expect(money('-5.5', 'MXN'), contains('5.50'));
       expect(money('-5.5', 'MXN'), contains('-'));
       expect(money('7', 'MXN'), r'$7.00');
+    });
+  });
+
+  group('unit price', () {
+    String unitPrice(String amount) {
+      return formatters.unitPrice(UnitPrice.parse(amount, currency: 'MXN'));
+    }
+
+    test('should show up to four decimals trimming trailing zeros to two', () {
+      expect(unitPrice('12.3456'), r'$12.3456');
+      expect(unitPrice('12.345'), r'$12.345');
+      expect(unitPrice('12.3'), r'$12.30');
+      expect(unitPrice('35.5'), r'$35.50');
+      expect(unitPrice('1234.5000'), r'$1,234.50');
     });
   });
 
