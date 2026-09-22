@@ -1,5 +1,8 @@
 package com.grupomariposa.orders.infrastructure.persistence.mapping;
 
+import static com.grupomariposa.orders.infrastructure.support.Enums.nameOf;
+import static com.grupomariposa.orders.infrastructure.support.Enums.parseNullable;
+
 import com.grupomariposa.orders.application.query.OrderSummary;
 import com.grupomariposa.orders.domain.model.ClientSegment;
 import com.grupomariposa.orders.domain.model.ClientSnapshot;
@@ -21,10 +24,14 @@ import com.grupomariposa.orders.infrastructure.persistence.document.FailureDocum
 import com.grupomariposa.orders.infrastructure.persistence.document.OrderDocument;
 import com.grupomariposa.orders.infrastructure.persistence.document.TotalsDocument;
 import com.grupomariposa.orders.infrastructure.persistence.document.ViolationDocument;
+import java.util.List;
 import java.util.Objects;
-import java.util.function.Function;
 
 public final class OrderDocumentMapper {
+
+    private static final String MISSING_FIELD = "Order document %s has no %s";
+    private static final String CLIENT = "client";
+    private static final String TOTALS = "totals";
 
     private final AesGcmPiiCipher cipher;
     private final LineDocumentMapper lineMapper = new LineDocumentMapper();
@@ -41,7 +48,7 @@ public final class OrderDocumentMapper {
                 totalsDocument(order.totals()),
                 order.reason().map(RejectionCode::name).orElse(null),
                 order.violations().stream().map(OrderDocumentMapper::violationDocument).toList(),
-                order.failureDetails().map(OrderDocumentMapper::failureDocument).orElse(null),
+                failureDocument(order.failure()),
                 order.timeline().occurredAt(), order.timeline().receivedAt(),
                 order.processedAt(), order.traceId());
     }
@@ -52,10 +59,11 @@ public final class OrderDocumentMapper {
                         document.eventVersion()),
                 OrderStatus.valueOf(document.status()), Market.valueOf(document.market()),
                 Currency.valueOf(document.currency()), document.channel(),
-                clientSnapshot(document.client()),
-                document.lines().stream().map(lineMapper::toDomain).toList(),
-                totals(document.totals()),
-                document.violations().stream().map(OrderDocumentMapper::violation).toList(),
+                clientSnapshot(required(document.client(), CLIENT, document.id())),
+                orEmpty(document.lines()).stream().map(lineMapper::toDomain).toList(),
+                totals(required(document.totals(), TOTALS, document.id())),
+                orEmpty(document.violations()).stream().map(OrderDocumentMapper::violation)
+                        .toList(),
                 failure(document.failure()),
                 new OrderTimeline(document.occurredAt(), document.receivedAt(),
                         document.processedAt()),
@@ -67,7 +75,18 @@ public final class OrderDocumentMapper {
                 Market.valueOf(document.market()), Currency.valueOf(document.currency()),
                 document.client().clientId(), document.eventVersion(),
                 Decimals.toMoney(document.totals().grandTotal()),
-                nullable(document.reason(), RejectionCode::valueOf), document.processedAt());
+                parseNullable(document.reason(), RejectionCode::valueOf), document.processedAt());
+    }
+
+    private static <T> T required(final T value, final String field, final String orderId) {
+        if (value == null) {
+            throw new IllegalStateException(MISSING_FIELD.formatted(orderId, field));
+        }
+        return value;
+    }
+
+    private static <T> List<T> orEmpty(final List<T> values) {
+        return values == null ? List.of() : values;
     }
 
     private ClientDocument clientDocument(final ClientSnapshot client) {
@@ -78,10 +97,10 @@ public final class OrderDocumentMapper {
 
     private ClientSnapshot clientSnapshot(final ClientDocument client) {
         return new ClientSnapshot(client.clientId(), cipher.decrypt(client.encryptedName()),
-                nullable(client.status(), ClientStatus::valueOf),
-                nullable(client.segment(), ClientSegment::valueOf),
-                nullable(client.taxRegime(), TaxRegime::valueOf),
-                nullable(client.market(), Market::valueOf));
+                parseNullable(client.status(), ClientStatus::valueOf),
+                parseNullable(client.segment(), ClientSegment::valueOf),
+                parseNullable(client.taxRegime(), TaxRegime::valueOf),
+                parseNullable(client.market(), Market::valueOf));
     }
 
     private static TotalsDocument totalsDocument(final Totals totals) {
@@ -107,19 +126,12 @@ public final class OrderDocumentMapper {
     }
 
     private static FailureDocument failureDocument(final FailureDetails failure) {
-        return new FailureDocument(failure.category(), failure.cause(), failure.attempts());
+        return failure == null ? null
+                : new FailureDocument(failure.category(), failure.cause(), failure.attempts());
     }
 
     private static FailureDetails failure(final FailureDocument document) {
         return document == null ? null
                 : new FailureDetails(document.category(), document.cause(), document.attempts());
-    }
-
-    static String nameOf(final Enum<?> value) {
-        return value == null ? null : value.name();
-    }
-
-    static <T> T nullable(final String value, final Function<String, T> parser) {
-        return value == null ? null : parser.apply(value);
     }
 }

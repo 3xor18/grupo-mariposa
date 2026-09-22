@@ -84,7 +84,7 @@ public final class OrderEnricher {
         }
     }
 
-    static RuntimeException unwrap(final CompletionException failure) {
+    private static RuntimeException unwrap(final CompletionException failure) {
         if (failure.getCause() instanceof RuntimeException runtime) {
             return runtime;
         }

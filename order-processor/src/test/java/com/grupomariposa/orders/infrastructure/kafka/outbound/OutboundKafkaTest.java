@@ -1,6 +1,7 @@
 package com.grupomariposa.orders.infrastructure.kafka.outbound;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -51,8 +52,8 @@ class OutboundKafkaTest {
         final OutboxRelayScheduler scheduler =
                 new OutboxRelayScheduler(relay, new CauseSanitizer(), registry);
 
-        scheduler.relay();
-        scheduler.relay();
+        assertThatCode(scheduler::relay).doesNotThrowAnyException();
+        assertThatCode(scheduler::relay).doesNotThrowAnyException();
 
         verify(relay, times(2)).publishPending();
         assertThat(registry.counter(OutboxRelayScheduler.RELAY_FAILURES).count()).isOne();

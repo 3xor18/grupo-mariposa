@@ -8,7 +8,6 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.core.IntervalBiFunction;
 import io.github.resilience4j.core.IntervalFunction;
 import io.github.resilience4j.core.functions.Either;
-import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.retry.RetryRegistry;
 import java.time.Duration;
@@ -39,11 +38,7 @@ public final class ResilienceFactory {
                 bulkheads.bulkhead(name, bulkheadConfig()));
     }
 
-    public Retry retryOf(final Dependency dependency) {
-        return retries.retry(dependency.id(), retryConfig());
-    }
-
-    RetryConfig retryConfig() {
+    private RetryConfig retryConfig() {
         return RetryConfig.custom()
                 .maxAttempts(settings.maxAttempts())
                 .retryOnException(ExternalTransientException.class::isInstance)
@@ -51,7 +46,7 @@ public final class ResilienceFactory {
                 .build();
     }
 
-    IntervalBiFunction<Object> intervalFunction() {
+    private IntervalBiFunction<Object> intervalFunction() {
         final IntervalFunction backoff = IntervalFunction.ofExponentialRandomBackoff(
                 settings.initialBackoff(), settings.backoffMultiplier(), settings.jitter());
         return (attempt, outcome) -> retryAfter(outcome)
@@ -71,7 +66,7 @@ public final class ResilienceFactory {
                 ? settings.maxRetryAfter() : requested;
     }
 
-    CircuitBreakerConfig circuitBreakerConfig() {
+    private CircuitBreakerConfig circuitBreakerConfig() {
         return CircuitBreakerConfig.custom()
                 .slidingWindowType(CircuitBreakerConfig.SlidingWindowType.COUNT_BASED)
                 .slidingWindowSize(settings.slidingWindowSize())
@@ -83,7 +78,7 @@ public final class ResilienceFactory {
                 .build();
     }
 
-    BulkheadConfig bulkheadConfig() {
+    private BulkheadConfig bulkheadConfig() {
         return BulkheadConfig.custom()
                 .maxConcurrentCalls(settings.bulkheadMaxConcurrentCalls())
                 .maxWaitDuration(settings.bulkheadMaxWait())

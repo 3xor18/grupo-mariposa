@@ -20,7 +20,7 @@ import com.grupomariposa.orders.application.port.in.ProcessOrderUseCase;
 import com.grupomariposa.orders.application.port.out.ProcessingObserver;
 import com.grupomariposa.orders.application.port.out.ProcessingStage;
 import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import com.grupomariposa.orders.support.Contracts;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.charset.StandardCharsets;
@@ -38,17 +38,17 @@ class OrderCreatedListenerTest {
 
     private final ProcessOrderUseCase useCase = mock(ProcessOrderUseCase.class);
     private final ProcessingObserver observer = mock(ProcessingObserver.class);
-    private final TraceContext traceContext = mock(TraceContext.class);
+    private final TraceIds traceIds = mock(TraceIds.class);
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private OrderCreatedListener listener;
 
     @BeforeEach
     void setUp() {
-        when(traceContext.currentTraceId()).thenReturn(Optional.of("trace-9"));
+        when(traceIds.currentTraceId()).thenReturn(Optional.of("trace-9"));
         listener = new OrderCreatedListener(new OrderMessageReader(), new OrderMessageMapper(),
                 ApplicationFixtures.validator(), useCase, observer,
                 () -> Instant.EPOCH,
-                traceContext, new ProcessingMetrics(registry));
+                traceIds, new ProcessingMetrics(registry));
     }
 
     @Test
@@ -56,7 +56,7 @@ class OrderCreatedListenerTest {
         when(useCase.process(any())).thenReturn(new ProcessingOutcome.Duplicate(ORDER_ID,
                 EVENT_ID));
 
-        listener.onMessage(record(GOLDEN));
+        listener.onMessage(consumerRecord(GOLDEN));
 
         final ArgumentCaptor<OrderCommand> command = ArgumentCaptor.forClass(OrderCommand.class);
         verify(useCase).process(command.capture());
@@ -71,7 +71,7 @@ class OrderCreatedListenerTest {
         final byte[] invalid = new String(GOLDEN, StandardCharsets.UTF_8)
                 .replace("\"MXN\"", "\"PEN\"").getBytes(StandardCharsets.UTF_8);
 
-        assertThatThrownBy(() -> listener.onMessage(record(invalid)))
+        assertThatThrownBy(() -> listener.onMessage(consumerRecord(invalid)))
                 .isExactlyInstanceOf(RecordProcessingFailure.class)
                 .satisfies(failure -> assertThat(((RecordProcessingFailure) failure).category())
                         .isEqualTo(ErrorCategory.VALIDATION));
@@ -83,7 +83,7 @@ class OrderCreatedListenerTest {
         final byte[] huge = new String(GOLDEN, StandardCharsets.UTF_8)
                 .replace("35.5", "1e999999999").getBytes(StandardCharsets.UTF_8);
 
-        assertThatThrownBy(() -> listener.onMessage(record(huge)))
+        assertThatThrownBy(() -> listener.onMessage(consumerRecord(huge)))
                 .isInstanceOfSatisfying(RecordProcessingFailure.class, failure -> {
                     assertThat(failure.category()).isEqualTo(ErrorCategory.VALIDATION);
                     assertThat(failure.getMessage()).contains("items[0].unitPrice");
@@ -96,7 +96,7 @@ class OrderCreatedListenerTest {
         when(useCase.process(any())).thenReturn(new ProcessingOutcome.VersionConflict(ORDER_ID,
                 EVENT_ID, 1, "EVT-WINNER"));
 
-        assertThatThrownBy(() -> listener.onMessage(record(GOLDEN)))
+        assertThatThrownBy(() -> listener.onMessage(consumerRecord(GOLDEN)))
                 .isExactlyInstanceOf(RecordProcessingFailure.class)
                 .hasMessageContaining("EVT-WINNER");
     }
@@ -106,7 +106,7 @@ class OrderCreatedListenerTest {
         when(useCase.process(any()))
                 .thenThrow(new ExternalTransientException("products-api", "503", null));
 
-        assertThatThrownBy(() -> listener.onMessage(record(GOLDEN)))
+        assertThatThrownBy(() -> listener.onMessage(consumerRecord(GOLDEN)))
                 .isInstanceOfSatisfying(RetryableRecordFailure.class, failure -> {
                     assertThat(failure.category()).isEqualTo(ErrorCategory.EXTERNAL_TRANSIENT);
                     assertThat(failure.command()).isPresent();
@@ -118,7 +118,7 @@ class OrderCreatedListenerTest {
         when(useCase.process(any()))
                 .thenThrow(new ExternalPermanentException("clients-api", "401", null));
 
-        assertThatThrownBy(() -> listener.onMessage(record(GOLDEN)))
+        assertThatThrownBy(() -> listener.onMessage(consumerRecord(GOLDEN)))
                 .isExactlyInstanceOf(RecordProcessingFailure.class);
     }
 
@@ -126,14 +126,14 @@ class OrderCreatedListenerTest {
     void should_classify_unexpected_errors() {
         when(useCase.process(any())).thenThrow(new IllegalStateException("bug"));
 
-        assertThatThrownBy(() -> listener.onMessage(record(GOLDEN)))
+        assertThatThrownBy(() -> listener.onMessage(consumerRecord(GOLDEN)))
                 .isInstanceOfSatisfying(RecordProcessingFailure.class, failure -> {
                     assertThat(failure.category()).isEqualTo(ErrorCategory.UNEXPECTED);
                     assertThat(failure.getMessage()).isEqualTo("IllegalStateException");
                 });
     }
 
-    private static ConsumerRecord<String, byte[]> record(final byte[] value) {
+    private static ConsumerRecord<String, byte[]> consumerRecord(final byte[] value) {
         return new ConsumerRecord<>("orders.created.v1", 0, 0L, ORDER_ID, value);
     }
 }

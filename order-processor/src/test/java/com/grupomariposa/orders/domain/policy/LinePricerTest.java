@@ -74,7 +74,7 @@ class LinePricerTest {
         final LineAmounts amounts = pricer.price(Market.PE, retailClient(Market.PE),
                 item("PRD-010", 30, "4.25"), product("PRD-010", TaxCategory.REDUCED)).amounts();
 
-        assertThat(amounts.discountRate().isZero()).isTrue();
+        assertThat(amounts.discountRate().value()).isZero();
         assertThat(amounts.netSubtotal()).isEqualTo(Money.of("127.50"));
         assertThat(amounts.taxAmount()).isEqualTo(Money.of("12.75"));
         assertThat(amounts.lineTotal()).isEqualTo(Money.of("140.25"));
@@ -86,7 +86,7 @@ class LinePricerTest {
                 client(Market.CO, ClientSegment.WHOLESALE, TaxRegime.EXEMPT, ClientStatus.ACTIVE),
                 item("PRD-006", 20, "10.00"), product("PRD-006", TaxCategory.STANDARD)).amounts();
 
-        assertThat(amounts.taxRate().isZero()).isTrue();
+        assertThat(amounts.taxRate().value()).isZero();
         assertThat(amounts.discount()).isEqualTo(Money.of("6.00"));
         assertThat(amounts.lineTotal()).isEqualTo(Money.of("194.00"));
     }

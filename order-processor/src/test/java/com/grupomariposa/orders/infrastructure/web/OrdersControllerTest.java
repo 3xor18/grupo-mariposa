@@ -2,7 +2,6 @@ package com.grupomariposa.orders.infrastructure.web;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -19,7 +18,7 @@ import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.OrderStatus;
 import com.grupomariposa.orders.infrastructure.config.WebConfiguration;
 import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import com.grupomariposa.orders.infrastructure.persistence.PersistenceFixtures;
 import com.grupomariposa.orders.infrastructure.web.security.WebSecurityProperties;
 import java.time.Clock;
@@ -36,6 +35,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -49,6 +49,10 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
     "app.security.reader-role=orders-reader",
     "app.security.admin-role=orders-admin",
     "app.security.api-docs-enabled=false",
+    "app.security.public-paths=/actuator/health/**,/livez,/readyz,/error",
+    "app.security.cors-allowed-methods=GET,OPTIONS",
+    "app.security.cors-allowed-headers=Authorization,traceparent",
+    "app.api.problems.type-base=https://contracts.grupomariposa.dev/problems/",
     "app.api.orders.default-page-size=20",
     "app.api.orders.max-page-size=100",
     "app.api.orders.max-offset=10000"
@@ -70,11 +74,11 @@ class OrdersControllerTest {
     private JwtDecoder jwtDecoder;
 
     @MockitoBean
-    private TraceContext traceContext;
+    private TraceIds traceIds;
 
     @BeforeEach
     void setUp() {
-        when(traceContext.currentTraceId()).thenReturn(Optional.of("4bf92f3577b34da6"));
+        when(traceIds.currentTraceId()).thenReturn(Optional.of("4bf92f3577b34da6"));
     }
 
     @Test
@@ -208,7 +212,8 @@ class OrdersControllerTest {
     }
 
     @TestConfiguration
-    @EnableConfigurationProperties({WebSecurityProperties.class, OrdersApiProperties.class})
+    @EnableConfigurationProperties({WebSecurityProperties.class, OrdersApiProperties.class,
+        ProblemProperties.class})
     static class Support {
 
         @Bean
@@ -220,5 +225,9 @@ class OrdersControllerTest {
         CauseSanitizer causeSanitizer() {
             return new CauseSanitizer();
         }
+    }
+
+    private static SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor jwt() {
+        return SecurityMockMvcRequestPostProcessors.jwt();
     }
 }

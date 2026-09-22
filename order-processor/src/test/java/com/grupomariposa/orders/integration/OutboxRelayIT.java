@@ -34,11 +34,11 @@ class OutboxRelayIT extends IntegrationTest {
 
         try (TopicProbe processed = new TopicProbe(KAFKA.getBootstrapServers(),
                 ORDERS_PROCESSED)) {
-            assertThat(processed.awaitKey(pending.key(), 1)).singleElement().satisfies(record ->
-                    assertThat(new String(record.value(), StandardCharsets.UTF_8))
+            assertThat(processed.awaitKey(pending.key(), 1)).singleElement().satisfies(received ->
+                    assertThat(new String(received.value(), StandardCharsets.UTF_8))
                             .isEqualTo(pending.payload()));
             assertThat(processed.awaitKey(abandoned.key(), 1)).hasSize(1);
-            assertThat(processed.await(record -> leased.key().equals(record.key()), 1,
+            assertThat(processed.await(received -> leased.key().equals(received.key()), 1,
                     Duration.ofSeconds(2), Duration.ZERO)).isEmpty();
         }
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {

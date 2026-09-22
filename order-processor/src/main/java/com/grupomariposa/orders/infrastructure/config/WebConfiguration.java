@@ -1,12 +1,13 @@
 package com.grupomariposa.orders.infrastructure.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import com.grupomariposa.orders.infrastructure.web.OrderRequestParser;
 import com.grupomariposa.orders.infrastructure.web.OrderResponseMapper;
 import com.grupomariposa.orders.infrastructure.web.OrdersApiProperties;
 import com.grupomariposa.orders.infrastructure.web.OrdersController;
 import com.grupomariposa.orders.infrastructure.web.ProblemFactory;
+import com.grupomariposa.orders.infrastructure.web.ProblemProperties;
 import com.grupomariposa.orders.infrastructure.web.security.ProblemSecurityHandler;
 import com.grupomariposa.orders.infrastructure.web.security.RealmRoleConverter;
 import com.grupomariposa.orders.infrastructure.web.security.SecurityModeGuard;
@@ -16,7 +17,6 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import java.time.Clock;
-import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -25,6 +25,7 @@ import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
@@ -34,10 +35,6 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @Configuration(proxyBeanMethods = false)
 public class WebConfiguration {
 
-    private static final String[] PUBLIC_PATHS = {
-        "/actuator/health/**", "/actuator/health", "/actuator/prometheus", "/health/**",
-        "/livez", "/readyz", "/error"
-    };
     private static final String[] API_DOC_PATHS = {
         "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**"
     };
@@ -48,10 +45,6 @@ public class WebConfiguration {
     private static final String JWT = "JWT";
     private static final String API_TITLE = "Orders query API (order-processor)";
     private static final String API_VERSION = "1.0.0";
-    private static final List<String> CORS_HEADERS = List.of("Authorization", "Content-Type",
-            "traceparent", "X-Request-Id");
-    private static final List<String> CORS_METHODS = List.of(HttpMethod.GET.name(),
-            HttpMethod.OPTIONS.name());
 
     @Bean
     public OrderRequestParser orderRequestParser(final OrdersApiProperties limits) {
@@ -64,8 +57,9 @@ public class WebConfiguration {
     }
 
     @Bean
-    public ProblemFactory problemFactory(final Clock clock, final TraceContext traceContext) {
-        return new ProblemFactory(clock, traceContext);
+    public ProblemFactory problemFactory(final Clock clock, final TraceIds traceIds,
+                                         final ProblemProperties problems) {
+        return new ProblemFactory(clock, traceIds, problems.typeBase());
     }
 
     @Bean
@@ -81,24 +75,11 @@ public class WebConfiguration {
                                                    final Environment environment)
             throws Exception {
         SecurityModeGuard.requireLocalWhenDisabled(properties.enabled(), environment);
-        http.csrf(AbstractHttpConfigurer::disable)
-                .cors(Customizer.withDefaults())
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .exceptionHandling(handling -> handling.authenticationEntryPoint(problems)
-                        .accessDeniedHandler(problems));
+        statelessApi(http, problems);
         if (!properties.enabled()) {
             return http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll()).build();
         }
-        return http.authorizeHttpRequests(auth -> auth
-                        .requestMatchers(PUBLIC_PATHS).permitAll()
-                        .requestMatchers(API_DOC_PATHS).access((authentication, context) ->
-                                new AuthorizationDecision(properties.apiDocsEnabled()))
-                        .requestMatchers(HttpMethod.OPTIONS, ALL_PATHS).permitAll()
-                        .requestMatchers(ACTUATOR_PATHS).hasRole(properties.adminRole())
-                        .requestMatchers(HttpMethod.GET, OrdersController.BASE_PATH, ORDERS_PATHS)
-                        .hasAnyRole(properties.readerRole(), properties.adminRole())
-                        .anyRequest().authenticated())
+        return http.authorizeHttpRequests(auth -> authorize(auth, properties))
                 .oauth2ResourceServer(server -> server
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(new RealmRoleConverter()))
                         .authenticationEntryPoint(problems)
@@ -106,13 +87,37 @@ public class WebConfiguration {
                 .build();
     }
 
+    private static void statelessApi(final HttpSecurity http,
+                                     final ProblemSecurityHandler problems) throws Exception {
+        http.csrf(AbstractHttpConfigurer::disable)
+                .cors(Customizer.withDefaults())
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(handling -> handling.authenticationEntryPoint(problems)
+                        .accessDeniedHandler(problems));
+    }
+
+    private static void authorize(
+            final AuthorizeHttpRequestsConfigurer<HttpSecurity>
+                    .AuthorizationManagerRequestMatcherRegistry auth,
+            final WebSecurityProperties properties) {
+        auth.requestMatchers(properties.publicPaths().toArray(String[]::new)).permitAll()
+                .requestMatchers(API_DOC_PATHS).access((authentication, context) ->
+                        new AuthorizationDecision(properties.apiDocsEnabled()))
+                .requestMatchers(HttpMethod.OPTIONS, ALL_PATHS).permitAll()
+                .requestMatchers(ACTUATOR_PATHS).hasRole(properties.adminRole())
+                .requestMatchers(HttpMethod.GET, OrdersController.BASE_PATH, ORDERS_PATHS)
+                .hasAnyRole(properties.readerRole(), properties.adminRole())
+                .anyRequest().authenticated();
+    }
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource(
             final WebSecurityProperties properties) {
         final CorsConfiguration cors = new CorsConfiguration();
         cors.setAllowedOrigins(properties.allowedOrigins());
-        cors.setAllowedMethods(CORS_METHODS);
-        cors.setAllowedHeaders(CORS_HEADERS);
+        cors.setAllowedMethods(properties.corsAllowedMethods());
+        cors.setAllowedHeaders(properties.corsAllowedHeaders());
         final UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration(ALL_PATHS, cors);
         return source;

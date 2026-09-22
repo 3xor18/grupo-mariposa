@@ -12,6 +12,7 @@ public final class TransactionRunner {
 
     private static final String EXHAUSTED = "MongoDB transaction failed after %d attempts: %s";
     private static final String FAILED = "MongoDB operation failed: %s";
+    private static final int SINGLE_ATTEMPT = 1;
     private static final String INTERRUPTED = "Interrupted while retrying a transaction";
 
     private final TransactionTemplate transactionTemplate;
@@ -42,8 +43,12 @@ public final class TransactionRunner {
         }
     }
 
+    static PersistenceException translate(final RuntimeException failure) {
+        return translate(failure, SINGLE_ATTEMPT);
+    }
+
     static PersistenceException translate(final RuntimeException failure, final int attempts) {
-        final String message = attempts > 1
+        final String message = attempts > SINGLE_ATTEMPT
                 ? EXHAUSTED.formatted(attempts, MongoErrors.describe(failure))
                 : FAILED.formatted(MongoErrors.describe(failure));
         return new PersistenceException(message, failure);

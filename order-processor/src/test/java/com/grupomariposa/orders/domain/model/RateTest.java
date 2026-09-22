@@ -16,8 +16,8 @@ class RateTest {
 
     @Test
     void should_report_zero() {
-        assertThat(Rate.ZERO.isZero()).isTrue();
-        assertThat(Rate.ofPercent(1).isZero()).isFalse();
+        assertThat(Rate.ZERO.value()).isZero();
+        assertThat(Rate.ofPercent(1).value()).isPositive();
     }
 
     @Test

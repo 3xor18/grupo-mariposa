@@ -14,6 +14,10 @@ public record CachedProduct(String productId, String name, String sku, ProductSt
                 profile.status(), profile.taxCategory());
     }
 
+    public boolean isComplete() {
+        return productId != null && status != null && taxCategory != null;
+    }
+
     public ProductProfile toProfile() {
         return new ProductProfile(productId, name, sku, status, taxCategory);
     }

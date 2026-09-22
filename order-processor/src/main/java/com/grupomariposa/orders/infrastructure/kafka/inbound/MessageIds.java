@@ -1,7 +1,6 @@
 package com.grupomariposa.orders.infrastructure.kafka.inbound;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import java.util.Optional;
 
 public record MessageIds(String orderId, String eventId) {
 
@@ -11,14 +10,6 @@ public record MessageIds(String orderId, String eventId) {
 
     public static MessageIds from(final JsonNode tree) {
         return new MessageIds(text(tree, ORDER_ID), text(tree, EVENT_ID));
-    }
-
-    public Optional<String> order() {
-        return Optional.ofNullable(orderId);
-    }
-
-    public Optional<String> event() {
-        return Optional.ofNullable(eventId);
     }
 
     private static String text(final JsonNode tree, final String field) {

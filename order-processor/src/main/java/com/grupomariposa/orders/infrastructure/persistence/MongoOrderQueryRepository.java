@@ -58,7 +58,7 @@ public final class MongoOrderQueryRepository implements OrderQueryRepository {
         try {
             return query.get();
         } catch (DataAccessException failure) {
-            throw TransactionRunner.translate(failure, 1);
+            throw TransactionRunner.translate(failure);
         }
     }
 

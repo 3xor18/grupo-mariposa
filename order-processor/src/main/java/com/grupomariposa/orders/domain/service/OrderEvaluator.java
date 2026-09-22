@@ -50,7 +50,7 @@ public final class OrderEvaluator {
 
     private static Totals totalsOf(final List<OrderLine> lines) {
         final List<LineAmounts> amounts = lines.stream()
-                .map(line -> line.pricing().orElseThrow())
+                .map(OrderLine::amounts)
                 .toList();
         return Totals.sumOf(amounts);
     }

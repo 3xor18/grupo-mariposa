@@ -1,6 +1,6 @@
 package com.grupomariposa.orders.infrastructure.web;
 
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import java.net.URI;
 import java.time.Clock;
 import java.util.List;
@@ -11,30 +11,33 @@ import org.springframework.http.ProblemDetail;
 
 public final class ProblemFactory {
 
-    public static final String TYPE_BASE = "https://contracts.grupomariposa.dev/problems/";
     public static final String CODE = "code";
     public static final String TRACE_ID = "traceId";
     public static final String TIMESTAMP = "timestamp";
     public static final String ERRORS = "errors";
     private static final String HYPHEN = "-";
+    private static final String EMPTY = "";
     private static final String ROOT = "/";
 
     private final Clock clock;
-    private final TraceContext traceContext;
+    private final String typeBase;
+    private final TraceIds traceIds;
 
-    public ProblemFactory(final Clock clock, final TraceContext traceContext) {
+    public ProblemFactory(final Clock clock, final TraceIds traceIds,
+                          final String typeBase) {
+        this.typeBase = Objects.requireNonNull(typeBase, "typeBase");
         this.clock = Objects.requireNonNull(clock, "clock");
-        this.traceContext = Objects.requireNonNull(traceContext, "traceContext");
+        this.traceIds = Objects.requireNonNull(traceIds, "traceIds");
     }
 
     public ProblemDetail create(final HttpStatus status, final ApiErrorCode code,
                                 final String detail, final String path) {
         final ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
-        problem.setType(URI.create(TYPE_BASE + code.slug()));
+        problem.setType(URI.create(typeBase + code.slug()));
         problem.setTitle(status.getReasonPhrase());
         problem.setInstance(instanceOf(path));
         problem.setProperty(CODE, code.name());
-        problem.setProperty(TRACE_ID, traceContext.currentTraceId().orElseGet(
+        problem.setProperty(TRACE_ID, traceIds.currentTraceId().orElseGet(
                 ProblemFactory::generatedTraceId));
         problem.setProperty(TIMESTAMP, clock.instant().toString());
         return problem;
@@ -57,6 +60,6 @@ public final class ProblemFactory {
     }
 
     private static String generatedTraceId() {
-        return UUID.randomUUID().toString().replace(HYPHEN, "");
+        return UUID.randomUUID().toString().replace(HYPHEN, EMPTY);
     }
 }

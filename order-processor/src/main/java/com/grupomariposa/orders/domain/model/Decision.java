@@ -31,11 +31,13 @@ public sealed interface Decision permits Decision.Approved, Decision.Rejected {
 
     record Rejected(List<OrderLine> lines, List<Violation> violations) implements Decision {
 
+        private static final String NO_VIOLATIONS = "A rejection needs at least one violation";
+
         public Rejected {
             lines = List.copyOf(lines);
             violations = List.copyOf(violations);
             if (violations.isEmpty()) {
-                throw new IllegalArgumentException("A rejection needs at least one violation");
+                throw new IllegalArgumentException(NO_VIOLATIONS);
             }
         }
 

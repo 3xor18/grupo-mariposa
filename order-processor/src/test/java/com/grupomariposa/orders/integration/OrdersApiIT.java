@@ -1,7 +1,6 @@
 package com.grupomariposa.orders.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -19,6 +18,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -102,7 +102,7 @@ class OrdersApiIT extends IntegrationTest {
     }
 
     @Test
-    void should_expose_public_health_and_metrics() throws Exception {
+    void should_expose_probes_and_metrics_for_internal_scraping() throws Exception {
         seedApprovedOrder();
 
         assertThat(read(mockMvc.perform(get("/health/live")).andReturn(), 200)
@@ -145,5 +145,9 @@ class OrdersApiIT extends IntegrationTest {
     private JsonNode read(final MvcResult result, final int status) throws Exception {
         assertThat(result.getResponse().getStatus()).isEqualTo(status);
         return objectMapper.readTree(result.getResponse().getContentAsString());
+    }
+
+    private static SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor jwt() {
+        return SecurityMockMvcRequestPostProcessors.jwt();
     }
 }

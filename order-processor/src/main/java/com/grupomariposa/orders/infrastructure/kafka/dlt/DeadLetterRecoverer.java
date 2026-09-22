@@ -1,6 +1,5 @@
 package com.grupomariposa.orders.infrastructure.kafka.dlt;
 
-import com.grupomariposa.orders.application.command.OrderCommand;
 import com.grupomariposa.orders.application.port.in.RecordTechnicalFailureUseCase;
 import com.grupomariposa.orders.application.port.out.ProcessingObserver;
 import com.grupomariposa.orders.application.port.out.ProcessingStage;
@@ -37,28 +36,27 @@ public final class DeadLetterRecoverer implements ConsumerRecordRecoverer {
     }
 
     @Override
-    public void accept(final ConsumerRecord<?, ?> record, final Exception exception) {
+    public void accept(final ConsumerRecord<?, ?> consumerRecord, final Exception exception) {
         final FailureDescription failure = FailureDescription.of(exception);
         try (LogContext ignored = LogContext.bind(failure.ids().orderId(),
                 failure.ids().eventId())) {
-            deadLetters.accept(record, exception);
+            deadLetters.accept(consumerRecord, new DescribedFailure(exception, failure));
             metrics.deadLettered(failure.category());
             observer.stage(ProcessingStage.SENT_TO_DLT, failure.ids().orderId(),
                     failure.ids().eventId());
             LOG.atWarn().addKeyValue(CATEGORY, failure.category())
                     .log("Record sent to dead letter topic: {}", sanitizer.cause(failure.cause()));
-            recordTechnicalFailure(failure, DeliveryAttempts.of(record));
+            recordTechnicalFailure(failure, DeliveryAttempts.of(consumerRecord));
         }
     }
 
     private void recordTechnicalFailure(final FailureDescription failure, final int attempts) {
-        if (!failure.category().recordsTechnicalFailure() || failure.orderCommand().isEmpty()) {
+        if (!failure.recordsTechnicalFailure()) {
             return;
         }
-        final OrderCommand command = failure.orderCommand().get();
         try {
-            technicalFailures.record(command, new FailureDetails(failure.category().name(),
-                    sanitizer.cause(failure.cause()), attempts));
+            technicalFailures.record(failure.command(), new FailureDetails(
+                    failure.category().name(), sanitizer.cause(failure.cause()), attempts));
         } catch (RuntimeException unavailable) {
             LOG.warn("Technical failure could not be recorded: {}",
                     sanitizer.describe(unavailable));

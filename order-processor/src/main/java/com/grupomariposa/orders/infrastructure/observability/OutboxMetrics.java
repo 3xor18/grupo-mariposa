@@ -26,7 +26,7 @@ public final class OutboxMetrics implements MeterBinder {
 
     @Override
     public void bindTo(final MeterRegistry registry) {
-        Gauge.builder(PENDING, outbox, safely(store -> store.countUnpublished()))
+        Gauge.builder(PENDING, outbox, safely(MongoOutboxStore::countUnpublished))
                 .description("Outbox events not yet published")
                 .register(registry);
         Gauge.builder(OLDEST_AGE, outbox, safely(this::oldestAgeSeconds))

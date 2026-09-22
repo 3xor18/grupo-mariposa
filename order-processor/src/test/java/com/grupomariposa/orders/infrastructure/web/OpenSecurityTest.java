@@ -10,7 +10,7 @@ import com.grupomariposa.orders.application.port.in.FindOrderQuery;
 import com.grupomariposa.orders.application.port.in.ListOrdersQuery;
 import com.grupomariposa.orders.application.query.PageResult;
 import com.grupomariposa.orders.infrastructure.config.WebConfiguration;
-import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -32,6 +32,10 @@ import org.springframework.test.web.servlet.MockMvc;
     "app.security.reader-role=orders-reader",
     "app.security.admin-role=orders-admin",
     "app.security.api-docs-enabled=false",
+    "app.security.public-paths=/actuator/health/**,/livez,/readyz,/error",
+    "app.security.cors-allowed-methods=GET,OPTIONS",
+    "app.security.cors-allowed-headers=Authorization,traceparent",
+    "app.api.problems.type-base=https://contracts.grupomariposa.dev/problems/",
     "app.api.orders.default-page-size=20",
     "app.api.orders.max-page-size=100",
     "app.api.orders.max-offset=10000"
@@ -51,11 +55,11 @@ class OpenSecurityTest {
     private JwtDecoder jwtDecoder;
 
     @MockitoBean
-    private TraceContext traceContext;
+    private TraceIds traceIds;
 
     @Test
     void should_allow_anonymous_reads_when_auth_is_disabled() throws Exception {
-        when(traceContext.currentTraceId()).thenReturn(Optional.empty());
+        when(traceIds.currentTraceId()).thenReturn(Optional.empty());
         when(listOrders.list(any())).thenReturn(new PageResult<>(List.of(), 0, 20, 0));
 
         mockMvc.perform(get("/orders")).andExpect(status().isOk());

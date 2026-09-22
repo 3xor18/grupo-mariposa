@@ -36,6 +36,11 @@
         </module>
         <module name="TrailingComment"/>
         <module name="AvoidStarImport"/>
+        <module name="CustomImportOrder">
+            <property name="customImportOrderRules" value="STATIC###THIRD_PARTY_PACKAGE"/>
+            <property name="sortImportsInGroupAlphabetically" value="true"/>
+            <property name="separateLineBetweenGroups" value="true"/>
+        </module>
         <module name="UnusedImports"/>
         <module name="RedundantImport"/>
         <module name="IllegalImport"/>

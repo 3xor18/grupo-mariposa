@@ -22,10 +22,11 @@ public final class KafkaEventPublisher implements EventPublisher {
 
     @Override
     public CompletableFuture<Void> publish(final PendingEvent event) {
-        final ProducerRecord<String, String> record =
+        final ProducerRecord<String, String> producerRecord =
                 new ProducerRecord<>(event.topic(), event.key(), event.payload());
-        record.headers().add(EVENT_TYPE_HEADER, EVENT_TYPE.getBytes(StandardCharsets.UTF_8));
-        record.headers().add(EVENT_ID_HEADER, event.eventId().getBytes(StandardCharsets.UTF_8));
-        return template.send(record).thenApply(result -> null);
+        producerRecord.headers()
+                .add(EVENT_TYPE_HEADER, EVENT_TYPE.getBytes(StandardCharsets.UTF_8))
+                .add(EVENT_ID_HEADER, event.eventId().getBytes(StandardCharsets.UTF_8));
+        return template.send(producerRecord).thenApply(result -> null);
     }
 }

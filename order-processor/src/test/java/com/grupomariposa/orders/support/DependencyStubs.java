@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
+import com.grupomariposa.orders.domain.DomainFixtures;
 
 public final class DependencyStubs {
 
@@ -22,6 +23,9 @@ public final class DependencyStubs {
     private static final String BEARER = "Bearer " + TOKEN;
     private static final String PROBLEM = "application/problem+json";
     private static final String RECOVERED = "recovered";
+    private static final String GOLDEN_MARKET = "MX";
+    private static final String ACTIVE = "ACTIVE";
+    private static final String STANDARD = "STANDARD";
 
     private final WireMockServer server;
 
@@ -47,13 +51,13 @@ public final class DependencyStubs {
     }
 
     public void golden() {
-        goldenClient("CLI-99821");
-        product("PRD-001", "MX", "ACTIVE", "STANDARD");
-        product("PRD-008", "MX", "ACTIVE", "STANDARD");
+        goldenClient(DomainFixtures.GOLDEN_CLIENT);
+        product(DomainFixtures.PRD_001, GOLDEN_MARKET, ACTIVE, STANDARD);
+        product(DomainFixtures.PRD_008, GOLDEN_MARKET, ACTIVE, STANDARD);
     }
 
     public void goldenClient(final String clientId) {
-        client(clientId, "MX", "WHOLESALE", "GENERAL", "ACTIVE");
+        client(clientId, GOLDEN_MARKET, "WHOLESALE", "GENERAL", ACTIVE);
     }
 
     public void product(final String productId, final String market, final String status,

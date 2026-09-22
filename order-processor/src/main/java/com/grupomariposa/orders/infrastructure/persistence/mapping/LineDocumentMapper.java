@@ -1,5 +1,8 @@
 package com.grupomariposa.orders.infrastructure.persistence.mapping;
 
+import static com.grupomariposa.orders.infrastructure.support.Enums.nameOf;
+import static com.grupomariposa.orders.infrastructure.support.Enums.parseNullable;
+
 import com.grupomariposa.orders.domain.model.LineAmounts;
 import com.grupomariposa.orders.domain.model.OrderLine;
 import com.grupomariposa.orders.domain.model.TaxCategory;
@@ -11,7 +14,7 @@ final class LineDocumentMapper {
         final LineAmounts amounts = line.amounts();
         final boolean priced = amounts != null;
         return new LineDocument(line.productId(), line.name(), line.sku(),
-                OrderDocumentMapper.nameOf(line.taxCategory()), line.quantity(),
+                nameOf(line.taxCategory()), line.quantity(),
                 Decimals.of(line.unitPrice()),
                 priced ? Decimals.of(amounts.grossSubtotal()) : null,
                 priced ? Decimals.of(amounts.discountRate()) : null,
@@ -24,7 +27,7 @@ final class LineDocumentMapper {
 
     OrderLine toDomain(final LineDocument document) {
         return new OrderLine(document.productId(), document.name(), document.sku(),
-                OrderDocumentMapper.nullable(document.taxCategory(), TaxCategory::valueOf),
+                parseNullable(document.taxCategory(), TaxCategory::valueOf),
                 document.quantity(), Decimals.toBigDecimal(document.unitPrice()),
                 document.grossSubtotal() == null ? null : amounts(document));
     }

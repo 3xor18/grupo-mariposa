@@ -20,6 +20,8 @@ import java.util.Optional;
 
 public final class ProcessOrderService implements ProcessOrderUseCase {
 
+    private static final String STATE_CHANGED =
+            "Stored order moved to version %d in status %s between read and write";
     private static final String CONCURRENT_CHANGE =
             "Order changed concurrently; retrying the record";
 
@@ -46,16 +48,17 @@ public final class ProcessOrderService implements ProcessOrderUseCase {
 
     @Override
     public ProcessingOutcome process(final OrderCommand command) {
-        final Optional<ProcessingOutcome> known = alreadyHandled(command);
-        if (known.isPresent()) {
-            return conclude(command, known.get());
-        }
+        return alreadyHandled(command)
+                .map(known -> conclude(command, known))
+                .orElseGet(() -> conclude(command, evaluateAndPersist(command)));
+    }
+
+    private ProcessingOutcome evaluateAndPersist(final OrderCommand command) {
         final EvaluationInput input = enricher.enrich(command);
         observer.stage(ProcessingStage.ENRICHED, command.orderId(), command.eventId());
         final Decision decision = evaluator.evaluate(input);
         observer.stage(ProcessingStage.EVALUATED, command.orderId(), command.eventId());
-        final Order order = assembler.decided(command, input.client(), decision);
-        return conclude(command, persist(command, order));
+        return persist(command, assembler.decided(command, input.client(), decision));
     }
 
     private Optional<ProcessingOutcome> alreadyHandled(final OrderCommand command) {
@@ -71,7 +74,10 @@ public final class ProcessOrderService implements ProcessOrderUseCase {
             case SaveResult.Saved saved -> new ProcessingOutcome.Processed(order);
             case SaveResult.DuplicateEvent duplicate -> duplicate(command);
             case SaveResult.Superseded superseded -> arbiter.classify(command, superseded.current())
-                    .orElseThrow(() -> new PersistenceException(CONCURRENT_CHANGE, null));
+                    .orElseThrow(() -> new PersistenceException(CONCURRENT_CHANGE,
+                            new IllegalStateException(STATE_CHANGED.formatted(
+                                    superseded.current().eventVersion(),
+                                    superseded.current().status()))));
         };
     }
 

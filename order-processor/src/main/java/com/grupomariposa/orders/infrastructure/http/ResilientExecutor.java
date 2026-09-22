@@ -27,6 +27,10 @@ public final class ResilientExecutor {
         this.bulkhead = Objects.requireNonNull(bulkhead, "bulkhead");
     }
 
+    public Retry retry() {
+        return retry;
+    }
+
     public <T> T execute(final Supplier<T> call) {
         final Supplier<T> guarded = Bulkhead.decorateSupplier(bulkhead, call);
         final Supplier<T> broken = CircuitBreaker.decorateSupplier(circuitBreaker, guarded);

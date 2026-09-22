@@ -13,6 +13,8 @@ public final class ProcessingMetrics {
     public static final String RETRIES = "orders.retries";
     public static final String CATEGORY = "category";
     public static final String DEPENDENCY = "dependency";
+    public static final String STAGES = "orders.stages";
+    public static final String STAGE = "stage";
 
     private final MeterRegistry registry;
     private final Timer latency;

@@ -1,8 +1,11 @@
 package com.grupomariposa.orders.infrastructure.web;
 
+import static com.grupomariposa.orders.infrastructure.support.Enums.nameOf;
+
 import com.grupomariposa.orders.application.query.OrderSummary;
 import com.grupomariposa.orders.application.query.PageResult;
 import com.grupomariposa.orders.domain.model.ClientSnapshot;
+import com.grupomariposa.orders.domain.model.FailureDetails;
 import com.grupomariposa.orders.domain.model.LineAmounts;
 import com.grupomariposa.orders.domain.model.Money;
 import com.grupomariposa.orders.domain.model.Order;
@@ -32,8 +35,7 @@ public final class OrderResponseMapper {
                 order.violations().stream().map(violation -> new ViolationResponse(
                         violation.code().name(), violation.message(), violation.productId()))
                         .toList(),
-                order.failureDetails().map(failure -> new FailureResponse(failure.category(),
-                        failure.cause(), failure.attempts())).orElse(null),
+                failure(order.failure()),
                 order.timeline().occurredAt(), order.timeline().receivedAt(),
                 order.processedAt(), order.traceId());
     }
@@ -47,24 +49,29 @@ public final class OrderResponseMapper {
         return new OrderSummaryResponse(summary.orderId(), summary.status().name(),
                 summary.market().name(), summary.currency().name(), summary.clientId(),
                 summary.eventVersion(), summary.grandTotal().amount(),
-                name(summary.reason()), summary.processedAt());
+                nameOf(summary.reason()), summary.processedAt());
     }
 
     private static ClientSnapshotResponse client(final ClientSnapshot client) {
         return new ClientSnapshotResponse(client.clientId(), client.name(),
-                name(client.status()), name(client.segment()), name(client.taxRegime()),
-                name(client.market()));
+                nameOf(client.status()), nameOf(client.segment()), nameOf(client.taxRegime()),
+                nameOf(client.market()));
     }
 
     private static OrderLineResponse line(final OrderLine line) {
         final LineAmounts amounts = line.amounts();
         return new OrderLineResponse(line.productId(), line.name(), line.sku(),
-                name(line.taxCategory()), line.quantity(), line.unitPrice(),
+                nameOf(line.taxCategory()), line.quantity(), line.unitPrice(),
                 money(amounts, LineAmounts::grossSubtotal),
                 rate(amounts, LineAmounts::discountRate),
                 money(amounts, LineAmounts::discount), money(amounts, LineAmounts::netSubtotal),
                 rate(amounts, LineAmounts::taxRate), money(amounts, LineAmounts::taxAmount),
                 money(amounts, LineAmounts::lineTotal));
+    }
+
+    private static FailureResponse failure(final FailureDetails failure) {
+        return failure == null ? null
+                : new FailureResponse(failure.category(), failure.cause(), failure.attempts());
     }
 
     private static TotalsResponse totals(final Totals totals) {
@@ -81,9 +88,5 @@ public final class OrderResponseMapper {
     private static BigDecimal rate(final LineAmounts amounts,
                                    final Function<LineAmounts, Rate> field) {
         return amounts == null ? null : field.apply(amounts).value();
-    }
-
-    private static String name(final Enum<?> value) {
-        return value == null ? null : value.name();
     }
 }

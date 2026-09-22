@@ -12,8 +12,8 @@ public final class DeliveryAttempts {
     private DeliveryAttempts() {
     }
 
-    public static int of(final ConsumerRecord<?, ?> record) {
-        final Header header = record.headers().lastHeader(KafkaHeaders.DELIVERY_ATTEMPT);
+    public static int of(final ConsumerRecord<?, ?> consumerRecord) {
+        final Header header = consumerRecord.headers().lastHeader(KafkaHeaders.DELIVERY_ATTEMPT);
         if (header == null || header.value() == null || header.value().length != Integer.BYTES) {
             return FIRST_ATTEMPT;
         }
