@@ -14,8 +14,7 @@ class AesGcmPiiCipherTest {
 
     private static final String NAME = "Distribuidora Central";
     private final String key = randomKey();
-    private final AesGcmPiiCipher cipher = new AesGcmPiiCipher(
-            new PiiProperties(key, "k1", null, null));
+    private final AesGcmPiiCipher cipher = new AesGcmPiiCipher(PiiKeys.single("k1", key));
 
     @Test
     void should_round_trip_with_key_id_prefix_and_random_iv() {
@@ -47,8 +46,7 @@ class AesGcmPiiCipherTest {
 
     @Test
     void should_reject_ciphertext_from_another_key() {
-        final AesGcmPiiCipher other = new AesGcmPiiCipher(
-                new PiiProperties(randomKey(), "k1", null, null));
+        final AesGcmPiiCipher other = new AesGcmPiiCipher(PiiKeys.single("k1", randomKey()));
 
         assertThatThrownBy(() -> other.decrypt(cipher.encrypt(NAME)))
                 .isInstanceOf(PiiCryptoException.class);
@@ -58,7 +56,7 @@ class AesGcmPiiCipherTest {
     void should_decrypt_values_sealed_with_previous_key_after_rotation() {
         final String legacy = cipher.encrypt(NAME);
         final AesGcmPiiCipher rotated = new AesGcmPiiCipher(
-                new PiiProperties(randomKey(), "k2", key, "k1"));
+                new PiiKeys("k2", randomKey(), "k1", key));
 
         assertThat(rotated.decrypt(legacy)).isEqualTo(NAME);
         assertThat(rotated.encrypt(NAME)).startsWith("k2:");
@@ -80,10 +78,15 @@ class AesGcmPiiCipherTest {
     @Test
     void should_fail_fast_on_invalid_key_material() {
         assertThatIllegalStateException().isThrownBy(() -> new AesGcmPiiCipher(
-                new PiiProperties("not-base64!", "k1", null, null)));
+                PiiKeys.single("k1", "not-base64!")));
         assertThatIllegalStateException().isThrownBy(() -> new AesGcmPiiCipher(
-                new PiiProperties(Base64.getEncoder().encodeToString(new byte[16]), "k1",
-                        " ", " ")));
+                new PiiKeys("k1", Base64.getEncoder().encodeToString(new byte[16]), " ", " ")));
+    }
+
+    @Test
+    void should_ignore_incomplete_previous_key() {
+        assertThat(new PiiKeys("k2", key, "k1", null).previous()).isEmpty();
+        assertThat(new PiiKeys("k2", key, null, key).previous()).isEmpty();
     }
 
     private static String randomKey() {

@@ -30,14 +30,12 @@ public final class AesGcmPiiCipher {
     private final Map<String, SecretKey> keys;
     private final SecureRandom random = new SecureRandom();
 
-    public AesGcmPiiCipher(final PiiProperties properties) {
-        this.activeKeyId = properties.keyId();
+    public AesGcmPiiCipher(final PiiKeys keys) {
+        this.activeKeyId = keys.activeKeyId();
         final Map<String, SecretKey> ring = new HashMap<>();
-        ring.put(properties.keyId(), keyOf(properties.keyId(), properties.encryptionKey()));
-        if (hasText(properties.previousKeyId()) && hasText(properties.previousEncryptionKey())) {
-            ring.put(properties.previousKeyId(),
-                    keyOf(properties.previousKeyId(), properties.previousEncryptionKey()));
-        }
+        keys.previous().ifPresent(previous -> ring.put(previous.activeKeyId(),
+                keyOf(previous.activeKeyId(), previous.activeKey())));
+        ring.put(keys.activeKeyId(), keyOf(keys.activeKeyId(), keys.activeKey()));
         this.keys = Map.copyOf(ring);
     }
 
@@ -106,10 +104,6 @@ public final class AesGcmPiiCipher {
         cipher.init(mode, key, new GCMParameterSpec(TAG_BITS, iv));
         cipher.updateAAD(keyId.getBytes(StandardCharsets.UTF_8));
         return cipher;
-    }
-
-    private static boolean hasText(final String value) {
-        return value != null && !value.isBlank();
     }
 
     private static SecretKey keyOf(final String keyId, final String base64) {

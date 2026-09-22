@@ -28,7 +28,9 @@ import org.springframework.test.web.servlet.MockMvc;
     "app.security.enabled=false",
     "app.security.allowed-origins=*",
     "app.security.reader-role=orders-reader",
-    "app.security.admin-role=orders-admin"
+    "app.security.admin-role=orders-admin",
+    "app.api.orders.default-page-size=20",
+    "app.api.orders.max-page-size=100"
 })
 class OpenSecurityTest {
 

@@ -6,12 +6,8 @@ import java.util.Optional;
 
 public record OrderSearchCriteria(OrderStatus status, Market market, int page, int size) {
 
-    public static final int DEFAULT_PAGE = 0;
-    public static final int DEFAULT_SIZE = 20;
-    public static final int MAX_SIZE = 100;
-
     public OrderSearchCriteria {
-        if (page < 0 || size < 1 || size > MAX_SIZE) {
+        if (page < 0 || size < 1) {
             throw new IllegalArgumentException("Invalid page request");
         }
     }

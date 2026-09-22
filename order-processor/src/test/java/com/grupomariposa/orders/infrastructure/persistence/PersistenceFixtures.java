@@ -13,7 +13,7 @@ import com.grupomariposa.orders.domain.model.Lookup;
 import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.Order;
 import com.grupomariposa.orders.infrastructure.crypto.AesGcmPiiCipher;
-import com.grupomariposa.orders.infrastructure.crypto.PiiProperties;
+import com.grupomariposa.orders.infrastructure.crypto.PiiKeys;
 import java.time.Instant;
 import java.util.Base64;
 
@@ -26,8 +26,8 @@ public final class PersistenceFixtures {
     }
 
     public static AesGcmPiiCipher cipher() {
-        return new AesGcmPiiCipher(new PiiProperties(
-                Base64.getEncoder().encodeToString(new byte[32]), "k1", null, null));
+        return new AesGcmPiiCipher(PiiKeys.single("k1",
+                Base64.getEncoder().encodeToString(new byte[32])));
     }
 
     public static Order approvedOrder() {

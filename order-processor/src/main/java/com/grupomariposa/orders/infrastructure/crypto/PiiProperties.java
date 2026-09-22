@@ -6,9 +6,5 @@ import org.springframework.validation.annotation.Validated;
 
 @Validated
 @ConfigurationProperties(prefix = "app.pii")
-public record PiiProperties(
-        @NotBlank String encryptionKey,
-        @NotBlank String keyId,
-        String previousEncryptionKey,
-        String previousKeyId) {
+public record PiiProperties(@NotBlank String keyId, String previousKeyId) {
 }

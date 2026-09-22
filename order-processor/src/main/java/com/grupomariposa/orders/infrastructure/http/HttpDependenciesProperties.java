@@ -24,7 +24,11 @@ public record HttpDependenciesProperties(
     public record Endpoint(@NotNull URI baseUrl) {
     }
 
-    public record OAuth(boolean enabled, @NotBlank String registrationId) {
+    public record OAuth(
+            boolean enabled,
+            @NotBlank String registrationId,
+            @NotNull URI tokenUri,
+            @NotBlank String clientId) {
     }
 
     public record Resilience(

@@ -45,7 +45,9 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
     "app.security.enabled=true",
     "app.security.allowed-origins=http://localhost:8090",
     "app.security.reader-role=orders-reader",
-    "app.security.admin-role=orders-admin"
+    "app.security.admin-role=orders-admin",
+    "app.api.orders.default-page-size=20",
+    "app.api.orders.max-page-size=100"
 })
 class OrdersControllerTest {
 
@@ -178,7 +180,7 @@ class OrdersControllerTest {
     }
 
     @TestConfiguration
-    @EnableConfigurationProperties(WebSecurityProperties.class)
+    @EnableConfigurationProperties({WebSecurityProperties.class, OrdersApiProperties.class})
     static class Support {
 
         @Bean

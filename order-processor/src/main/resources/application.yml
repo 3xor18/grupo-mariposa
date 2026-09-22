@@ -5,6 +5,12 @@ server:
 spring:
   application:
     name: order-processor
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:}"
+  cloud:
+    config:
+      fail-fast: ${CONFIG_SERVER_FAIL_FAST:false}
+      label: ${CONFIG_SERVER_LABEL:main}
   lifecycle:
     timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:20s}
   threads:
@@ -22,29 +28,38 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
       timeout: ${REDIS_TIMEOUT:250ms}
       connect-timeout: ${REDIS_CONNECT_TIMEOUT:250ms}
+      lettuce:
+        pool:
+          enabled: ${REDIS_POOL_ENABLED:false}
+          max-active: ${REDIS_POOL_MAX_ACTIVE:16}
+          max-idle: ${REDIS_POOL_MAX_IDLE:8}
+          min-idle: ${REDIS_POOL_MIN_IDLE:0}
+          max-wait: ${REDIS_POOL_MAX_WAIT:250ms}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
       group-id: ${app.kafka.consumer-group}
-      auto-offset-reset: earliest
+      auto-offset-reset: ${KAFKA_AUTO_OFFSET_RESET:earliest}
       enable-auto-commit: false
       isolation-level: read_committed
-      max-poll-records: 10
+      max-poll-records: ${KAFKA_MAX_POLL_RECORDS:10}
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
       properties:
-        max.poll.interval.ms: 300000
+        max.poll.interval.ms: ${KAFKA_MAX_POLL_INTERVAL_MS:300000}
+        session.timeout.ms: ${KAFKA_SESSION_TIMEOUT_MS:45000}
     producer:
       acks: all
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
       properties:
         enable.idempotence: true
-        max.in.flight.requests.per.connection: 5
-        delivery.timeout.ms: 30000
+        max.in.flight.requests.per.connection: ${KAFKA_MAX_IN_FLIGHT:5}
+        delivery.timeout.ms: ${KAFKA_DELIVERY_TIMEOUT_MS:120000}
+        request.timeout.ms: ${KAFKA_REQUEST_TIMEOUT_MS:30000}
+        linger.ms: ${KAFKA_LINGER_MS:5}
     listener:
       ack-mode: record
       observation-enabled: true
@@ -57,16 +72,6 @@ spring:
         jwt:
           issuer-uri: ${AUTH_ISSUER:http://localhost:8180/realms/mariposa}
           jwk-set-uri: ${AUTH_JWKS_URL:http://localhost:8180/realms/mariposa/protocol/openid-connect/certs}
-      client:
-        registration:
-          order-processor:
-            provider: keycloak
-            client-id: ${OAUTH_CLIENT_ID:order-processor}
-            client-secret: ${OAUTH_CLIENT_SECRET:}
-            authorization-grant-type: client_credentials
-        provider:
-          keycloak:
-            token-uri: ${OAUTH_TOKEN_URI:http://localhost:8180/realms/mariposa/protocol/openid-connect/token}
 
 management:
   endpoints:
@@ -104,7 +109,7 @@ management:
     metrics:
       export:
         enabled: ${DATADOG_ENABLED:false}
-        api-key: ${DD_API_KEY:}
+        api-key: ${DD_API_KEY}
 
 logging:
   structured:
@@ -112,13 +117,35 @@ logging:
       console: ${LOG_FORMAT:ecs}
   level:
     root: ${LOG_LEVEL:INFO}
-    org.apache.kafka: WARN
+    org.apache.kafka: ${LOG_LEVEL_KAFKA:WARN}
 
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
   api-docs:
     path: /v3/api-docs
+
+pricing:
+  tax-rates:
+    MX:
+      STANDARD: ${PRICING_TAX_MX_STANDARD:0.16}
+      REDUCED: ${PRICING_TAX_MX_REDUCED:0.08}
+      EXEMPT: ${PRICING_TAX_MX_EXEMPT:0.00}
+    CO:
+      STANDARD: ${PRICING_TAX_CO_STANDARD:0.19}
+      REDUCED: ${PRICING_TAX_CO_REDUCED:0.05}
+      EXEMPT: ${PRICING_TAX_CO_EXEMPT:0.00}
+    PE:
+      STANDARD: ${PRICING_TAX_PE_STANDARD:0.18}
+      REDUCED: ${PRICING_TAX_PE_REDUCED:0.10}
+      EXEMPT: ${PRICING_TAX_PE_EXEMPT:0.00}
+  wholesale-discount:
+    rate: ${PRICING_WHOLESALE_DISCOUNT_RATE:0.03}
+    min-quantity: ${PRICING_WHOLESALE_DISCOUNT_MIN_QUANTITY:20}
+  market-currencies:
+    MX: ${PRICING_CURRENCY_MX:MXN}
+    CO: ${PRICING_CURRENCY_CO:COP}
+    PE: ${PRICING_CURRENCY_PE:PEN}
 
 app:
   processing:
@@ -127,19 +154,20 @@ app:
   kafka:
     topics:
       orders-created: ${KAFKA_TOPIC_ORDERS_CREATED:orders.created.v1}
-      orders-created-partitions: 6
+      orders-created-partitions: ${KAFKA_TOPIC_ORDERS_CREATED_PARTITIONS:6}
       orders-processed: ${KAFKA_TOPIC_ORDERS_PROCESSED:orders.processed.v1}
-      orders-processed-partitions: 6
+      orders-processed-partitions: ${KAFKA_TOPIC_ORDERS_PROCESSED_PARTITIONS:6}
       dead-letter: ${KAFKA_TOPIC_DLT:orders.processing.dlt}
-      dead-letter-partitions: 3
+      dead-letter-partitions: ${KAFKA_TOPIC_DLT_PARTITIONS:3}
     consumer-group: ${KAFKA_CONSUMER_GROUP:order-processor}
     concurrency: ${KAFKA_LISTENER_CONCURRENCY:3}
     create-topics: ${KAFKA_CREATE_TOPICS:true}
     replication-factor: ${KAFKA_REPLICATION_FACTOR:1}
     health-timeout: ${KAFKA_HEALTH_TIMEOUT:2s}
+    dead-letter-retry-delay: ${KAFKA_DLT_RETRY_DELAY:1s}
     record-retry:
       initial-interval: ${RECORD_RETRY_INITIAL_INTERVAL:1s}
-      multiplier: 2.0
+      multiplier: ${RECORD_RETRY_MULTIPLIER:2.0}
       max-attempts: ${RECORD_RETRY_MAX_ATTEMPTS:4}
   http:
     clients:
@@ -150,45 +178,54 @@ app:
     read-timeout: ${HTTP_READ_TIMEOUT:2s}
     oauth:
       enabled: ${OAUTH_ENABLED:true}
-      registration-id: order-processor
+      registration-id: ${OAUTH_REGISTRATION_ID:order-processor}
+      token-uri: ${OAUTH_TOKEN_URI:http://localhost:8180/realms/mariposa/protocol/openid-connect/token}
+      client-id: ${OAUTH_CLIENT_ID:order-processor}
     resilience:
       max-attempts: ${HTTP_RETRY_MAX_ATTEMPTS:3}
       initial-backoff: ${HTTP_RETRY_INITIAL_BACKOFF:200ms}
-      backoff-multiplier: 2.0
-      jitter: 0.5
-      max-retry-after: 2s
-      sliding-window-size: 20
-      minimum-number-of-calls: 10
-      failure-rate-threshold: 50
-      open-state-duration: 10s
-      half-open-calls: 3
-      bulkhead-max-concurrent-calls: 32
-      bulkhead-max-wait: 500ms
+      backoff-multiplier: ${HTTP_RETRY_MULTIPLIER:2.0}
+      jitter: ${HTTP_RETRY_JITTER:0.5}
+      max-retry-after: ${HTTP_RETRY_MAX_RETRY_AFTER:2s}
+      sliding-window-size: ${HTTP_CB_SLIDING_WINDOW:20}
+      minimum-number-of-calls: ${HTTP_CB_MINIMUM_CALLS:10}
+      failure-rate-threshold: ${HTTP_CB_FAILURE_RATE:50}
+      open-state-duration: ${HTTP_CB_OPEN_DURATION:10s}
+      half-open-calls: ${HTTP_CB_HALF_OPEN_CALLS:3}
+      bulkhead-max-concurrent-calls: ${HTTP_BULKHEAD_MAX_CALLS:32}
+      bulkhead-max-wait: ${HTTP_BULKHEAD_MAX_WAIT:500ms}
   cache:
     products:
       enabled: ${CACHE_ENABLED:true}
       ttl: ${CACHE_PRODUCTS_TTL:5m}
-      key-prefix: products
+      key-prefix: ${CACHE_PRODUCTS_KEY_PREFIX:products}
   persistence:
-    transaction-attempts: 5
-    transaction-retry-backoff: 20ms
-    inbox-retention: 30d
-    outbox-retention: 7d
+    transaction-attempts: ${MONGO_TX_ATTEMPTS:5}
+    transaction-retry-backoff: ${MONGO_TX_RETRY_BACKOFF:20ms}
+    inbox-retention: ${INBOX_RETENTION:30d}
+    outbox-retention: ${OUTBOX_RETENTION:7d}
+    pool:
+      max-size: ${MONGO_POOL_MAX_SIZE:50}
+      min-size: ${MONGO_POOL_MIN_SIZE:0}
+      max-wait: ${MONGO_POOL_MAX_WAIT:2s}
+      max-idle: ${MONGO_POOL_MAX_IDLE:5m}
   pii:
-    encryption-key: ${PII_ENCRYPTION_KEY}
     key-id: ${PII_KEY_ID:k1}
-    previous-encryption-key: ${PII_PREVIOUS_ENCRYPTION_KEY:}
     previous-key-id: ${PII_PREVIOUS_KEY_ID:}
   outbox:
     enabled: ${OUTBOX_RELAY_ENABLED:true}
     fixed-delay: ${OUTBOX_RELAY_INTERVAL:250ms}
     batch-size: ${OUTBOX_BATCH_SIZE:100}
-    lease: 30s
-    send-timeout: 10s
-    initial-backoff: 1s
-    max-backoff: 60s
+    lease: ${OUTBOX_LEASE:30s}
+    send-timeout: ${OUTBOX_SEND_TIMEOUT:10s}
+    initial-backoff: ${OUTBOX_RETRY_INITIAL_BACKOFF:1s}
+    max-backoff: ${OUTBOX_RETRY_MAX_BACKOFF:60s}
+  api:
+    orders:
+      default-page-size: ${API_DEFAULT_PAGE_SIZE:20}
+      max-page-size: ${API_MAX_PAGE_SIZE:100}
   security:
     enabled: ${AUTH_ENABLED:true}
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:8090}
-    reader-role: orders-reader
-    admin-role: orders-admin
+    reader-role: ${AUTH_READER_ROLE:orders-reader}
+    admin-role: ${AUTH_ADMIN_ROLE:orders-admin}

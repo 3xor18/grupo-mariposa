@@ -6,6 +6,7 @@ import com.grupomariposa.orders.domain.model.OrderStatus;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -23,6 +24,13 @@ public final class OrderRequestParser {
     private static final String ONE_OF = "must be one of %s";
     private static final String MIN_PAGE = "must be an integer greater than or equal to 0";
     private static final String SIZE_RANGE = "must be an integer between 1 and %d";
+    private static final int FIRST_PAGE = 0;
+
+    private final OrdersApiProperties limits;
+
+    public OrderRequestParser(final OrdersApiProperties limits) {
+        this.limits = Objects.requireNonNull(limits, "limits");
+    }
 
     public String orderId(final String raw) {
         if (raw == null || !ORDER_ID.matcher(raw).matches()) {
@@ -37,12 +45,12 @@ public final class OrderRequestParser {
         final List<FieldViolation> violations = new ArrayList<>();
         final OrderStatus parsedStatus = enumValue(OrderStatus.class, STATUS, status, violations);
         final Market parsedMarket = enumValue(Market.class, MARKET, market, violations);
-        final int parsedPage = number(page, OrderSearchCriteria.DEFAULT_PAGE)
+        final int parsedPage = number(page, FIRST_PAGE)
                 .filter(value -> value >= 0).orElseGet(() -> invalid(PAGE, MIN_PAGE, violations));
-        final int parsedSize = number(size, OrderSearchCriteria.DEFAULT_SIZE)
-                .filter(value -> value >= 1 && value <= OrderSearchCriteria.MAX_SIZE)
-                .orElseGet(() -> invalid(SIZE,
-                        SIZE_RANGE.formatted(OrderSearchCriteria.MAX_SIZE), violations));
+        final int parsedSize = number(size, limits.defaultPageSize())
+                .filter(value -> value >= 1 && value <= limits.maxPageSize())
+                .orElseGet(() -> invalid(SIZE, SIZE_RANGE.formatted(limits.maxPageSize()),
+                        violations));
         if (!violations.isEmpty()) {
             throw new InvalidRequestException(violations);
         }

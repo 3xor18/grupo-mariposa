@@ -29,7 +29,11 @@ import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2A
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProviderBuilder;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
+import org.springframework.security.oauth2.client.InMemoryOAuth2AuthorizedClientService;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
+import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.client.web.client.OAuth2ClientHttpRequestInterceptor;
 import org.springframework.web.client.RestClient;
 
@@ -55,26 +59,34 @@ public class HttpConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "app.http.oauth", name = "enabled", havingValue = "true")
-    public OAuth2AuthorizedClientManager serviceAuthorizedClientManager(
-            final ClientRegistrationRepository registrations,
-            final OAuth2AuthorizedClientService authorizedClients) {
+    public OAuth2ClientHttpRequestInterceptor serviceTokenInterceptor(
+            final HttpDependenciesProperties properties, final EnvironmentSecrets secrets) {
+        final HttpDependenciesProperties.OAuth oauth = properties.oauth();
+        final ClientRegistrationRepository registrations =
+                new InMemoryClientRegistrationRepository(
+                        ClientRegistration.withRegistrationId(oauth.registrationId())
+                                .clientId(oauth.clientId())
+                                .clientSecret(secrets.required(
+                                        EnvironmentSecrets.OAUTH_CLIENT_SECRET))
+                                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                                .tokenUri(oauth.tokenUri().toString())
+                                .build());
+        final OAuth2AuthorizedClientService authorizedClients =
+                new InMemoryOAuth2AuthorizedClientService(registrations);
         final AuthorizedClientServiceOAuth2AuthorizedClientManager manager =
                 new AuthorizedClientServiceOAuth2AuthorizedClientManager(registrations,
                         authorizedClients);
         manager.setAuthorizedClientProvider(OAuth2AuthorizedClientProviderBuilder.builder()
                 .clientCredentials().build());
-        return manager;
+        return oauthInterceptor(manager, authorizedClients, oauth.registrationId());
     }
 
     @Bean
     public RestClientFactory restClientFactory(
             final RestClient.Builder builder, final HttpDependenciesProperties properties,
-            final ObjectProvider<OAuth2AuthorizedClientManager> managers,
-            final ObjectProvider<OAuth2AuthorizedClientService> authorizedClients) {
+            final ObjectProvider<OAuth2ClientHttpRequestInterceptor> tokenInterceptor) {
         final Optional<ClientHttpRequestInterceptor> authentication =
-                Optional.ofNullable(managers.getIfAvailable()).map(manager ->
-                        oauthInterceptor(manager, authorizedClients.getObject(),
-                                properties.oauth().registrationId()));
+                Optional.ofNullable(tokenInterceptor.getIfAvailable());
         return new RestClientFactory(builder, properties, authentication);
     }
 
@@ -105,7 +117,7 @@ public class HttpConfiguration {
         return new CachingProductCatalog(http, redis.getObject(), objectMapper, cache, registry);
     }
 
-    private static ClientHttpRequestInterceptor oauthInterceptor(
+    private static OAuth2ClientHttpRequestInterceptor oauthInterceptor(
             final OAuth2AuthorizedClientManager manager,
             final OAuth2AuthorizedClientService authorizedClients, final String registrationId) {
         final OAuth2ClientHttpRequestInterceptor interceptor =

@@ -69,7 +69,7 @@ class ApplicationModelTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"-1, 20", "0, 0", "0, 101"})
+    @CsvSource({"-1, 20", "0, 0"})
     void should_reject_invalid_pages(final int page, final int size) {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> new OrderSearchCriteria(null, null, page, size));

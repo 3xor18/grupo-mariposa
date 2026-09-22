@@ -2,16 +2,20 @@ package com.grupomariposa.orders.infrastructure.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.grupomariposa.orders.infrastructure.crypto.AesGcmPiiCipher;
+import com.grupomariposa.orders.infrastructure.crypto.PiiKeys;
 import com.grupomariposa.orders.infrastructure.crypto.PiiProperties;
 import com.grupomariposa.orders.infrastructure.kafka.MessagingProperties;
 import com.grupomariposa.orders.infrastructure.persistence.IndexInitializer;
 import com.grupomariposa.orders.infrastructure.persistence.MongoOrderQueryRepository;
 import com.grupomariposa.orders.infrastructure.persistence.MongoOrderStore;
 import com.grupomariposa.orders.infrastructure.persistence.MongoOutboxStore;
+import com.grupomariposa.orders.infrastructure.persistence.MongoPoolProperties;
 import com.grupomariposa.orders.infrastructure.persistence.PersistenceProperties;
 import com.grupomariposa.orders.infrastructure.persistence.TransactionRunner;
 import com.grupomariposa.orders.infrastructure.persistence.mapping.OrderDocumentMapper;
 import com.grupomariposa.orders.infrastructure.persistence.outbox.OutboxPayloadFactory;
+import java.util.concurrent.TimeUnit;
+import org.springframework.boot.autoconfigure.mongo.MongoClientSettingsBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
@@ -35,8 +39,22 @@ public class PersistenceConfiguration {
     }
 
     @Bean
-    public AesGcmPiiCipher piiCipher(final PiiProperties properties) {
-        return new AesGcmPiiCipher(properties);
+    public AesGcmPiiCipher piiCipher(final PiiProperties properties,
+                                     final EnvironmentSecrets secrets) {
+        return new AesGcmPiiCipher(new PiiKeys(properties.keyId(),
+                secrets.required(EnvironmentSecrets.PII_ENCRYPTION_KEY),
+                properties.previousKeyId(),
+                secrets.optional(EnvironmentSecrets.PII_PREVIOUS_ENCRYPTION_KEY).orElse(null)));
+    }
+
+    @Bean
+    public MongoClientSettingsBuilderCustomizer mongoPoolCustomizer(
+            final MongoPoolProperties pool) {
+        return settings -> settings.applyToConnectionPoolSettings(connections -> connections
+                .maxSize(pool.maxSize())
+                .minSize(pool.minSize())
+                .maxWaitTime(pool.maxWait().toMillis(), TimeUnit.MILLISECONDS)
+                .maxConnectionIdleTime(pool.maxIdle().toMillis(), TimeUnit.MILLISECONDS));
     }
 
     @Bean

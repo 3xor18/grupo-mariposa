@@ -62,11 +62,12 @@ public abstract class IntegrationTest {
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(REDIS_PORT));
         registry.add("app.http.clients.base-url", WIREMOCK::baseUrl);
         registry.add("app.http.products.base-url", WIREMOCK::baseUrl);
-        registry.add("spring.security.oauth2.client.provider.keycloak.token-uri",
+        registry.add("app.http.oauth.token-uri",
                 () -> WIREMOCK.baseUrl() + DependencyStubs.TOKEN_PATH);
+        registry.add("OAUTH_CLIENT_SECRET", () -> "integration-client-secret");
         registry.add("spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
                 () -> WIREMOCK.baseUrl() + "/jwks");
-        registry.add("app.pii.encryption-key", () -> PII_KEY);
+        registry.add("PII_ENCRYPTION_KEY", () -> PII_KEY);
     }
 
     @BeforeEach
