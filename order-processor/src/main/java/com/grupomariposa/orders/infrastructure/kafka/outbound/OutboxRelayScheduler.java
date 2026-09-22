@@ -27,8 +27,8 @@ public final class OutboxRelayScheduler {
                 .register(registry);
     }
 
-    @Scheduled(fixedDelayString = "${app.outbox.fixed-delay}",
-            initialDelayString = "${app.outbox.fixed-delay}")
+    @Scheduled(fixedDelayString = "#{@outboxRelaySchedule.intervalMillis()}",
+            initialDelayString = "#{@outboxRelaySchedule.intervalMillis()}")
     public void relay() {
         try {
             relay.publishPending();

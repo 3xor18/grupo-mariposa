@@ -12,12 +12,15 @@ import com.grupomariposa.orders.infrastructure.kafka.dlt.DeadLetterProducer;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.DeadLetterRecoverer;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.DltHeadersFactory;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.OrderDeadLetterPublisher;
+import com.grupomariposa.orders.infrastructure.kafka.OutboxRelayProperties;
+import com.grupomariposa.orders.infrastructure.kafka.inbound.ListenerSettings;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderCreatedListener;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderMessageMapper;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderMessageReader;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.RetryableRecordFailure;
 import com.grupomariposa.orders.infrastructure.kafka.outbound.KafkaEventPublisher;
 import com.grupomariposa.orders.infrastructure.kafka.outbound.OutboxRelayScheduler;
+import com.grupomariposa.orders.infrastructure.kafka.outbound.RelaySchedule;
 import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
 import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -41,9 +44,22 @@ public class KafkaConfiguration {
 
     private static final String APPLICATION_NAME = "${spring.application.name}";
 
+    @Bean(ListenerSettings.BEAN_NAME)
+    public ListenerSettings orderListenerSettings(final MessagingProperties properties) {
+        return new ListenerSettings(properties.topics().ordersCreated(),
+                properties.consumerGroup(), properties.concurrency());
+    }
+
+    @Bean(RelaySchedule.BEAN_NAME)
+    public RelaySchedule outboxRelaySchedule(final OutboxRelayProperties relay) {
+        return new RelaySchedule(relay.fixedDelay());
+    }
+
     @Bean
-    @ConditionalOnProperty(prefix = "app.kafka", name = "create-topics", havingValue = "true")
     public KafkaAdmin.NewTopics orderTopics(final MessagingProperties properties) {
+        if (!properties.createTopics()) {
+            return new KafkaAdmin.NewTopics();
+        }
         final MessagingProperties.Topics topics = properties.topics();
         final short replicas = properties.replicationFactor();
         return new KafkaAdmin.NewTopics(

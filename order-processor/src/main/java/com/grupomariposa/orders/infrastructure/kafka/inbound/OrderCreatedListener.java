@@ -52,8 +52,9 @@ public final class OrderCreatedListener {
         this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
-    @KafkaListener(id = LISTENER_ID, topics = "${app.kafka.topics.orders-created}",
-            groupId = "${app.kafka.consumer-group}", concurrency = "${app.kafka.concurrency}")
+    @KafkaListener(id = LISTENER_ID, topics = "#{@orderListenerSettings.topic()}",
+            groupId = "#{@orderListenerSettings.groupId()}",
+            concurrency = "#{@orderListenerSettings.concurrency()}")
     public void onMessage(final ConsumerRecord<String, byte[]> record) {
         final Timer.Sample sample = metrics.start();
         try {
