@@ -37,6 +37,6 @@ class WholesaleVolumeDiscountPolicyTest {
     @ParameterizedTest(name = "retail qty {0} -> no discount")
     @ValueSource(ints = {1, 19, 20, 21, 1000})
     void should_never_discount_retail(final int quantity) {
-        assertThat(policy.rateFor(retailClient(Market.CO), quantity).isZero()).isTrue();
+        assertThat(policy.rateFor(retailClient(Market.CO), quantity).value()).isZero();
     }
 }

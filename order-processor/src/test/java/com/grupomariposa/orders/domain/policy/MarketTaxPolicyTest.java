@@ -38,7 +38,7 @@ class MarketTaxPolicyTest {
                 ClientStatus.ACTIVE);
 
         for (final TaxCategory category : TaxCategory.values()) {
-            assertThat(policy.rateFor(market, exempt, category).isZero()).isTrue();
+            assertThat(policy.rateFor(market, exempt, category).value()).isZero();
         }
     }
 

@@ -20,10 +20,6 @@ public record Rate(BigDecimal value) {
         return new Rate(BigDecimal.valueOf(percent).movePointLeft(PERCENT_SCALE_SHIFT));
     }
 
-    public boolean isZero() {
-        return value.signum() == 0;
-    }
-
     public boolean isFraction() {
         return value.compareTo(BigDecimal.ONE) <= 0;
     }

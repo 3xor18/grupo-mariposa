@@ -1,6 +1,7 @@
 package com.grupomariposa.orders.infrastructure.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import com.grupomariposa.orders.domain.model.Currency;
@@ -26,7 +27,6 @@ class ConfigurationSupportTest {
                 new PricingProperties.WholesaleDiscount(new BigDecimal("0.03"), 20),
                 Map.of(Market.MX, Currency.MXN));
 
-        assertThat(pricing.isTaxTableComplete()).isTrue();
         assertThat(pricing.taxRateTable().rateFor(Market.MX, TaxCategory.STANDARD).value())
                 .isEqualByComparingTo("0.16");
         assertThat(pricing.discountRule().rate()).isEqualTo(new Rate(new BigDecimal("0.03")));
@@ -43,11 +43,9 @@ class ConfigurationSupportTest {
                 Map.of(Market.MX, Map.of(TaxCategory.STANDARD, BigDecimal.ONE)),
                 new PricingProperties.WholesaleDiscount(BigDecimal.ZERO, 1),
                 Map.of(Market.MX, Currency.MXN));
-        final PricingProperties unset = new PricingProperties(null, null, null);
 
-        assertThat(missingMarket.isTaxTableComplete()).isFalse();
-        assertThat(missingCategory.isTaxTableComplete()).isFalse();
-        assertThat(unset.isTaxTableComplete()).isFalse();
+        assertThatIllegalStateException().isThrownBy(missingMarket::taxRateTable);
+        assertThatIllegalArgumentException().isThrownBy(missingCategory::taxRateTable);
     }
 
     @Test

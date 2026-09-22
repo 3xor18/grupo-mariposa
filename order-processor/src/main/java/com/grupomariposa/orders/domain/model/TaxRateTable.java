@@ -1,5 +1,6 @@
 package com.grupomariposa.orders.domain.model;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -29,6 +30,10 @@ public record TaxRateTable(Map<Market, Map<TaxCategory, Rate>> rates) {
             throw new IllegalArgumentException(UNKNOWN_MARKET.formatted(market));
         }
         return categories.get(category);
+    }
+
+    public boolean covers(final Collection<Market> markets) {
+        return rates.keySet().containsAll(markets);
     }
 
     private static Map<TaxCategory, Rate> validated(final Market market,
