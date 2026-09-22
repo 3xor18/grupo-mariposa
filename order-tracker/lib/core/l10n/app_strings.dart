@@ -1,23 +1,19 @@
 abstract final class AppStrings {
   static const appTitle = 'Mariposa Order Tracker';
-  static const appShortTitle = 'Pedidos';
 
   static const navSearch = 'Buscar';
   static const navOrders = 'Pedidos';
 
-  static const loginTitle = 'Seguimiento de pedidos';
   static const loginSubtitle =
       'Inicia sesión con tu cuenta corporativa para consultar pedidos B2B.';
   static const loginButton = 'Iniciar sesión';
   static const logout = 'Cerrar sesión';
   static const checkingSession = 'Verificando sesión…';
-  static const redirecting = 'Redirigiendo…';
   static const unknownUser = 'Usuario';
   static const configErrorTitle = 'No se pudo iniciar la aplicación';
   static const configErrorMessage =
       'Falta la configuración de ejecución (config.json). Contacta al equipo de soporte.';
 
-  static const searchTitle = 'Buscar pedido';
   static const orderIdLabel = 'ID del pedido';
   static const orderIdHint = 'Ej. ORD-MX-000147';
   static const searchButton = 'Buscar';
@@ -28,7 +24,6 @@ abstract final class AppStrings {
   static const loadingOrder = 'Buscando pedido…';
   static const notFoundTitle = 'Pedido no encontrado';
   static const retry = 'Reintentar';
-  static const signInAgain = 'Iniciar sesión nuevamente';
 
   static const statusApproved = 'Aprobado';
   static const statusRejected = 'Rechazado';
@@ -42,7 +37,6 @@ abstract final class AppStrings {
   static const occurredAt = 'Emitido';
   static const receivedAt = 'Recibido';
   static const processedAt = 'Procesado';
-  static const lines = 'Líneas';
   static const noLines = 'El pedido no tiene líneas registradas.';
   static const totals = 'Totales';
   static const grossSubtotal = 'Subtotal bruto';
@@ -106,8 +100,6 @@ abstract final class AppStrings {
   static String taxDetail(String rate, String amount) => 'Imp. $rate ($amount)';
 
   static String productReference(String productId) => 'Producto $productId';
-
-  static String attempts(int count) => '$count';
 
   static String clientWithId(String name, String clientId) => '$name · $clientId';
 

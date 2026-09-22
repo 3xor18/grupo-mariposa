@@ -16,7 +16,6 @@ abstract final class AppBreakpoints {
 
 abstract final class AppSizes {
   static const maxContentWidth = 1200.0;
-  static const maxReadableWidth = 960.0;
   static const maxFormWidth = 420.0;
   static const listPaneWidth = 400.0;
   static const emptyStateIcon = 64.0;

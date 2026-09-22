@@ -8,7 +8,6 @@ abstract final class HttpHeaderNames {
 abstract final class HttpMediaTypes {
   static const json = 'application/json';
   static const problemJson = 'application/problem+json';
-  static const formUrlEncoded = 'application/x-www-form-urlencoded';
   static const jsonSuffix = 'json';
 }
 
