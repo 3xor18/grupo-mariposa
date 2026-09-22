@@ -1,6 +1,6 @@
 import { ErrorCode } from '../errors/error-code.enum';
 import { ProblemException, ProblemOptions } from '../errors/problem.exception';
-import { RETRY_AFTER_HEADER } from '../rate-limit/rate-limit.guard';
+import { HTTP_HEADERS } from '../constants/http.constants';
 import { FaultType } from './fault-rule';
 
 export type FailureFaultType = Exclude<FaultType, FaultType.TIMEOUT>;
@@ -18,7 +18,7 @@ const FAULT_ERROR_CODES: Readonly<Record<FailureFaultType, ErrorCode>> = {
 
 function optionsFor(fault: FailureFaultType): ProblemOptions {
   return fault === FaultType.TOO_MANY_REQUESTS
-    ? { headers: { [RETRY_AFTER_HEADER]: INJECTED_RETRY_AFTER_SECONDS } }
+    ? { headers: { [HTTP_HEADERS.RETRY_AFTER]: INJECTED_RETRY_AFTER_SECONDS } }
     : {};
 }
 
