@@ -16,26 +16,39 @@ final class StatusTone {
 
 @immutable
 final class StatusPalette extends ThemeExtension<StatusPalette> {
-  const StatusPalette({required this.approved, required this.rejected, required this.failure});
+  const StatusPalette({
+    required this.approved,
+    required this.rejected,
+    required this.failure,
+    required this.neutral,
+  });
 
   factory StatusPalette.of(Brightness brightness) {
     return StatusPalette(
       approved: StatusTone.fromSeed(AppColors.approvedSeed, brightness),
       rejected: StatusTone.fromSeed(AppColors.rejectedSeed, brightness),
       failure: StatusTone.fromSeed(AppColors.failureSeed, brightness),
+      neutral: StatusTone.fromSeed(AppColors.neutralSeed, brightness),
     );
   }
 
   final StatusTone approved;
   final StatusTone rejected;
   final StatusTone failure;
+  final StatusTone neutral;
 
   @override
-  StatusPalette copyWith({StatusTone? approved, StatusTone? rejected, StatusTone? failure}) {
+  StatusPalette copyWith({
+    StatusTone? approved,
+    StatusTone? rejected,
+    StatusTone? failure,
+    StatusTone? neutral,
+  }) {
     return StatusPalette(
       approved: approved ?? this.approved,
       rejected: rejected ?? this.rejected,
       failure: failure ?? this.failure,
+      neutral: neutral ?? this.neutral,
     );
   }
 
