@@ -191,6 +191,7 @@ jobs:
           DEMO_USER_PASSWORD: ${{ secrets.DEMO_USER_PASSWORD }}
           PII_ENCRYPTION_KEY: ${{ secrets.PII_ENCRYPTION_KEY }}
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          CONFIG_SERVER_PASSWORD: ${{ secrets.CONFIG_SERVER_PASSWORD }}
         run: ./scripts/ci/write-env-from-secrets.sh
       - name: Start platform
         run: docker compose --env-file .env up -d --build --wait --wait-timeout 600
