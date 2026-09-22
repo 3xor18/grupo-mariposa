@@ -30,6 +30,11 @@ abstract final class AppSizes {
   static const dividerThickness = 1.0;
 }
 
+abstract final class AppFlex {
+  static const detailMain = 3;
+  static const detailSide = 2;
+}
+
 abstract final class AppColors {
   static const seed = Color(0xFF5B3FA8);
   static const approvedSeed = Color(0xFF2E7D32);

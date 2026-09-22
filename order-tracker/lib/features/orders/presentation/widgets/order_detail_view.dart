@@ -42,7 +42,7 @@ class OrderDetailView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          flex: 3,
+          flex: AppFlex.detailMain,
           child: _Stack(
             children: [
               OrderHeaderCard(order: order),
@@ -52,7 +52,7 @@ class OrderDetailView extends StatelessWidget {
         ),
         const SizedBox(width: AppSpacing.md),
         Expanded(
-          flex: 2,
+          flex: AppFlex.detailSide,
           child: _Stack(children: [_totals(), ..._outcome()]),
         ),
       ],
