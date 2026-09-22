@@ -40,7 +40,7 @@ func TestLoadDefaults(t *testing.T) {
 		},
 		RateLimit: config.RateLimit{RPS: 200, Burst: 400, MaxKeys: 10000},
 		Auth: config.Auth{
-			Enabled: true, Issuer: authEnv()[config.EnvAuthIssuer],
+			Enabled: true, Issuer: authEnv()[config.EnvAuthIssuer], Audience: "products-api",
 			JWKSURL: authEnv()[config.EnvAuthJWKSURL], RequiredRole: "products-reader",
 			ClockLeeway: 30 * time.Second, JWKSTimeout: 2 * time.Second,
 			JWKSRefresh: time.Hour, JWKSMinimumRefresh: 10 * time.Second,
@@ -159,6 +159,49 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 				t.Fatalf("want ErrInvalid mentioning %s, got %v", tc.key, err)
 			}
 		})
+	}
+}
+
+func TestLoadGuards(t *testing.T) {
+	cases := []struct {
+		name    string
+		extra   map[string]string
+		wantKey string
+	}{
+		{name: "should_reject_blank_audience", wantKey: config.EnvAuthAudience,
+			extra: map[string]string{config.EnvAuthAudience: " "}},
+		{name: "should_refuse_faults_in_production", wantKey: config.EnvFaultInjectionEnabled,
+			extra: map[string]string{config.EnvAppEnvironment: "Production",
+				config.EnvFaultInjectionEnabled: "true"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := authEnv()
+			for k, v := range tc.extra {
+				env[k] = v
+			}
+			_, err := config.Load(lookupFrom(env))
+			if !errors.Is(err, config.ErrInvalid) || !strings.Contains(err.Error(), tc.wantKey) {
+				t.Fatalf("want ErrInvalid mentioning %s, got %v", tc.wantKey, err)
+			}
+		})
+	}
+}
+
+func TestLoadAllowsGuardedSettingsOutsideRestrictions(t *testing.T) {
+	cases := []map[string]string{
+		{config.EnvAppEnvironment: "production"},
+		{config.EnvAppEnvironment: "staging", config.EnvFaultInjectionEnabled: "true"},
+		{config.EnvAuthEnabled: "false", config.EnvAuthAudience: ""},
+	}
+	for _, extra := range cases {
+		env := authEnv()
+		for k, v := range extra {
+			env[k] = v
+		}
+		if _, err := config.Load(lookupFrom(env)); err != nil {
+			t.Fatalf("env %v: unexpected error %v", extra, err)
+		}
 	}
 }
 
