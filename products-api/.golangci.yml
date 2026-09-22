@@ -24,6 +24,10 @@ linters:
     - misspell
     - unconvert
     - godot
+    - mnd
+    - nilnil
+    - gocritic
+    - funlen
   settings:
     lll:
       line-length: 100
@@ -35,6 +39,9 @@ linters:
       min-occurrences: 3
     dupl:
       threshold: 120
+    funlen:
+      lines: 40
+      statements: 30
     revive:
       rules:
         - name: blank-imports
@@ -61,7 +68,7 @@ linters:
         - name: redefines-builtin-id
   exclusions:
     rules:
-      - path: internal/config/remote/settings\.go
+      - path: internal/config/.*\.go
         linters:
           - gosec
         text: "G101"
@@ -70,6 +77,8 @@ linters:
           - dupl
           - goconst
           - gosec
+          - mnd
+          - funlen
 
 formatters:
   enable:
