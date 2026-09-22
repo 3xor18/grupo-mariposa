@@ -20,21 +20,24 @@ docker run --rm -p 8082:3000 \
   -e AUTH_ISSUER=http://localhost:8180/realms/mariposa \
   -e AUTH_JWKS_URL=http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs \
   -e AUTH_AUDIENCE=clients-api \
+  -e API_DOCS_ENABLED=true -e TRUST_PROXY=1 \
   -e FAULT_INJECTION_ENABLED=true -e FAULT_RULES=CLI-40001:503:2,CLI-40002:503 clients-api
 ```
 
-The image does not set `NODE_ENV`; production deployments set `NODE_ENV=production`, which makes the
-service refuse to start with `FAULT_INJECTION_ENABLED=true`.
+The image is pinned to `node:24.21.0-alpine3.24` and does not set `NODE_ENV`. Production deployments
+set `NODE_ENV=production`, which makes the service refuse to start with `AUTH_ENABLED=false`,
+`FAULT_INJECTION_ENABLED=true` or `API_DOCS_ENABLED=true`.
 
 | Endpoint                                | Auth                          | Notes                                                              |
 | --------------------------------------- | ----------------------------- | ------------------------------------------------------------------ |
 | `GET /clients/{clientId}`               | Bearer, role `clients-reader` | `clientId` must match `^CLI-[A-Z0-9]{1,20}$`                       |
 | `GET /health/live`, `GET /health/ready` | public                        | `{"status":"UP"}`; readiness is `503 DOWN` once shutdown starts    |
 | `GET /metrics`                          | public (internal network)     | Prometheus: `http_requests_total`, `http_request_duration_seconds` |
-| `GET /docs`, `GET /docs-json`           | public (internal network)     | Swagger UI / generated OpenAPI 3.1                                 |
+| `GET /docs`, `GET /docs-json`           | public, only if enabled       | Swagger UI / generated OpenAPI 3.1 (`API_DOCS_ENABLED`)            |
 
 `/metrics` and `/docs` are unauthenticated by design (ADR 0003): they are only reachable inside the
-platform network and must not be published by an ingress.
+platform network and must not be published by an ingress. `/docs` is mounted only when
+`API_DOCS_ENABLED=true` (the docker profile of the config repository enables it).
 
 ## Test
 
@@ -58,11 +61,11 @@ Authentication fails closed: `AUTH_ENABLED=true` without issuer or JWKS URL stop
 | -------------------------------- | ------------------------ | -------------------------------------------------------------------------- |
 | `PORT`                           | `3000`                   | HTTP port                                                                  |
 | `LOG_LEVEL`                      | `info`                   | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`               |
-| `NODE_ENV`                       | unset                    | `production` forbids fault injection                                       |
+| `NODE_ENV`                       | unset                    | `production` forbids auth off, fault injection and API docs                |
 | `AUTH_ENABLED`                   | `true`                   | `false` only for local tests                                               |
 | `AUTH_ISSUER`                    | required when auth is on | expected `iss` claim                                                       |
 | `AUTH_JWKS_URL`                  | required when auth is on | Keycloak JWKS endpoint (RS256 only)                                        |
-| `AUTH_AUDIENCE`                  | unset (not checked)      | expected `aud` claim, e.g. `clients-api` (config key `auth.audience`)      |
+| `AUTH_AUDIENCE`                  | `clients-api`            | required `aud` claim, never blank (config key `auth.audience`)             |
 | `AUTH_REQUIRED_ROLE`             | `clients-reader`         | role expected in `realm_access.roles`                                      |
 | `FAULT_INJECTION_ENABLED`        | `false`                  | enables `FAULT_RULES`; refused when `NODE_ENV=production`                  |
 | `FAULT_RULES`                    | empty                    | `id:type[:times]` list, types `429`, `500`, `502`, `503`, `400`, `timeout` |
@@ -72,12 +75,15 @@ Authentication fails closed: `AUTH_ENABLED=true` without issuer or JWKS URL stop
 | `RATE_LIMIT_MAX_TRACKED_CALLERS` | `10000`                  | LRU bound of buckets kept per layer                                        |
 | `SHUTDOWN_DRAIN_MS`              | `5000`                   | time readiness reports `DOWN` before the server closes                     |
 | `SHUTDOWN_TIMEOUT_MS`            | `10000`                  | extra time after the drain before a signalled shutdown is forced           |
+| `API_DOCS_ENABLED`               | `false`                  | mounts Swagger at `/docs`; refused when `NODE_ENV=production`              |
+| `TRUST_PROXY`                    | `false`                  | Express `trust proxy`: `true`, hop count or address list (behind ingress)  |
 
 ### Rate limiting
 
 Two token buckets protect every non-probe route: one per client address, checked before
 authentication, and one per authenticated principal (`azp`, falling back to `sub`), checked after it.
-Excess requests get `429 RATE_LIMITED` with `Retry-After` in seconds. Buckets live in bounded LRU maps,
+Excess requests get `429 RATE_LIMITED` with `Retry-After` in seconds. Behind an ingress set
+`TRUST_PROXY` (for example `1`) so the address comes from `X-Forwarded-For`. Buckets live in bounded LRU maps,
 so limits are **per instance**: with N replicas the effective limit is N times the configured one.
 
 ### Fault injection demo data

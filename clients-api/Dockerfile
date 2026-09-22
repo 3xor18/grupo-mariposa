@@ -1,4 +1,4 @@
-FROM node:24-alpine AS build
+FROM node:24.21.0-alpine3.24 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
@@ -6,7 +6,7 @@ COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 RUN npm run build
 
-FROM node:24-alpine AS runtime
+FROM node:24.21.0-alpine3.24 AS runtime
 ENV PORT=3000
 WORKDIR /app
 COPY package.json package-lock.json ./

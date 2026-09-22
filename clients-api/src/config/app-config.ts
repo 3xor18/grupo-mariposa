@@ -17,7 +17,7 @@ export interface EnabledAuthConfig {
   readonly issuer: string;
   readonly jwksUrl: string;
   readonly requiredRole: string;
-  readonly audience?: string;
+  readonly audience: string;
 }
 
 export interface DisabledAuthConfig {
@@ -43,6 +43,13 @@ export interface ShutdownConfig {
   readonly timeoutMs: number;
 }
 
+export type TrustProxySetting = boolean | number | string;
+
+export interface HttpConfig {
+  readonly apiDocsEnabled: boolean;
+  readonly trustProxy: TrustProxySetting;
+}
+
 export interface AppConfig {
   readonly port: number;
   readonly logLevel: LogLevel;
@@ -50,4 +57,5 @@ export interface AppConfig {
   readonly faultInjection: FaultInjectionConfig;
   readonly rateLimit: RateLimitConfig;
   readonly shutdown: ShutdownConfig;
+  readonly http: HttpConfig;
 }

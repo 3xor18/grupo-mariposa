@@ -82,21 +82,16 @@ describe('JoseAccessTokenVerifier', () => {
     await expect(verifier.authenticate(`BEARER ${token}`)).resolves.toEqual({ id: TEST_CLIENT });
   });
 
-  it('should_not_check_audience_when_it_is_not_configured', async () => {
-    const noAudienceSettings: EnabledAuthConfig = {
-      enabled: true,
-      issuer: TEST_ISSUER,
-      jwksUrl: idp.jwksUrl,
-      requiredRole: TEST_ROLE,
-    };
-    const token = await idp.token({ audience: 'another-api' });
+  it('should_reject_token_without_audience_claim', async () => {
+    const token = await idp.token({ withoutAudience: true });
 
-    await expect(
-      new JoseAccessTokenVerifier(
-        noAudienceSettings,
-        guardedKeySource(createRemoteJWKSet(new URL(idp.jwksUrl))),
-      ).authenticate(`Bearer ${token}`),
-    ).resolves.toEqual({ id: TEST_CLIENT });
+    await expectUnauthorized(token, AUTH_MESSAGES.invalidToken);
+  });
+
+  it('should_accept_token_whose_audience_list_contains_the_service', async () => {
+    const token = await idp.token({ audience: ['account', TEST_AUDIENCE] });
+
+    await expect(verifier.authenticate(`Bearer ${token}`)).resolves.toEqual({ id: TEST_CLIENT });
   });
 
   it.each([undefined, ''])('should_require_a_token_when_header_is_%p', async (header) => {

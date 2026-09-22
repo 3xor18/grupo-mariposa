@@ -30,6 +30,7 @@ export function testConfig(jwksUrl: string, overrides: Partial<AppConfig> = {}):
     },
     rateLimit: { requestsPerSecond: 1000, burst: 1000, maxTrackedCallers: 100 },
     shutdown: { drainMs: 0, timeoutMs: 1000 },
+    http: { apiDocsEnabled: true, trustProxy: false },
     ...overrides,
   };
 }
