@@ -14,21 +14,24 @@ public final class OrderDeadLetterPublisher extends DeadLetterPublishingRecovere
 
     public OrderDeadLetterPublisher(final KafkaOperations<?, ?> template, final String topic,
                                     final DltHeadersFactory headersFactory) {
-        super(template, (record, exception) -> new TopicPartition(topic, ANY_PARTITION));
+        super(template, (failed, exception) -> new TopicPartition(topic, ANY_PARTITION));
         setHeadersFunction(headersFactory::create);
-        excludeHeader(HeaderNames.HeadersToAdd.EX_MSG, HeaderNames.HeadersToAdd.EX_STACKTRACE);
+        excludeHeader(HeaderNames.HeadersToAdd.EXCEPTION, HeaderNames.HeadersToAdd.EX_CAUSE,
+                HeaderNames.HeadersToAdd.EX_MSG, HeaderNames.HeadersToAdd.EX_STACKTRACE);
     }
 
     @Override
     protected ProducerRecord<Object, Object> createProducerRecord(
-            final ConsumerRecord<?, ?> record, final TopicPartition topicPartition,
+            final ConsumerRecord<?, ?> consumerRecord, final TopicPartition topicPartition,
             final Headers headers, final byte[] key, final byte[] value) {
         headers.remove(KafkaHeaders.DELIVERY_ATTEMPT);
         final Integer partition = topicPartition.partition() < 0
                 ? null : topicPartition.partition();
-        final Long timestamp = record.timestamp() < 0 ? null : record.timestamp();
+        final Long timestamp = consumerRecord.timestamp() < 0
+                ? null : consumerRecord.timestamp();
         return new ProducerRecord<>(topicPartition.topic(), partition, timestamp,
-                key == null ? record.key() : key, value == null ? record.value() : value,
+                key == null ? consumerRecord.key() : key,
+                value == null ? consumerRecord.value() : value,
                 headers);
     }
 }

@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,7 +49,7 @@ class DeadLetterRecovererTest {
 
         verify(technicalFailures).record(goldenCommand(),
                 new FailureDetails("EXTERNAL_TRANSIENT", "products-api responded 503", 1));
-        verify(deadLetters).accept(record, failure);
+        verify(deadLetters).accept(eq(record), any(DescribedFailure.class));
         verify(observer).stage(ProcessingStage.SENT_TO_DLT, ORDER_ID, EVENT_ID);
         assertThat(registry.counter(ProcessingMetrics.DEAD_LETTERED, ProcessingMetrics.CATEGORY,
                 "EXTERNAL_TRANSIENT").count()).isOne();
@@ -77,19 +78,34 @@ class DeadLetterRecovererTest {
 
         recoverer.accept(record, failure);
 
-        verify(deadLetters).accept(record, failure);
+        verify(deadLetters).accept(eq(record), any(DescribedFailure.class));
     }
 
     @Test
     void should_rethrow_without_recording_when_dead_letter_topic_is_unavailable() {
         final RecordProcessingFailure failure = failure(ErrorCategory.EXTERNAL_TRANSIENT, true);
         doThrow(new IllegalStateException("broker down")).when(deadLetters)
-                .accept(record, failure);
+                .accept(eq(record), any());
 
         assertThatThrownBy(() -> recoverer.accept(record, failure))
                 .isInstanceOf(IllegalStateException.class);
         verify(observer, never()).stage(ProcessingStage.SENT_TO_DLT, ORDER_ID, EVENT_ID);
         verify(technicalFailures, never()).record(any(), any());
+    }
+
+    @Test
+    void should_dead_letter_and_record_once_when_redelivered_after_dlt_failure() {
+        final RecordProcessingFailure failure = failure(ErrorCategory.EXTERNAL_TRANSIENT, true);
+        doThrow(new IllegalStateException("broker down")).doNothing().when(deadLetters)
+                .accept(eq(record), any());
+
+        assertThatThrownBy(() -> recoverer.accept(record, failure))
+                .isInstanceOf(IllegalStateException.class);
+        recoverer.accept(record, failure);
+
+        verify(deadLetters, times(2)).accept(eq(record), any(DescribedFailure.class));
+        verify(technicalFailures, times(1)).record(any(), any());
+        verify(observer, times(1)).stage(ProcessingStage.SENT_TO_DLT, ORDER_ID, EVENT_ID);
     }
 
     private static RecordProcessingFailure failure(final ErrorCategory category,

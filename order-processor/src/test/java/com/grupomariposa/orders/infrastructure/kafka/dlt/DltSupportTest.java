@@ -41,6 +41,7 @@ class DltSupportTest {
         assertThat(sanitizer.identifier("ORD-1<script>" + "9".repeat(80)))
                 .startsWith("ORD-1script").hasSize(CauseSanitizer.MAX_IDENTIFIER_LENGTH);
         assertThat(sanitizer.cause(null)).isEqualTo("unknown");
+        assertThat(sanitizer.identifier(null)).isEmpty();
         assertThat(sanitizer.cause("  ")).isEqualTo("unknown");
     }
 
@@ -83,6 +84,19 @@ class DltSupportTest {
 
         assertThat(built.lastHeader(DltHeaders.ORDER_ID)).isNull();
         assertThat(built.lastHeader(DltHeaders.EVENT_ID)).isNull();
+    }
+
+    @Test
+    void should_reuse_description_carried_by_the_recoverer() {
+        final FailureDescription description = new FailureDescription(
+                ErrorCategory.PERSISTENCE, "mongo down", new MessageIds("ORD-9", "EVT-9"), null);
+
+        final Headers built = headers.create(record(2),
+                new DescribedFailure(new IllegalStateException(), description));
+
+        assertThat(text(built, DltHeaders.ERROR_CATEGORY)).isEqualTo("PERSISTENCE");
+        assertThat(text(built, DltHeaders.ORDER_ID)).isEqualTo("ORD-9");
+        assertThat(description.recordsTechnicalFailure()).isFalse();
     }
 
     @Test

@@ -82,7 +82,7 @@ class OrderMessageReaderTest {
     void should_only_extract_textual_ids() {
         assertThatThrownBy(() -> reader.read(bytes("{\"orderId\":7,\"eventId\":null}")))
                 .isInstanceOfSatisfying(RecordProcessingFailure.class, failure ->
-                        assertThat(failure.ids().order()).isEmpty());
+                        assertThat(failure.ids().orderId()).isNull());
     }
 
     private static byte[] bytes(final String json) {

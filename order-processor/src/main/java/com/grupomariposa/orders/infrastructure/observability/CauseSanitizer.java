@@ -9,6 +9,7 @@ public final class CauseSanitizer {
     private static final String UNKNOWN = "unknown";
     private static final String MASK = "[redacted]";
     private static final String SPACE = " ";
+    private static final String EMPTY = "";
     private static final String DESCRIPTION_SEPARATOR = ": ";
     private static final Pattern CONTROL = Pattern.compile("\\p{Cntrl}");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
@@ -36,7 +37,10 @@ public final class CauseSanitizer {
     }
 
     public String identifier(final String raw) {
-        return truncate(UNSAFE_ID.matcher(raw).replaceAll(""), MAX_IDENTIFIER_LENGTH);
+        if (raw == null) {
+            return EMPTY;
+        }
+        return truncate(UNSAFE_ID.matcher(raw).replaceAll(EMPTY), MAX_IDENTIFIER_LENGTH);
     }
 
     private static String truncate(final String value, final int max) {
