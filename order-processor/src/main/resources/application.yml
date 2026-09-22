@@ -70,9 +70,9 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTH_ISSUER:http://localhost:8180/realms/mariposa}
-          jwk-set-uri: ${AUTH_JWKS_URL:http://localhost:8180/realms/mariposa/protocol/openid-connect/certs}
-          audiences: ${AUTH_AUDIENCE:}
+          issuer-uri: ${AUTH_ISSUER:${app.keycloak.realm-url}}
+          jwk-set-uri: ${AUTH_JWKS_URL:${app.keycloak.realm-url}${app.keycloak.certs-path}}
+          audiences: ${AUTH_AUDIENCE:${spring.application.name}}
 
 management:
   endpoints:
@@ -151,6 +151,10 @@ pricing:
     PE: ${PRICING_CURRENCY_PE:PEN}
 
 app:
+  keycloak:
+    realm-url: ${AUTH_REALM_URL:http://localhost:8180/realms/mariposa}
+    certs-path: /protocol/openid-connect/certs
+    token-path: /protocol/openid-connect/token
   processing:
     max-concurrent-lookups: ${PROCESSING_MAX_CONCURRENT_LOOKUPS:32}
     instance-id: ${HOSTNAME:}
@@ -181,7 +185,7 @@ app:
     oauth:
       enabled: ${OAUTH_ENABLED:true}
       registration-id: ${OAUTH_REGISTRATION_ID:order-processor}
-      token-uri: ${OAUTH_TOKEN_URI:http://localhost:8180/realms/mariposa/protocol/openid-connect/token}
+      token-uri: ${OAUTH_TOKEN_URI:${app.keycloak.realm-url}${app.keycloak.token-path}}
       client-id: ${OAUTH_CLIENT_ID:order-processor}
     resilience:
       max-attempts: ${HTTP_RETRY_MAX_ATTEMPTS:3}
@@ -241,6 +245,9 @@ app:
     reader-role: ${AUTH_READER_ROLE:orders-reader}
     admin-role: ${AUTH_ADMIN_ROLE:orders-admin}
     api-docs-enabled: ${API_DOCS_ENABLED:false}
-    public-paths: ${AUTH_PUBLIC_PATHS:/actuator/health,/actuator/health/**,/actuator/prometheus,/health/**,/livez,/readyz,/error}
+    public-paths: >-
+      ${AUTH_PUBLIC_PATHS:/actuator/health,/actuator/health/**,/actuator/prometheus,
+      /health/**,/livez,/readyz,/error}
     cors-allowed-methods: ${CORS_ALLOWED_METHODS:GET,OPTIONS}
-    cors-allowed-headers: ${CORS_ALLOWED_HEADERS:Authorization,Content-Type,traceparent,X-Request-Id}
+    cors-allowed-headers: >-
+      ${CORS_ALLOWED_HEADERS:Authorization,Content-Type,traceparent,X-Request-Id}
