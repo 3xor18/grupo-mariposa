@@ -18,6 +18,8 @@ const TRUE_VALUE = 'true';
 const BOOLEAN_VALUES = [TRUE_VALUE, 'false'] as const;
 const AUTH_SETTINGS_REQUIRED = 'is required when AUTH_ENABLED=true';
 
+export type ConfigSource = Readonly<Record<string, string | undefined>>;
+
 export class InvalidConfigurationError extends Error {
   constructor(issues: readonly string[]) {
     super(`Invalid configuration: ${issues.join('; ')}`);
@@ -76,14 +78,14 @@ function toAuthConfig(environment: Environment): AuthConfig {
   };
 }
 
-function toIssues(error: z.ZodError): string[] {
+export function issuesOf(error: z.ZodError): string[] {
   return error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
 }
 
-export function loadConfig(source: NodeJS.ProcessEnv): AppConfig {
+export function loadConfig(source: ConfigSource): AppConfig {
   const result = environmentSchema.safeParse(source);
   if (!result.success) {
-    throw new InvalidConfigurationError(toIssues(result.error));
+    throw new InvalidConfigurationError(issuesOf(result.error));
   }
   const environment = result.data;
   return {
