@@ -38,7 +38,7 @@ class OrderProcessingIT extends IntegrationTest {
 
     @Test
     void should_approve_golden_order_and_publish_contract_compliant_event() throws IOException {
-        stubGoldenDependencies();
+        stubs.golden();
         final OrderEvents event = OrderEvents.goldenWithFreshIds("GOLDEN");
 
         publish(event);
@@ -96,7 +96,7 @@ class OrderProcessingIT extends IntegrationTest {
 
     @Test
     void should_reject_when_product_does_not_exist_in_market() {
-        stubGoldenDependencies();
+        stubs.golden();
         final OrderEvents event = OrderEvents.goldenWithFreshIds("NOTFOUND")
                 .item(0, "PRD-MISSING1");
 
@@ -133,14 +133,15 @@ class OrderProcessingIT extends IntegrationTest {
     @Test
     void should_send_unreadable_payload_to_dlt_without_poison_pill_loop() {
         final byte[] garbage = "{not-json".getBytes(StandardCharsets.UTF_8);
+        final String key = OrderEvents.freshOrderId("GARBAGE");
 
         try (KafkaTestClient kafka = kafka()) {
-            kafka.send(ORDERS_CREATED, "ORD-IT-GARBAGE", garbage);
+            kafka.send(ORDERS_CREATED, key, garbage);
         }
 
         try (TopicProbe dlt = probe(DLT)) {
             final List<ConsumerRecord<String, byte[]>> records =
-                    dlt.awaitKey("ORD-IT-GARBAGE", 1);
+                    dlt.awaitKey(key, 1);
             assertThat(records).hasSize(1);
             assertThat(records.getFirst().value()).isEqualTo(garbage);
             assertThat(header(records.getFirst(), "x-error-category"))
@@ -167,7 +168,7 @@ class OrderProcessingIT extends IntegrationTest {
 
     @Test
     void should_produce_single_effect_when_same_event_is_delivered_twice() {
-        stubGoldenDependencies();
+        stubs.golden();
         final OrderEvents event = OrderEvents.goldenWithFreshIds("DUPLICATE");
 
         publish(event);
@@ -185,7 +186,7 @@ class OrderProcessingIT extends IntegrationTest {
 
     @Test
     void should_keep_first_result_and_dead_letter_conflicting_event_of_same_version() {
-        stubGoldenDependencies();
+        stubs.golden();
         final OrderEvents first = OrderEvents.goldenWithFreshIds("CONFLICT");
         final OrderEvents second = OrderEvents.golden().orderId(first.orderId())
                 .eventId(first.eventId() + "-OTHER");
@@ -206,7 +207,7 @@ class OrderProcessingIT extends IntegrationTest {
 
     @Test
     void should_ignore_lower_version_after_higher_one() {
-        stubGoldenDependencies();
+        stubs.golden();
         final OrderEvents newer = OrderEvents.goldenWithFreshIds("STALE").version(2);
         final OrderEvents older = OrderEvents.golden().orderId(newer.orderId())
                 .eventId(newer.eventId() + "-V1").version(1);
@@ -299,12 +300,6 @@ class OrderProcessingIT extends IntegrationTest {
             assertThat(header(record, "x-error-category")).isEqualTo("EXTERNAL_PERMANENT");
             assertThat(header(record, "x-attempts")).isEqualTo("1");
         }
-    }
-
-    private void stubGoldenDependencies() {
-        stubs.goldenClient("CLI-99821");
-        stubs.product("PRD-001", "MX", "ACTIVE", "STANDARD");
-        stubs.product("PRD-008", "MX", "ACTIVE", "STANDARD");
     }
 
     private void publish(final OrderEvents event) {

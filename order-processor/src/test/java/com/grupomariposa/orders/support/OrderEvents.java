@@ -23,7 +23,11 @@ public final class OrderEvents {
     }
 
     public static OrderEvents goldenWithFreshIds(final String suffix) {
-        return golden().orderId("ORD-IT-" + suffix).eventId("EVT-" + UUID.randomUUID());
+        return golden().orderId(freshOrderId(suffix)).eventId("EVT-" + UUID.randomUUID());
+    }
+
+    public static String freshOrderId(final String label) {
+        return "ORD-IT-" + label + "-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
     public OrderEvents orderId(final String orderId) {

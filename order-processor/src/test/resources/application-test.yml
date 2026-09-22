@@ -43,6 +43,8 @@ app:
       initial-backoff: 20ms
       sliding-window-size: 100
       minimum-number-of-calls: 100
+  persistence:
+    transaction-attempts: 10
   outbox:
     fixed-delay: 100ms
     initial-backoff: 200ms

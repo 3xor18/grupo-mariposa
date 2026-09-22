@@ -6,18 +6,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.grupomariposa.orders.application.command.OrderCommand;
-import com.grupomariposa.orders.application.command.Reception;
+import com.grupomariposa.orders.application.ApplicationFixtures;
 import com.grupomariposa.orders.application.outcome.ProcessingOutcome;
 import com.grupomariposa.orders.application.port.in.ProcessOrderUseCase;
-import com.grupomariposa.orders.domain.model.Currency;
-import com.grupomariposa.orders.domain.model.Market;
-import com.grupomariposa.orders.domain.model.RequestedItem;
 import com.grupomariposa.orders.support.Contracts;
 import com.grupomariposa.orders.support.IntegrationTest;
 import com.grupomariposa.orders.support.JwtTokens;
-import java.math.BigDecimal;
-import java.time.Instant;
+import com.grupomariposa.orders.support.OrderEvents;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -51,7 +46,7 @@ class OrdersApiIT extends IntegrationTest {
 
         assertThat(Contracts.validateOpenApiSchema(OPENAPI, "Order", body)).isEmpty();
         assertThat(body.at("/client/name").asText()).isEqualTo("Distribuidora Central");
-        assertThat(body.at("/totals/grandTotal").decimalValue()).isEqualByComparingTo("958.67");
+        assertThat(body.at("/totals/grandTotal").decimalValue()).isEqualByComparingTo("2100.11");
         assertThat(body.at("/lines/0/discountRate").decimalValue()).isEqualByComparingTo("0.03");
     }
 
@@ -114,6 +109,10 @@ class OrdersApiIT extends IntegrationTest {
                 .get("status").asText()).isEqualTo("UP");
         assertThat(read(mockMvc.perform(get("/health/ready")).andReturn(), 200)
                 .get("status").asText()).isEqualTo("UP");
+        assertThat(read(mockMvc.perform(get("/livez")).andReturn(), 200)
+                .get("status").asText()).isEqualTo("UP");
+        assertThat(read(mockMvc.perform(get("/readyz")).andReturn(), 200)
+                .get("status").asText()).isEqualTo("UP");
         final String metrics = mockMvc.perform(get("/actuator/prometheus")).andReturn()
                 .getResponse().getContentAsString();
         assertThat(metrics).contains("orders_processed_total", "orders_processing_latency",
@@ -121,14 +120,10 @@ class OrdersApiIT extends IntegrationTest {
     }
 
     private String seedApprovedOrder() {
-        stubs.goldenClient("CLI-99821");
-        stubs.product("PRD-001", "MX", "ACTIVE", "STANDARD");
-        final String orderId = "ORD-API-" + UUID.randomUUID();
-        final ProcessingOutcome outcome = useCase.process(new OrderCommand(
-                "EVT-" + UUID.randomUUID(), 1, orderId, Market.MX, Currency.MXN, "CLI-99821",
-                "C1", Instant.parse("2026-09-18T15:42:10Z"),
-                List.of(new RequestedItem("PRD-001", 24, new BigDecimal("35.5"))),
-                new Reception(Instant.now(), null)));
+        stubs.golden();
+        final String orderId = OrderEvents.freshOrderId("API");
+        final ProcessingOutcome outcome = useCase.process(
+                ApplicationFixtures.command(orderId, "EVT-" + UUID.randomUUID(), 1));
         assertThat(outcome).isInstanceOf(ProcessingOutcome.Processed.class);
         return orderId;
     }

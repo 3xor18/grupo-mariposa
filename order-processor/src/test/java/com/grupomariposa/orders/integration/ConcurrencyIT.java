@@ -2,24 +2,20 @@ package com.grupomariposa.orders.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.grupomariposa.orders.application.ApplicationFixtures;
 import com.grupomariposa.orders.application.command.OrderCommand;
-import com.grupomariposa.orders.application.command.Reception;
 import com.grupomariposa.orders.application.outcome.ProcessingOutcome;
 import com.grupomariposa.orders.application.port.in.ProcessOrderUseCase;
-import com.grupomariposa.orders.domain.model.Currency;
-import com.grupomariposa.orders.domain.model.Market;
-import com.grupomariposa.orders.domain.model.RequestedItem;
 import com.grupomariposa.orders.support.IntegrationTest;
-import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.function.IntFunction;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +26,8 @@ import org.springframework.data.mongodb.core.query.Query;
 class ConcurrencyIT extends IntegrationTest {
 
     private static final int WORKERS = 8;
+    private static final long BARRIER_TIMEOUT_SECONDS = 10;
+    private static final long RACE_TIMEOUT_SECONDS = 60;
 
     @Autowired
     private ProcessOrderUseCase useCase;
@@ -67,21 +65,20 @@ class ConcurrencyIT extends IntegrationTest {
 
     private List<ProcessingOutcome> race(final IntFunction<OrderCommand> commands)
             throws Exception {
-        final CountDownLatch start = new CountDownLatch(1);
+        final CyclicBarrier start = new CyclicBarrier(WORKERS);
         try (ExecutorService pool = Executors.newFixedThreadPool(WORKERS)) {
             final List<Future<ProcessingOutcome>> futures = new ArrayList<>();
             for (int worker = 0; worker < WORKERS; worker++) {
                 final OrderCommand command = commands.apply(worker);
                 final Callable<ProcessingOutcome> task = () -> {
-                    start.await();
+                    start.await(BARRIER_TIMEOUT_SECONDS, TimeUnit.SECONDS);
                     return useCase.process(command);
                 };
                 futures.add(pool.submit(task));
             }
-            start.countDown();
             final List<ProcessingOutcome> outcomes = new ArrayList<>();
             for (final Future<ProcessingOutcome> future : futures) {
-                outcomes.add(future.get());
+                outcomes.add(future.get(RACE_TIMEOUT_SECONDS, TimeUnit.SECONDS));
             }
             return outcomes;
         }
@@ -95,13 +92,10 @@ class ConcurrencyIT extends IntegrationTest {
     }
 
     private void stubDependencies() {
-        stubs.goldenClient("CLI-99821");
-        stubs.product("PRD-001", "MX", "ACTIVE", "STANDARD");
+        stubs.golden();
     }
 
     private static OrderCommand command(final String orderId, final String eventId) {
-        return new OrderCommand(eventId, 1, orderId, Market.MX, Currency.MXN, "CLI-99821", null,
-                null, List.of(new RequestedItem("PRD-001", 24, new BigDecimal("35.5"))),
-                new Reception(Instant.now(), null));
+        return ApplicationFixtures.command(orderId, eventId, 1);
     }
 }

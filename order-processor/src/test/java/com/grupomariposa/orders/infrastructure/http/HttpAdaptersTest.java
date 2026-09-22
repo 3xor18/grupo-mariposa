@@ -172,7 +172,7 @@ class HttpAdaptersTest {
     @Test
     void should_treat_timeouts_as_transient() {
         API.stubFor(get("/clients/CLI-SLOW").willReturn(okJson(CLIENT_BODY)
-                .withFixedDelay(600)));
+                .withFixedDelay(1500)));
 
         assertThatThrownBy(() -> clients.findClient("CLI-SLOW"))
                 .isInstanceOf(ExternalTransientException.class)
@@ -231,7 +231,7 @@ class HttpAdaptersTest {
         final HttpDependenciesProperties.Endpoint endpoint =
                 new HttpDependenciesProperties.Endpoint(URI.create(API.baseUrl()));
         return new HttpDependenciesProperties(endpoint, endpoint, Duration.ofMillis(500),
-                Duration.ofMillis(300), new HttpDependenciesProperties.OAuth(false, "test",
+                Duration.ofMillis(1000), new HttpDependenciesProperties.OAuth(false, "test",
                         URI.create(API.baseUrl()), "order-processor"),
                 new HttpDependenciesProperties.Resilience(3, Duration.ofMillis(5), 2.0, 0.5,
                         Duration.ofMillis(50), 20, 10, 50f, Duration.ofSeconds(10), 3, 32,

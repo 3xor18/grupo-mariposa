@@ -46,6 +46,12 @@ public final class DependencyStubs {
                 .willReturn(okJson(body.toString())));
     }
 
+    public void golden() {
+        goldenClient("CLI-99821");
+        product("PRD-001", "MX", "ACTIVE", "STANDARD");
+        product("PRD-008", "MX", "ACTIVE", "STANDARD");
+    }
+
     public void goldenClient(final String clientId) {
         client(clientId, "MX", "WHOLESALE", "GENERAL", "ACTIVE");
     }
