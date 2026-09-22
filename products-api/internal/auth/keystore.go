@@ -26,6 +26,7 @@ var (
 	errJWKSStatus        = errors.New("unexpected jwks status")
 	errMissingKeyID      = errors.New("token header has no kid")
 	errAlgorithmMismatch = errors.New("token alg does not match signing key")
+	errEmptyKeySet       = errors.New("jwks contains no usable keys")
 )
 
 type keyStorage interface {
@@ -105,6 +106,9 @@ func (s *keyStore) refresh(ctx context.Context) error {
 		if err == nil {
 			keys = append(keys, jwk)
 		}
+	}
+	if len(keys) == 0 {
+		return errEmptyKeySet
 	}
 	if err := s.store.KeyReplaceAll(ctx, keys); err != nil {
 		return fmt.Errorf("store jwks: %w", err)

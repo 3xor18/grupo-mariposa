@@ -3,7 +3,11 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -98,13 +102,14 @@ func TestVerifyRejectsInvalidTokens(t *testing.T) {
 	}
 }
 
-func TestVerifyWithoutAudienceAcceptsAnyAudience(t *testing.T) {
+func TestVerifyAlwaysChecksAudience(t *testing.T) {
 	issuer := authtest.NewIssuer(t)
 	s := settings(issuer)
 	s.Audience = ""
 	token := issuer.Token(t, with(func(c *authtest.Claims) { c.Audience = []string{"account"} }))
-	if _, err := newVerifier(s).Verify(context.Background(), token); err != nil {
-		t.Fatalf("audience check must be optional, got %v", err)
+	if _, err := newVerifier(s).Verify(context.Background(), token); !errors.Is(err,
+		auth.ErrUnauthenticated) {
+		t.Fatalf("audience must never fail open, got %v", err)
 	}
 }
 
@@ -199,4 +204,30 @@ func noneToken(t *testing.T) string {
 		t.Fatalf("sign: %v", err)
 	}
 	return signed
+}
+
+func TestReadinessStaysDownWithEmptyKeySet(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = io.WriteString(w, `{"keys":[]}`)
+	}))
+	t.Cleanup(server.Close)
+	s := settings(authtest.NewIssuer(t))
+	s.JWKSURL = server.URL
+	verifier := newVerifier(s)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		verifier.Run(ctx)
+		close(done)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	waitFor(t, func() bool { return requests.Load() >= 2 })
+	if verifier.Ready() {
+		t.Fatal("an empty key set must not make the verifier ready")
+	}
 }

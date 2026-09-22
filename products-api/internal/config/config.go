@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/grupomariposa/platform/products-api/internal/fault"
@@ -36,6 +37,9 @@ const (
 	EnvProblemTypeBaseURL     = "PROBLEM_TYPE_BASE_URL"
 	EnvLogLevel               = "LOG_LEVEL"
 	EnvHealthcheckTimeoutMS   = "HEALTHCHECK_TIMEOUT_MS"
+	EnvAppEnvironment         = "APP_ENV"
+	productionEnvironment     = "production"
+	defaultAudience           = "products-api"
 	defaultPort               = 8081
 	defaultRequestTimeoutMS   = 3000
 	defaultShutdownTimeoutMS  = 10000
@@ -66,6 +70,8 @@ const (
 var (
 	ErrInvalid            = errors.New("invalid configuration")
 	errWriteTimeoutTooLow = errors.New("must be greater than " + EnvRequestTimeoutMS)
+	errFaultsInProduction = errors.New("must not be true when " + EnvAppEnvironment + "=" +
+		productionEnvironment)
 )
 
 type Config struct {
@@ -187,7 +193,7 @@ func loadAuth(r *Reader) Auth {
 	auth := Auth{
 		Enabled:            r.Bool(EnvAuthEnabled, true),
 		Issuer:             r.String(EnvAuthIssuer, ""),
-		Audience:           r.String(EnvAuthAudience, ""),
+		Audience:           r.String(EnvAuthAudience, defaultAudience),
 		JWKSURL:            r.AbsoluteURL(EnvAuthJWKSURL, ""),
 		RequiredRole:       r.String(EnvAuthRequiredRole, defaultRequiredRole),
 		ClockLeeway:        r.OptionalMillis(EnvAuthClockLeewayMS, defaultClockLeewayMS),
@@ -198,6 +204,7 @@ func loadAuth(r *Reader) Auth {
 	if auth.Enabled {
 		r.Require(EnvAuthIssuer, auth.Issuer)
 		r.Require(EnvAuthJWKSURL, auth.JWKSURL)
+		r.RejectBlank(EnvAuthAudience)
 	}
 	return auth
 }
@@ -207,8 +214,12 @@ func loadFaults(r *Reader) Faults {
 	if err != nil {
 		r.Fail(EnvFaultRules, err)
 	}
+	enabled := r.Bool(EnvFaultInjectionEnabled, false)
+	if enabled && strings.EqualFold(r.String(EnvAppEnvironment, ""), productionEnvironment) {
+		r.Fail(EnvFaultInjectionEnabled, errFaultsInProduction)
+	}
 	return Faults{
-		Enabled: r.Bool(EnvFaultInjectionEnabled, false),
+		Enabled: enabled,
 		Rules:   rules,
 		Timeout: r.Millis(EnvFaultTimeoutMS, defaultFaultTimeoutMS),
 	}

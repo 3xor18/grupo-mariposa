@@ -20,6 +20,7 @@ var (
 	errOutOfRange     = errors.New("is out of range")
 	errRequired       = errors.New("is required")
 	errNotAbsoluteURL = errors.New("must be an absolute URL")
+	errBlank          = errors.New("must not be blank")
 )
 
 type LookupFunc func(key string) (string, bool)
@@ -116,6 +117,12 @@ func (r *Reader) AbsoluteURL(key, fallback string) string {
 		r.Fail(key, errNotAbsoluteURL)
 	}
 	return raw
+}
+
+func (r *Reader) RejectBlank(key string) {
+	if value, ok := r.lookup(key); ok && strings.TrimSpace(value) == "" {
+		r.Fail(key, errBlank)
+	}
 }
 
 func (r *Reader) Require(key, value string) {
