@@ -1,0 +1,11 @@
+port: 3000
+log-level: info
+rate-limit:
+  rps: 200
+  burst: 400
+auth:
+  enabled: true
+  required-role: clients-reader
+fault:
+  rules: ""
+  timeout-ms: 5000

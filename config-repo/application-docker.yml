@@ -1,0 +1,3 @@
+auth:
+  issuer: http://localhost:8180/realms/mariposa
+  jwks-url: http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs

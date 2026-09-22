@@ -6,10 +6,16 @@ x-logging: &default-logging
     max-size: 10m
     max-file: "3"
 
-x-auth-env: &auth-env
-  AUTH_ENABLED: "true"
-  AUTH_ISSUER: ${KEYCLOAK_PUBLIC_URL}/realms/mariposa
-  AUTH_JWKS_URL: http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs
+x-config-client: &config-client
+  CONFIG_SERVER_URL: http://config-server:8888
+  CONFIG_PROFILE: docker
+  CONFIG_SERVER_USERNAME: ${CONFIG_SERVER_USERNAME}
+  CONFIG_SERVER_PASSWORD: ${CONFIG_SERVER_PASSWORD}
+  CONFIG_SERVER_FAIL_FAST: "true"
+
+x-config-dependency: &config-dependency
+  config-server:
+    condition: service_healthy
 
 services:
   mongo:
@@ -153,16 +159,11 @@ services:
     build:
       context: ./products-api
     environment:
-      <<: *auth-env
-      PORT: 8081
-      AUTH_REQUIRED_ROLE: products-reader
-      FAULT_RULES: ${PRODUCTS_FAULT_RULES:-PRD-012:503:2,PRD-013:timeout,PRD-014:400}
-      FAULT_TIMEOUT_MS: 5000
-      RATE_LIMIT_RPS: 200
-      RATE_LIMIT_BURST: 400
+      <<: *config-client
     ports:
       - "8081:8081"
     depends_on:
+      <<: *config-dependency
       keycloak:
         condition: service_healthy
     logging: *default-logging
@@ -171,16 +172,11 @@ services:
     build:
       context: ./clients-api
     environment:
-      <<: *auth-env
-      PORT: 3000
-      AUTH_REQUIRED_ROLE: clients-reader
-      FAULT_RULES: ${CLIENTS_FAULT_RULES:-CLI-40001:503:2,CLI-40002:503}
-      FAULT_TIMEOUT_MS: 5000
-      RATE_LIMIT_RPS: 200
-      RATE_LIMIT_BURST: 400
+      <<: *config-client
     ports:
       - "8082:3000"
     depends_on:
+      <<: *config-dependency
       keycloak:
         condition: service_healthy
     logging: *default-logging
@@ -189,12 +185,12 @@ services:
     build:
       context: ./order-processor
     environment:
-      <<: *auth-env
-      SERVER_PORT: 8080
       SPRING_PROFILES_ACTIVE: docker
       CONFIG_SERVER_URL: http://config-server:8888
       SPRING_CLOUD_CONFIG_USERNAME: ${CONFIG_SERVER_USERNAME}
       SPRING_CLOUD_CONFIG_PASSWORD: ${CONFIG_SERVER_PASSWORD}
+      AUTH_ISSUER: ${KEYCLOAK_PUBLIC_URL}/realms/mariposa
+      AUTH_JWKS_URL: http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs
       MONGODB_URI: mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongo:27017/orders?replicaSet=rs0&authSource=orders
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       REDIS_HOST: redis
@@ -213,8 +209,7 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      config-server:
-        condition: service_healthy
+      <<: *config-dependency
       mongo:
         condition: service_healthy
       kafka-init:
@@ -233,14 +228,12 @@ services:
     build:
       context: ./order-tracker
     environment:
-      ORDERS_API_URL: http://order-processor:8080
-      API_BASE_URL: /api
-      KEYCLOAK_URL: ${KEYCLOAK_PUBLIC_URL}
-      KEYCLOAK_REALM: mariposa
-      KEYCLOAK_CLIENT_ID: order-tracker
+      <<: *config-client
+      CONFIG_APP_NAME: order-tracker
     ports:
       - "8090:8080"
     depends_on:
+      <<: *config-dependency
       order-processor:
         condition: service_started
     logging: *default-logging
