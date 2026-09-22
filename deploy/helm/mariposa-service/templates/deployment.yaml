@@ -22,7 +22,7 @@ spec:
       labels:
         {{- include "mariposa.selectorLabels" . | nindent 8 }}
       annotations:
-        checksum/env: {{ toJson .Values.env | sha256sum }}
+        checksum/config: {{ include "mariposa.configChecksum" . }}
         {{- if .Values.metrics.enabled }}
         prometheus.io/scrape: "true"
         prometheus.io/path: {{ .Values.metrics.path | quote }}
@@ -34,9 +34,12 @@ spec:
     spec:
       serviceAccountName: {{ include "mariposa.name" . }}
       automountServiceAccountToken: false
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext:
         runAsNonRoot: true
+        runAsUser: {{ .Values.podSecurityContext.runAsUser }}
+        runAsGroup: {{ .Values.podSecurityContext.runAsGroup }}
+        fsGroup: {{ .Values.podSecurityContext.fsGroup }}
         seccompProfile:
           type: RuntimeDefault
       topologySpreadConstraints:
@@ -48,7 +51,7 @@ spec:
               {{- include "mariposa.selectorLabels" . | nindent 14 }}
       containers:
         - name: {{ include "mariposa.name" . }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: {{ include "mariposa.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
@@ -63,6 +66,16 @@ spec:
             - secretRef:
                 name: {{ include "mariposa.name" . }}
           {{- end }}
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: {{ .Values.lifecycle.preStopSleepSeconds }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.startup.path | default .Values.probes.liveness }}
+              port: http
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
           livenessProbe:
             httpGet:
               path: {{ .Values.probes.liveness }}
@@ -86,6 +99,12 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

@@ -13,12 +13,26 @@ service:
   type: ClusterIP
   port: 80
 
+podSecurityContext:
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+
+terminationGracePeriodSeconds: 30
+
+lifecycle:
+  preStopSleepSeconds: 5
+
 probes:
   liveness: /health/live
   readiness: /health/ready
-  initialDelaySeconds: 10
+  initialDelaySeconds: 0
   periodSeconds: 10
   failureThreshold: 3
+  startup:
+    path: ""
+    periodSeconds: 5
+    failureThreshold: 12
 
 resources:
   requests:
@@ -62,5 +76,11 @@ metrics:
 networkPolicy:
   enabled: true
   allowedFrom: []
+  allowedCidrs: []
+  monitoringNamespace: monitoring
+
+extraVolumes: []
+
+extraVolumeMounts: []
 
 podAnnotations: {}
