@@ -24,6 +24,7 @@ abstract final class AppSizes {
   static const progressIndicator = 20.0;
   static const progressStroke = 2.0;
   static const cardRadius = 16.0;
+  static const userNameWidth = 200.0;
   static const badgeRadius = 8.0;
   static const badgeIcon = 16.0;
   static const compactBadgeIcon = 14.0;
