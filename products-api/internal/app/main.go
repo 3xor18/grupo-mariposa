@@ -38,7 +38,10 @@ func Main(ctx context.Context, args []string, env config.LookupFunc, out io.Writ
 		return ExitFailure
 	}
 	bootstrap := telemetry.NewLogger(out, slog.LevelInfo)
-	lookup, err := resolveLookup(ctx, env, bootstrap, *healthcheck)
+	if *healthcheck {
+		return report(ctx, bootstrap, probe(ctx, env), logHealthFailed)
+	}
+	lookup, err := remote.Resolve(ctx, env, bootstrap)
 	if err != nil {
 		return report(ctx, bootstrap, err, logInvalidConfig)
 	}
@@ -48,24 +51,15 @@ func Main(ctx context.Context, args []string, env config.LookupFunc, out io.Writ
 	if err != nil {
 		return report(ctx, logger, err, logInvalidConfig)
 	}
-	if *healthcheck {
-		err = CheckHealth(ctx, fmt.Sprintf(liveURLFormat, cfg.Port))
-		return report(ctx, logger, err, logHealthFailed)
-	}
 	return report(ctx, logger, Run(ctx, cfg, logger), logRunFailed)
 }
 
-func resolveLookup(ctx context.Context, env config.LookupFunc, logger *slog.Logger,
-	healthcheck bool,
-) (config.LookupFunc, error) {
-	if healthcheck {
-		return env, nil
-	}
-	lookup, err := remote.Resolve(ctx, env, logger)
+func probe(ctx context.Context, env config.LookupFunc) error {
+	port, err := config.LoadPort(env)
 	if err != nil {
-		return nil, fmt.Errorf("resolve configuration sources: %w", err)
+		return err
 	}
-	return lookup, nil
+	return CheckHealth(ctx, fmt.Sprintf(liveURLFormat, port))
 }
 
 func report(ctx context.Context, logger *slog.Logger, err error, message string) int {

@@ -83,8 +83,9 @@ Keys the service does not use (for example `management.*`) are ignored.
 Precedence: **environment variable > config server > built-in default**. Remote values are
 layered behind the environment through the lookup function passed to `config.Load`; the process
 environment is never mutated. Values of keys containing `SECRET`, `PASSWORD`, `KEY` or `TOKEN`
-are redacted in logs and the server password is never logged. `-healthcheck` reads only the
-environment (the image sets `PORT`), so container probes never call the config server.
+are redacted in logs and the server password is never logged. `-healthcheck` resolves only
+`PORT` from the environment (default `8081`): it never validates the rest of the configuration
+nor calls the config server.
 
 | Variable | Default | Description |
 |---|---|---|
