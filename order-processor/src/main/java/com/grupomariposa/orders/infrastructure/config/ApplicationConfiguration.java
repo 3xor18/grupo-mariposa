@@ -17,6 +17,9 @@ import com.grupomariposa.orders.application.service.PublishPendingEventsService;
 import com.grupomariposa.orders.application.service.RecordTechnicalFailureService;
 import com.grupomariposa.orders.application.service.RelaySettings;
 import com.grupomariposa.orders.application.validation.OrderCommandValidator;
+import com.grupomariposa.orders.domain.model.DiscountRule;
+import com.grupomariposa.orders.domain.model.MarketCurrencies;
+import com.grupomariposa.orders.domain.model.TaxRateTable;
 import com.grupomariposa.orders.domain.policy.EligibilityPolicy;
 import com.grupomariposa.orders.domain.policy.LinePricer;
 import com.grupomariposa.orders.domain.policy.MarketTaxPolicy;
@@ -30,6 +33,7 @@ import java.time.Clock;
 import java.util.UUID;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 @Configuration(proxyBeanMethods = false)
 public class ApplicationConfiguration {
@@ -50,14 +54,36 @@ public class ApplicationConfiguration {
     }
 
     @Bean
-    public OrderEvaluator orderEvaluator() {
-        return new OrderEvaluator(new EligibilityPolicy(),
-                new LinePricer(new MarketTaxPolicy(), new WholesaleVolumeDiscountPolicy()));
+    public EnvironmentSecrets environmentSecrets(final Environment environment) {
+        return new EnvironmentSecrets(environment);
     }
 
     @Bean
-    public OrderCommandValidator orderCommandValidator() {
-        return new OrderCommandValidator();
+    public TaxRateTable taxRateTable(final PricingProperties pricing) {
+        return pricing.taxRateTable();
+    }
+
+    @Bean
+    public DiscountRule wholesaleDiscountRule(final PricingProperties pricing) {
+        return pricing.discountRule();
+    }
+
+    @Bean
+    public MarketCurrencies marketCurrencies(final PricingProperties pricing) {
+        return pricing.markets();
+    }
+
+    @Bean
+    public OrderEvaluator orderEvaluator(final TaxRateTable taxRates,
+                                         final DiscountRule wholesaleDiscountRule) {
+        return new OrderEvaluator(new EligibilityPolicy(), new LinePricer(
+                new MarketTaxPolicy(taxRates),
+                new WholesaleVolumeDiscountPolicy(wholesaleDiscountRule)));
+    }
+
+    @Bean
+    public OrderCommandValidator orderCommandValidator(final MarketCurrencies markets) {
+        return new OrderCommandValidator(markets);
     }
 
     @Bean

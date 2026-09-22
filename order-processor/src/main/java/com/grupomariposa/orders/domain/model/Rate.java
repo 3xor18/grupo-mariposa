@@ -23,4 +23,8 @@ public record Rate(BigDecimal value) {
     public boolean isZero() {
         return value.signum() == 0;
     }
+
+    public boolean isFraction() {
+        return value.compareTo(BigDecimal.ONE) <= 0;
+    }
 }

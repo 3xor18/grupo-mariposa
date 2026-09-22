@@ -5,10 +5,15 @@ import static com.grupomariposa.orders.application.ApplicationFixtures.goldenCom
 import static com.grupomariposa.orders.application.ApplicationFixtures.goldenSubmission;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.grupomariposa.orders.domain.DomainFixtures;
+import com.grupomariposa.orders.domain.model.Currency;
+import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCurrencies;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.function.UnaryOperator;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
@@ -20,7 +25,8 @@ class OrderCommandValidatorTest {
 
     private static final String REQUIRED = "is required";
 
-    private final OrderCommandValidator validator = new OrderCommandValidator();
+    private final OrderCommandValidator validator =
+            new OrderCommandValidator(DomainFixtures.MARKETS);
 
     @Test
     void should_build_command_when_submission_is_valid() {
@@ -110,6 +116,17 @@ class OrderCommandValidatorTest {
         assertThat(errors(validator.validate(marketAndCurrency("PE", "MXN"), RECEPTION)))
                 .containsExactly(new ValidationError("currency",
                         "does not match market PE (expected PEN)"));
+    }
+
+    @Test
+    void should_only_accept_configured_markets_and_currencies() {
+        final OrderCommandValidator mexicoOnly = new OrderCommandValidator(
+                new MarketCurrencies(Map.of(Market.MX, Currency.MXN)));
+
+        assertThat(errors(mexicoOnly.validate(marketAndCurrency("CO", "COP"), RECEPTION)))
+                .containsExactly(new ValidationError("market", "must be one of [MX]"));
+        assertThat(mexicoOnly.validate(goldenSubmission(), RECEPTION))
+                .isInstanceOf(ValidationResult.Valid.class);
     }
 
     @Test

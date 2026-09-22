@@ -4,6 +4,7 @@ import com.grupomariposa.orders.application.command.OrderCommand;
 import com.grupomariposa.orders.application.command.Reception;
 import com.grupomariposa.orders.domain.model.Currency;
 import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCurrencies;
 import com.grupomariposa.orders.domain.model.RequestedItem;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -11,6 +12,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.IntStream;
@@ -46,6 +48,12 @@ public final class OrderCommandValidator {
     private static final String NON_NEGATIVE_PRICE = "must be greater than or equal to 0";
     private static final String DUPLICATED_PRODUCT = "is duplicated within the order";
 
+    private final MarketCurrencies markets;
+
+    public OrderCommandValidator(final MarketCurrencies markets) {
+        this.markets = Objects.requireNonNull(markets, "markets");
+    }
+
     public ValidationResult validate(final UnvalidatedOrder order, final Reception reception) {
         final ErrorCollector errors = new ErrorCollector();
         validateHeader(order, errors);
@@ -70,16 +78,17 @@ public final class OrderCommandValidator {
         }
     }
 
-    private static void validateMarketAndCurrency(final UnvalidatedOrder order,
-                                                  final ErrorCollector errors) {
-        final Optional<Market> market = parseEnum(MARKET, order.market(), Market.fromCode(
-                order.market()), Market.values(), errors);
+    private void validateMarketAndCurrency(final UnvalidatedOrder order,
+                                           final ErrorCollector errors) {
+        final Optional<Market> market = parseEnum(MARKET, order.market(),
+                Market.fromCode(order.market()).filter(markets::supports),
+                markets.supportedMarkets().toArray(Market[]::new), errors);
         final Optional<Currency> currency = parseEnum(CURRENCY, order.currency(),
                 currencyOf(order.currency()), Currency.values(), errors);
         if (market.isPresent() && currency.isPresent()
-                && !market.get().acceptsCurrency(currency.get())) {
+                && !markets.accepts(market.get(), currency.get())) {
             errors.add(CURRENCY, CURRENCY_MISMATCH.formatted(market.get(),
-                    market.get().currency()));
+                    markets.currencyOf(market.get()).orElseThrow()));
         }
     }
 

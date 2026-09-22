@@ -19,6 +19,7 @@ import com.grupomariposa.orders.application.port.in.ProcessOrderUseCase;
 import com.grupomariposa.orders.application.port.out.ProcessingObserver;
 import com.grupomariposa.orders.application.port.out.ProcessingStage;
 import com.grupomariposa.orders.application.validation.OrderCommandValidator;
+import com.grupomariposa.orders.domain.DomainFixtures;
 import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
 import com.grupomariposa.orders.infrastructure.observability.TraceContext;
 import com.grupomariposa.orders.support.Contracts;
@@ -46,7 +47,8 @@ class OrderCreatedListenerTest {
     void setUp() {
         when(traceContext.currentTraceId()).thenReturn(Optional.of("trace-9"));
         listener = new OrderCreatedListener(new OrderMessageReader(),
-                new OrderCommandValidator(), useCase, observer, () -> Instant.EPOCH,
+                new OrderCommandValidator(DomainFixtures.MARKETS), useCase, observer,
+                () -> Instant.EPOCH,
                 traceContext, new ProcessingMetrics(registry));
     }
 

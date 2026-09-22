@@ -4,6 +4,7 @@ import static com.grupomariposa.orders.domain.DomainFixtures.client;
 import static com.grupomariposa.orders.domain.DomainFixtures.wholesaleClient;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.grupomariposa.orders.domain.DomainFixtures;
 import com.grupomariposa.orders.domain.model.ClientSegment;
 import com.grupomariposa.orders.domain.model.ClientStatus;
 import com.grupomariposa.orders.domain.model.Market;
@@ -16,7 +17,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 class MarketTaxPolicyTest {
 
-    private final TaxPolicy policy = new MarketTaxPolicy();
+    private final TaxPolicy policy = new MarketTaxPolicy(DomainFixtures.TAX_RATES);
 
     @ParameterizedTest(name = "{0} {1} -> {2}%")
     @CsvSource({
