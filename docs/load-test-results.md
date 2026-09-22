@@ -14,6 +14,7 @@ transacción.
 |---|---|---|---|---|---|---|
 | 1 instancia, concurrencia 3 | 2 200 | 2 000 | 31 s | 64 pedidos/s | 2 000 | 200 |
 | 1 instancia, concurrencia 6 (= particiones) | 2 200 | 2 000 | 26 s | 76 pedidos/s | 2 000 | 200 |
+| Idem, tras la revisión (relay con lotes acotados por deadline, fan-out ≤ bulkhead) | 2 200 | 2 000 | 14 s | 142 pedidos/s | 2 000 | 200 |
 
 - **Correctitud bajo carga**: 0 efectos duplicados, 0 fallos técnicos, 0 mensajes en la DLT; el outbox publicó
   exactamente 2 000 eventos y quedó en 0 pendientes segundos después de terminar la ráfaga.
@@ -42,8 +43,8 @@ Tasa constante durante 60 s: 100 iteraciones/s de catálogo (1 producto + 1 clie
 |---|---|---|
 | Requests | 13 203 | — |
 | Errores | 0,00 % | < 1 % ✅ |
-| Catálogo p95 | 2,52 ms | < 50 ms ✅ |
-| Consulta de pedidos p95 | 15,96 ms | < 150 ms ✅ |
+| Catálogo p95 | 2,52 ms → 1,75 ms tras la revisión | < 50 ms ✅ |
+| Consulta de pedidos p95 | 15,96 ms → 8,44 ms tras la revisión | < 150 ms ✅ |
 | Checks | 100 % (13 202 / 13 202) | — |
 
 Ejecución:
@@ -54,4 +55,11 @@ docker run --rm --network grupo-mariposa_default -v "$PWD/load/k6:/scripts" \
   -e KEYCLOAK_URL=http://keycloak:8080 -e PRODUCTS_URL=http://products-api:8081 \
   -e CLIENTS_URL=http://clients-api:3000 -e ORDERS_URL=http://order-processor:8080 \
   -e DEMO_PASSWORD=<DEMO_USER_PASSWORD> grafana/k6:0.54.0 run /scripts/apis.js
+```
+
+El token se obtiene una sola vez en `setup()` y se comparte entre los usuarios virtuales: 30 logins simultáneos
+del mismo usuario activan la protección de fuerza bruta de Keycloak (`user_temporarily_disabled`), que es el
+comportamiento correcto del IdP, no un fallo de la plataforma.
+
+```text
 ```

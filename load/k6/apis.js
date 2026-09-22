@@ -67,9 +67,13 @@ function refreshGrant(refreshToken) {
   });
 }
 
-function accessToken() {
+export function setup() {
+  return passwordGrant();
+}
+
+function accessToken(shared) {
   if (session === null) {
-    session = passwordGrant();
+    session = shared;
   } else if (Date.now() > session.expiresAt - TOKEN_REFRESH_MARGIN_MS) {
     session = session.refreshToken ? refreshGrant(session.refreshToken) : passwordGrant();
   }
@@ -77,19 +81,19 @@ function accessToken() {
 }
 
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
-const auth = () => ({
-  headers: { Authorization: `Bearer ${accessToken()}` },
+const auth = (shared) => ({
+  headers: { Authorization: `Bearer ${accessToken(shared)}` },
   tags: { endpoint: 'api' },
 });
 
-export function catalog() {
-  const product = http.get(`${PRODUCTS_URL}/products/${pick(PRODUCTS)}?market=MX`, auth());
-  const client = http.get(`${CLIENTS_URL}/clients/${pick(CLIENTS)}`, auth());
+export function catalog(shared) {
+  const product = http.get(`${PRODUCTS_URL}/products/${pick(PRODUCTS)}?market=MX`, auth(shared));
+  const client = http.get(`${CLIENTS_URL}/clients/${pick(CLIENTS)}`, auth(shared));
   check(product, { 'product 200': (r) => r.status === STATUS_OK });
   check(client, { 'client 200': (r) => r.status === STATUS_OK });
 }
 
-export function orders() {
-  const page = http.get(`${ORDERS_URL}/orders?status=APPROVED&size=20`, auth());
+export function orders(shared) {
+  const page = http.get(`${ORDERS_URL}/orders?status=APPROVED&size=20`, auth(shared));
   check(page, { 'orders page 200': (r) => r.status === STATUS_OK });
 }
