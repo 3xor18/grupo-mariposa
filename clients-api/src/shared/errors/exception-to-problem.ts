@@ -10,7 +10,11 @@ import { ErrorCode } from './error-code.enum';
 import { ProblemDescriptor } from './problem-details';
 import { ProblemException, ProblemOptions } from './problem.exception';
 
-export const INTERNAL_ERROR_DETAIL = 'An unexpected error occurred';
+export const INTERNAL_ERROR_DETAIL = ERROR_CATALOG[ErrorCode.INTERNAL_ERROR].detail;
+
+function isServerError(status: number): boolean {
+  return status >= SERVER_ERROR_STATUS_THRESHOLD;
+}
 
 function fromCode(
   code: ErrorCode,
@@ -19,7 +23,9 @@ function fromCode(
 ): ProblemDescriptor {
   const definition = ERROR_CATALOG[code];
   return {
-    ...options,
+    ...(options.errors === undefined ? {} : { errors: options.errors }),
+    ...(options.headers === undefined ? {} : { headers: options.headers }),
+    ...(options.cause === undefined ? {} : { cause: options.cause }),
     status: definition.status,
     code,
     title: definition.title,
@@ -29,22 +35,27 @@ function fromCode(
 }
 
 function fallbackCodeFor(status: number): ErrorCode {
-  return status >= SERVER_ERROR_STATUS_THRESHOLD ? ErrorCode.INTERNAL_ERROR : ErrorCode.BAD_REQUEST;
+  return isServerError(status) ? ErrorCode.INTERNAL_ERROR : ErrorCode.BAD_REQUEST;
+}
+
+function safeDetail(code: ErrorCode, status: number, message: string): string {
+  return isServerError(status) ? ERROR_CATALOG[code].detail : message;
 }
 
 function fromHttpException(exception: HttpException): ProblemDescriptor {
   const status = exception.getStatus();
   const knownCode = HTTP_STATUS_ERROR_CODES.get(status);
+  const code = knownCode ?? fallbackCodeFor(status);
+  const detail = safeDetail(code, status, exception.message);
   if (knownCode !== undefined) {
-    return fromCode(knownCode, exception.message);
+    return { ...fromCode(knownCode, detail), unexpected: isServerError(status) };
   }
-  const code = fallbackCodeFor(status);
   return {
     status,
     code,
     title: STATUS_CODES[status] ?? ERROR_CATALOG[code].title,
-    detail: exception.message,
-    unexpected: code === ErrorCode.INTERNAL_ERROR,
+    detail,
+    unexpected: isServerError(status),
   };
 }
 

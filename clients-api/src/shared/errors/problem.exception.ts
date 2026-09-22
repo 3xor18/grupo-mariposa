@@ -8,6 +8,7 @@ export interface FieldError {
 export interface ProblemOptions {
   readonly errors?: readonly FieldError[];
   readonly headers?: Readonly<Record<string, string>>;
+  readonly cause?: unknown;
 }
 
 export class ProblemException extends Error {
@@ -16,7 +17,7 @@ export class ProblemException extends Error {
     readonly detail: string,
     readonly options: ProblemOptions = {},
   ) {
-    super(detail);
+    super(detail, { cause: options.cause });
     this.name = ProblemException.name;
   }
 }
