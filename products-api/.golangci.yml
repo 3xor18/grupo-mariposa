@@ -1,0 +1,81 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - revive
+    - gocyclo
+    - lll
+    - goconst
+    - dupl
+    - gosec
+    - errorlint
+    - bodyclose
+    - noctx
+    - misspell
+    - unconvert
+    - godot
+  settings:
+    lll:
+      line-length: 100
+      tab-width: 1
+    gocyclo:
+      min-complexity: 10
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    dupl:
+      threshold: 120
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - dupl
+          - goconst
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/grupomariposa/platform/products-api
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
