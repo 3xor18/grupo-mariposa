@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly ALLOWED_SERVICES=(config-server products-api clients-api order-processor order-tracker)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 readonly ALLOWED_ENVIRONMENTS=(staging production)
 readonly CHART=deploy/helm/mariposa-service
 readonly VALUES_DIR=deploy/helm/values
@@ -18,24 +19,12 @@ readonly SESSION_SECONDS="${AWS_SESSION_SECONDS:-3600}"
 : "${IMAGE_TAG:?IMAGE_TAG is required}"
 
 contains() {
-  local needle="$1"
+  local needle="$1" item
   shift
-  local item
   for item in "$@"; do
     [[ "${item}" == "${needle}" ]] && return 0
   done
   return 1
-}
-
-requested_services() {
-  local raw="${SERVICES:-$(IFS=','; echo "${ALLOWED_SERVICES[*]}")}"
-  local entry service
-  local -a entries
-  IFS=',' read -ra entries <<< "${raw}"
-  for entry in "${entries[@]}"; do
-    service="$(echo "${entry}" | tr -d '[:space:]')"
-    [[ -n "${service}" ]] && echo "${service}"
-  done
 }
 
 assume_role() {
@@ -64,18 +53,12 @@ main() {
     echo "Unknown environment '${ENVIRONMENT}'" >&2
     exit 1
   fi
-  local services
-  mapfile -t services < <(requested_services)
-  if (( ${#services[@]} == 0 )); then
-    echo "No services requested" >&2
-    exit 1
-  fi
-  local service
+  local resolved service
+  local -a services
+  resolved="$("${SCRIPT_DIR}/resolve-services.sh")"
+  mapfile -t services <<< "${resolved}"
   for service in "${services[@]}"; do
-    if ! contains "${service}" "${ALLOWED_SERVICES[@]}"; then
-      echo "Unknown service '${service}'. Allowed: ${ALLOWED_SERVICES[*]}" >&2
-      exit 1
-    fi
+    "${SCRIPT_DIR}/scan-image.sh" "${IMAGE_PREFIX}/${service}:${IMAGE_TAG}"
   done
   assume_role
   aws eks update-kubeconfig --name "${EKS_CLUSTER}" --region "${AWS_REGION}"

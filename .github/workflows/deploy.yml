@@ -10,45 +10,56 @@ on:
         required: true
       services:
         description: Services to deploy (comma separated)
-        default: products-api,clients-api,order-processor,order-tracker
+        default: config-server,products-api,clients-api,order-processor,order-tracker
         required: true
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
 
 permissions:
   id-token: write
   contents: read
 
+env:
+  HELM_VERSION: v3.16.2
+  IMAGE_PREFIX: grupo-mariposa
+
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     env:
+      ENVIRONMENT: ${{ inputs.environment }}
       AWS_REGION: ${{ vars.AWS_REGION }}
       EKS_CLUSTER: ${{ vars.EKS_CLUSTER_NAME }}
       ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
       NAMESPACE: grupo-mariposa
+      IMAGE_TAG: ${{ github.sha }}
+      SERVICES: ${{ inputs.services }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Validate requested services against the allowlist
+        id: services
+        run: |
+          resolved="$(./scripts/ci/resolve-services.sh)"
+          echo "list=$(tr '\n' ' ' <<< "${resolved}")" >> "${GITHUB_OUTPUT}"
+      - name: Build images
+        env:
+          RESOLVED: ${{ steps.services.outputs.list }}
+        run: |
+          read -ra list <<< "${RESOLVED}"
+          for service in "${list[@]}"; do
+            docker build -t "${IMAGE_PREFIX}/${service}:${IMAGE_TAG}" "${service}"
+          done
       - name: Assume deploy role with OIDC (no static AWS keys)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a #v4.3.1
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
-      - uses: aws-actions/amazon-ecr-login@v2
-      - uses: azure/setup-helm@v4
-      - name: Build, push and roll out
-        env:
-          SERVICES: ${{ inputs.services }}
-          TAG: ${{ github.sha }}
-        run: |
-          aws eks update-kubeconfig --name "$EKS_CLUSTER" --region "$AWS_REGION"
-          IFS=',' read -ra LIST <<< "$SERVICES"
-          for service in "${LIST[@]}"; do
-            image="$ECR_REGISTRY/grupo-mariposa/$service"
-            docker build -t "$image:$TAG" "$service"
-            docker push "$image:$TAG"
-            helm upgrade --install "$service" deploy/helm/mariposa-service \
-              --namespace "$NAMESPACE" --create-namespace \
-              -f "deploy/helm/values/$service.yaml" \
-              --set image.repository="$image" --set image.tag="$TAG" \
-              --atomic --wait --timeout 10m
-          done
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - name: Scan, push and roll out with the environment overlay
+        run: ./scripts/ci/deploy-eks.sh
