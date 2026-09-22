@@ -30,6 +30,7 @@ class StateMessage extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: AppSizes.maxFormWidth),
           child: Semantics(
+            container: true,
             liveRegion: true,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -40,7 +41,15 @@ class StateMessage extends StatelessWidget {
                   color: iconColor ?? theme.colorScheme.primary,
                 ),
                 const SizedBox(height: AppSpacing.md),
-                Text(title, style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
+                Semantics(
+                  container: true,
+                  header: true,
+                  child: Text(
+                    title,
+                    style: theme.textTheme.titleLarge,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(message, style: theme.textTheme.bodyMedium, textAlign: TextAlign.center),
                 if (detail != null) ...[

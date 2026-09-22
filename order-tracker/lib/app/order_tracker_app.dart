@@ -12,9 +12,10 @@ import 'package:order_tracker/features/auth/presentation/auth_cubit.dart';
 import 'package:order_tracker/features/auth/presentation/auth_gate.dart';
 
 class OrderTrackerApp extends StatefulWidget {
-  const OrderTrackerApp({required this.dependencies, super.key});
+  const OrderTrackerApp({required this.dependencies, required this.authCubit, super.key});
 
   final AppDependencies dependencies;
+  final AuthCubit authCubit;
 
   @override
   State<OrderTrackerApp> createState() => _OrderTrackerAppState();
@@ -25,14 +26,9 @@ class _OrderTrackerAppState extends State<OrderTrackerApp> {
 
   @override
   void dispose() {
+    unawaited(widget.authCubit.close());
     unawaited(dependencies.dispose());
     super.dispose();
-  }
-
-  AuthCubit _startAuth() {
-    final cubit = AuthCubit(dependencies.authRepository);
-    unawaited(cubit.initialize());
-    return cubit;
   }
 
   @override
@@ -43,8 +39,8 @@ class _OrderTrackerAppState extends State<OrderTrackerApp> {
         RepositoryProvider.value(value: dependencies.searchOrder),
         RepositoryProvider.value(value: dependencies.listOrders),
       ],
-      child: BlocProvider(
-        create: (_) => _startAuth(),
+      child: BlocProvider.value(
+        value: widget.authCubit,
         child: MaterialApp(
           title: AppStrings.appTitle,
           theme: AppTheme.light(),

@@ -41,6 +41,7 @@ abstract final class AppFlex {
 
 abstract final class AppColors {
   static const seed = Color(0xFF5B3FA8);
+  static const splashBackground = Color(0xFFFFFBFF);
   static const approvedSeed = Color(0xFF2E7D32);
   static const rejectedSeed = Color(0xFFC62828);
   static const failureSeed = Color(0xFFEF6C00);

@@ -50,13 +50,13 @@ void main() {
   );
 
   blocTest<AuthCubit, AuthState>(
-    'should keep checking while a silent sign in redirects to keycloak',
+    'should report a silent sign in redirecting to keycloak',
     setUp: () => when(
       repository.restoreSession,
     ).thenAnswer((_) async => const Ok(SigningInSilently())),
     build: buildCubit,
     act: (cubit) => cubit.initialize(),
-    expect: () => const <AuthState>[],
+    expect: () => const [AuthSigningInSilently()],
   );
 
   blocTest<AuthCubit, AuthState>(

@@ -10,13 +10,16 @@ import 'package:order_tracker/app/bootstrap.dart';
 import 'package:order_tracker/app/config_error_app.dart';
 import 'package:order_tracker/app/order_tracker_app.dart';
 import 'package:order_tracker/app/shell_keys.dart';
+import 'package:order_tracker/app/silent_sign_in_view.dart';
 import 'package:order_tracker/core/config/app_config.dart';
 import 'package:order_tracker/core/format/app_formatters.dart';
 import 'package:order_tracker/core/l10n/app_strings.dart';
 import 'package:order_tracker/core/result/result.dart';
 import 'package:order_tracker/features/auth/data/auth_repository_impl.dart';
+import 'package:order_tracker/features/auth/data/auth_storage_keys.dart';
 import 'package:order_tracker/features/auth/domain/auth_user.dart';
 import 'package:order_tracker/features/auth/domain/session_restoration.dart';
+import 'package:order_tracker/features/auth/presentation/auth_cubit.dart';
 import 'package:order_tracker/features/auth/presentation/auth_keys.dart';
 import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart';
 import 'package:order_tracker/features/orders/domain/usecases/list_orders.dart';
@@ -60,8 +63,11 @@ void main() {
     final restoration = user == null ? const SignedOut() : SignedIn(user);
     when(authRepository.restoreSession).thenAnswer((_) async => Ok(restoration));
     await tester.useSize(size);
+    final authCubit = AuthCubit(authRepository);
+    await authCubit.initialize();
     await tester.pumpWidget(
       OrderTrackerApp(
+        authCubit: authCubit,
         dependencies: AppDependencies(
           authRepository: authRepository,
           searchOrder: SearchOrder(orderRepository),
@@ -135,19 +141,26 @@ void main() {
 
   group('AppBootstrap', () {
     late MockHttpClient httpClient;
-    final location = FakeBrowserLocation(Uri.parse('http://localhost:8090/'));
-
+    late FakeBrowserLocation location;
+    late InMemoryKeyValueStore store;
     late int semanticsRequests;
 
     setUp(() {
       httpClient = MockHttpClient();
+      location = FakeBrowserLocation(Uri.parse('http://localhost:8090/'));
+      store = InMemoryKeyValueStore();
       semanticsRequests = 0;
     });
+
+    void returnFromFailedSilentSignIn() {
+      store.write(AuthStorageKeys.mode, AuthRedirectModes.silent);
+      location.current = Uri.parse('http://localhost:8090/?error=login_required&state=s');
+    }
 
     AppBootstrap bootstrap() {
       return AppBootstrap(
         location: location,
-        store: InMemoryKeyValueStore(),
+        store: store,
         httpClient: httpClient,
         enableSemantics: () => semanticsRequests++,
         clock: () => DateTime.utc(2026),
@@ -170,8 +183,22 @@ void main() {
       );
     }
 
+    test('should start a silent sign in before building the app', () async {
+      respondConfig(enableSemantics: false);
+      final app = await bootstrap().createApp();
+      expect(app, isA<SilentSignInView>());
+      expect(location.assigned.single.queryParameters['prompt'], 'none');
+    });
+
+    testWidgets('should render the silent sign in splash without navigation', (tester) async {
+      await tester.pumpWidget(const SilentSignInView());
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(Navigator), findsNothing);
+    });
+
     test('should build the app and enable semantics when configured', () async {
       respondConfig(enableSemantics: true);
+      returnFromFailedSilentSignIn();
       final app = await bootstrap().createApp();
       expect(app, isA<OrderTrackerApp>());
       final dependencies = (app as OrderTrackerApp).dependencies;
@@ -181,6 +208,7 @@ void main() {
 
     test('should keep semantics off unless configured', () async {
       respondConfig(enableSemantics: false);
+      returnFromFailedSilentSignIn();
       await bootstrap().createApp();
       expect(semanticsRequests, 0);
     });

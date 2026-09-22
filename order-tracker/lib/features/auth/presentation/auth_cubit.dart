@@ -32,7 +32,7 @@ class AuthCubit extends Cubit<AuthState> {
       case Ok<SessionRestoration>(value: SignedOut()):
         _emitIfOpen(const AuthUnauthenticated());
       case Ok<SessionRestoration>(value: SigningInSilently()):
-        return;
+        _emitIfOpen(const AuthSigningInSilently());
       case Err<SessionRestoration>(:final failure):
         _emitIfOpen(AuthUnauthenticated(failure: failure));
     }

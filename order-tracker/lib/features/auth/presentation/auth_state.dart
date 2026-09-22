@@ -13,6 +13,10 @@ final class AuthChecking extends AuthState {
   const AuthChecking();
 }
 
+final class AuthSigningInSilently extends AuthState {
+  const AuthSigningInSilently();
+}
+
 final class AuthRedirecting extends AuthState {
   const AuthRedirecting();
 }
