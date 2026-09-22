@@ -90,3 +90,21 @@ describe('graceful shutdown through app.close()', () => {
     await expect(fetch(`${base}/health/live`)).rejects.toThrow('fetch failed');
   });
 });
+
+describe('api docs gate', () => {
+  it('should_not_serve_swagger_when_api_docs_are_disabled', async () => {
+    const config = testConfig('http://unused');
+    const app = await createTestApp({
+      ...config,
+      auth: NO_AUTH,
+      http: { ...config.http, apiDocsEnabled: false },
+    });
+    const server = app.getHttpServer() as App;
+
+    const json = await request(server).get('/docs-json').expect(404);
+    await request(server).get('/docs').expect(404);
+
+    expect(json.body).toMatchObject({ code: ErrorCode.NOT_FOUND });
+    await app.close();
+  });
+});

@@ -223,3 +223,30 @@ describe('rate limiting per authenticated principal', () => {
     expect(response.body).toMatchObject({ code: ErrorCode.UNAUTHORIZED });
   });
 });
+
+describe('rate limiting behind a trusted proxy', () => {
+  const limitedBy = async (trustProxy: boolean | number): Promise<number[]> => {
+    const config = unauthenticated({
+      rateLimit: { requestsPerSecond: 0.001, burst: 1, maxTrackedCallers: 10 },
+    });
+    const app = await createTestApp({ ...config, http: { ...config.http, trustProxy } });
+    const server = app.getHttpServer() as App;
+    const statuses: number[] = [];
+    for (const forwardedFor of ['203.0.113.10', '203.0.113.11']) {
+      const response = await request(server)
+        .get('/clients/CLI-99821')
+        .set('X-Forwarded-For', forwardedFor);
+      statuses.push(response.status);
+    }
+    await app.close();
+    return statuses;
+  };
+
+  it('should_bucket_by_forwarded_client_address_when_proxy_is_trusted', async () => {
+    await expect(limitedBy(1)).resolves.toEqual([200, 200]);
+  });
+
+  it('should_ignore_forwarded_header_when_proxy_is_not_trusted', async () => {
+    await expect(limitedBy(false)).resolves.toEqual([200, 429]);
+  });
+});
