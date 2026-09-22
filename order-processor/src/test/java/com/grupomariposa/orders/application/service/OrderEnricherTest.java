@@ -15,7 +15,6 @@ import static org.mockito.Mockito.when;
 import com.grupomariposa.orders.application.command.OrderCommand;
 import com.grupomariposa.orders.application.error.ErrorCategory;
 import com.grupomariposa.orders.application.error.ExternalTransientException;
-import com.grupomariposa.orders.application.error.ProcessingException;
 import com.grupomariposa.orders.application.error.UnexpectedProcessingException;
 import com.grupomariposa.orders.application.port.out.ClientDirectory;
 import com.grupomariposa.orders.application.port.out.ProductCatalog;
@@ -32,7 +31,6 @@ import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -85,14 +83,16 @@ class OrderEnricherTest {
     @Test
     void should_wrap_checked_lookup_failures_as_unexpected() {
         final IOException checked = new IOException("boom");
+        when(clients.findClient(CLIENT_ID)).thenAnswer(invocation -> {
+            throw checked;
+        });
+        when(products.findProduct(anyString(), eq(Market.MX))).thenReturn(Lookup.notFound());
 
-        final RuntimeException unwrapped =
-                OrderEnricher.unwrap(new CompletionException(checked));
-
-        assertThat(unwrapped).isInstanceOf(UnexpectedProcessingException.class)
-                .hasCause(checked);
-        assertThat(((ProcessingException) unwrapped).category())
-                .isEqualTo(ErrorCategory.UNEXPECTED);
+        assertThatThrownBy(() -> enricher(4).enrich(goldenCommand()))
+                .isInstanceOfSatisfying(UnexpectedProcessingException.class, unexpected -> {
+                    assertThat(unexpected).hasCause(checked);
+                    assertThat(unexpected.category()).isEqualTo(ErrorCategory.UNEXPECTED);
+                });
     }
 
     @Test

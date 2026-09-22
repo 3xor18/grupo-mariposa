@@ -14,13 +14,27 @@ import com.grupomariposa.orders.infrastructure.http.client.HttpClientDirectory;
 import com.grupomariposa.orders.infrastructure.http.product.HttpProductCatalog;
 import com.grupomariposa.orders.infrastructure.http.product.ProductResponseMapper;
 import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
+import java.util.Objects;
 
-public record HttpAdapterSupport(
-        RestClientFactory restClients,
-        HttpDependenciesProperties properties,
-        ResilienceFactory resilience,
-        RetryAfterParser retryAfter,
-        ProcessingMetrics metrics) {
+public final class HttpAdapterSupport {
+
+    private final RestClientFactory restClients;
+    private final HttpDependenciesProperties properties;
+    private final ResilienceFactory resilience;
+    private final RetryAfterParser retryAfter;
+    private final ProcessingMetrics metrics;
+
+    public HttpAdapterSupport(final RestClientFactory restClients,
+                              final HttpDependenciesProperties properties,
+                              final ResilienceFactory resilience,
+                              final RetryAfterParser retryAfter,
+                              final ProcessingMetrics metrics) {
+        this.restClients = Objects.requireNonNull(restClients, "restClients");
+        this.properties = Objects.requireNonNull(properties, "properties");
+        this.resilience = Objects.requireNonNull(resilience, "resilience");
+        this.retryAfter = Objects.requireNonNull(retryAfter, "retryAfter");
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
+    }
 
     ClientDirectory clientDirectory() {
         return new HttpClientDirectory(restClients.create(properties.clients()),
@@ -36,8 +50,7 @@ public record HttpAdapterSupport(
 
     private ResilientExecutor resilient(final Dependency dependency) {
         final ResilientExecutor executor = resilience.create(dependency);
-        resilience.retryOf(dependency).getEventPublisher()
-                .onRetry(event -> metrics.retried(dependency.id()));
+        executor.retry().getEventPublisher().onRetry(event -> metrics.retried(dependency.id()));
         return executor;
     }
 }

@@ -9,6 +9,7 @@ import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.bulkhead.BulkheadConfig;
 import io.github.resilience4j.bulkhead.BulkheadRegistry;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.core.IntervalBiFunction;
 import io.github.resilience4j.core.functions.Either;
@@ -25,13 +26,15 @@ class ResilienceTest {
                     Duration.ofSeconds(2), 20, 10, 50f, Duration.ofSeconds(10), 3, 32,
                     Duration.ofMillis(100));
 
-    private final ResilienceFactory factory = new ResilienceFactory(SETTINGS,
-            RetryRegistry.ofDefaults(), CircuitBreakerRegistry.ofDefaults(),
-            BulkheadRegistry.ofDefaults());
+    private final RetryRegistry retries = RetryRegistry.ofDefaults();
+    private final CircuitBreakerRegistry circuitBreakers = CircuitBreakerRegistry.ofDefaults();
+    private final BulkheadRegistry bulkheads = BulkheadRegistry.ofDefaults();
+    private final ResilienceFactory factory =
+            new ResilienceFactory(SETTINGS, retries, circuitBreakers, bulkheads);
 
     @Test
     void should_honour_retry_after_up_to_the_cap() {
-        final IntervalBiFunction<Object> interval = factory.intervalFunction();
+        final IntervalBiFunction<Object> interval = intervalFunction();
 
         assertThat(interval.apply(1, Either.left(transientWithRetryAfter(Duration.ofSeconds(1)))))
                 .isEqualTo(1000L);
@@ -41,7 +44,7 @@ class ResilienceTest {
 
     @Test
     void should_use_jittered_exponential_backoff_otherwise() {
-        final IntervalBiFunction<Object> interval = factory.intervalFunction();
+        final IntervalBiFunction<Object> interval = intervalFunction();
 
         assertThat(interval.apply(1, Either.left(new ExternalTransientException("x", "y", null))))
                 .isBetween(100L, 300L);
@@ -52,12 +55,17 @@ class ResilienceTest {
 
     @Test
     void should_configure_breaker_and_bulkhead_from_settings() {
-        assertThat(factory.circuitBreakerConfig().getSlidingWindowSize()).isEqualTo(20);
-        assertThat(factory.circuitBreakerConfig().getFailureRateThreshold()).isEqualTo(50f);
-        assertThat(factory.circuitBreakerConfig().getRecordExceptionPredicate()
+        final ResilientExecutor executor = factory.create(Dependency.CLIENTS_API);
+        final CircuitBreakerConfig breaker = circuitBreakers
+                .circuitBreaker(Dependency.CLIENTS_API.id()).getCircuitBreakerConfig();
+
+        assertThat(breaker.getSlidingWindowSize()).isEqualTo(20);
+        assertThat(breaker.getFailureRateThreshold()).isEqualTo(50f);
+        assertThat(breaker.getRecordExceptionPredicate()
                 .test(new ExternalPermanentException("x", "y", null))).isFalse();
-        assertThat(factory.bulkheadConfig().getMaxConcurrentCalls()).isEqualTo(32);
-        assertThat(factory.retryConfig().getMaxAttempts()).isEqualTo(3);
+        assertThat(bulkheads.bulkhead(Dependency.CLIENTS_API.id()).getBulkheadConfig()
+                .getMaxConcurrentCalls()).isEqualTo(32);
+        assertThat(executor.retry().getRetryConfig().getMaxAttempts()).isEqualTo(3);
     }
 
     @Test
@@ -83,6 +91,12 @@ class ResilienceTest {
         assertThatThrownBy(() -> executor.execute(() -> "never"))
                 .isInstanceOf(ExternalTransientException.class)
                 .hasMessage("products-api bulkhead is saturated");
+    }
+
+    @SuppressWarnings("unchecked")
+    private IntervalBiFunction<Object> intervalFunction() {
+        return (IntervalBiFunction<Object>) factory.create(Dependency.CLIENTS_API).retry()
+                .getRetryConfig().getIntervalBiFunction();
     }
 
     private static ExternalTransientException transientWithRetryAfter(final Duration wait) {
