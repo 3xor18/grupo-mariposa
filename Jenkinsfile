@@ -23,7 +23,7 @@ pipeline {
     stage('Quality gates') {
       parallel {
         stage('products-api') {
-          agent { docker { image 'golang:1.23'; reuseNode true } }
+          agent { docker { image 'golang:1.26'; reuseNode true } }
           steps {
             dir('products-api') {
               sh 'go vet ./...'
