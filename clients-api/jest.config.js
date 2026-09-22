@@ -14,6 +14,7 @@ module.exports = {
       lines: FULL_COVERAGE,
       statements: FULL_COVERAGE,
       functions: FULL_COVERAGE,
+      branches: FULL_COVERAGE,
     },
   },
 };
