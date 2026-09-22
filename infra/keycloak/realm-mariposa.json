@@ -10,10 +10,12 @@
   "failureFactor": 10,
   "waitIncrementSeconds": 30,
   "maxFailureWaitSeconds": 300,
-  "quickLoginCheckMilliSeconds": 1,
+  "quickLoginCheckMilliSeconds": 100,
   "minimumQuickLoginWaitSeconds": 5,
   "accessTokenLifespan": 300,
   "ssoSessionIdleTimeout": 1800,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
   "roles": {
     "realm": [
       {
@@ -79,7 +81,7 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
-        "http://localhost:8090/*",
+        "http://localhost:8090/",
         "http://localhost:8080/swagger-ui/oauth2-redirect.html"
       ],
       "webOrigins": [
@@ -88,7 +90,7 @@
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:8090/*"
+        "post.logout.redirect.uris": "http://localhost:8090/"
       },
       "protocol": "openid-connect",
       "protocolMappers": [
