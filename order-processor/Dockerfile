@@ -23,7 +23,8 @@ COPY --from=build --chown=10001:10001 /workspace/target/extracted/spring-boot-lo
 COPY --from=build --chown=10001:10001 /workspace/target/extracted/snapshot-dependencies/ ./
 COPY --from=build --chown=10001:10001 /workspace/target/extracted/application/ ./
 USER 10001:10001
-ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=50 -XX:+ExitOnOutOfMemoryError -XX:+UseZGC -Djava.security.egd=file:/dev/./urandom"
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=50 \
+-XX:+ExitOnOutOfMemoryError -XX:+UseZGC -Djava.security.egd=file:/dev/./urandom"
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=3s --start-period=60s --retries=3 \
     CMD wget -q -O /dev/null http://127.0.0.1:8080/health/live || exit 1

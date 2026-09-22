@@ -9,7 +9,11 @@
 
     <module name="SuppressionSingleFilter">
         <property name="files" value="src.test.java"/>
-        <property name="checks" value="MagicNumber|MethodLength|ClassDataAbstractionCoupling|HideUtilityClassConstructor"/>
+        <property name="checks" value="MagicNumber|MethodLength"/>
+    </module>
+    <module name="SuppressionSingleFilter">
+        <property name="files" value="src.test.java"/>
+        <property name="checks" value="ClassDataAbstractionCoupling|HideUtilityClassConstructor"/>
     </module>
 
     <module name="SuppressionSingleFilter">
