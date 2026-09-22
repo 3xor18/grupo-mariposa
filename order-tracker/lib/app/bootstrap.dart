@@ -7,6 +7,7 @@ import 'package:order_tracker/app/order_tracker_app.dart';
 import 'package:order_tracker/core/config/config_loader.dart';
 import 'package:order_tracker/core/format/app_locale.dart';
 import 'package:order_tracker/core/platform/browser_location.dart';
+import 'package:order_tracker/core/platform/key_value_store.dart';
 import 'package:order_tracker/core/time/clock.dart';
 
 final class AppBootstrap {
@@ -14,12 +15,14 @@ final class AppBootstrap {
     required this.location,
     required this.store,
     required this.httpClient,
+    required this.enableSemantics,
     this.clock = systemClock,
   });
 
   final BrowserLocation location;
   final KeyValueStore store;
   final http.Client httpClient;
+  final VoidCallback enableSemantics;
   final Clock clock;
 
   Future<Widget> createApp() async {
@@ -29,6 +32,9 @@ final class AppBootstrap {
         appUri: location.current,
         cacheBuster: '${clock().millisecondsSinceEpoch}',
       );
+      if (config.enableSemantics) {
+        enableSemantics();
+      }
       final dependencies = AppDependencies.create(
         config: config,
         location: location,

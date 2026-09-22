@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:order_tracker/core/config/app_config.dart';
 import 'package:order_tracker/core/json/json_map.dart';
 import 'package:order_tracker/features/auth/data/authorization_callback.dart';
+import 'package:order_tracker/features/auth/data/id_token_validator.dart';
 import 'package:order_tracker/features/auth/data/jwt_claims.dart';
 import 'package:order_tracker/features/auth/data/oidc_endpoints.dart';
 import 'package:order_tracker/features/auth/data/pkce.dart';
@@ -44,6 +45,7 @@ void main() {
         keycloakUrl: 'http://localhost:8180',
         realm: 'mariposa',
         clientId: 'order-tracker',
+        redirectUri: 'http://localhost:8090/',
       ),
     );
     final redirect = Uri.parse('http://localhost:8090/');
@@ -60,6 +62,7 @@ void main() {
         redirectUri: redirect,
         state: 'state-1',
         codeChallenge: 'challenge-1',
+        nonce: 'nonce-1',
       );
       expect(uri.path, '/realms/mariposa/protocol/openid-connect/auth');
       expect(uri.queryParameters, {
@@ -70,7 +73,19 @@ void main() {
         'state': 'state-1',
         'code_challenge': 'challenge-1',
         'code_challenge_method': 'S256',
+        'nonce': 'nonce-1',
       });
+    });
+
+    test('should ask keycloak not to prompt during silent sign in', () {
+      final uri = endpoints.authorization(
+        redirectUri: redirect,
+        state: 's',
+        codeChallenge: 'c',
+        nonce: 'n',
+        prompt: OidcValues.silentPrompt,
+      );
+      expect(uri.queryParameters['prompt'], 'none');
     });
 
     test('should build the logout request with and without id token hint', () {
@@ -104,15 +119,6 @@ void main() {
       expect(
         AuthorizationCallback.parse(Uri.parse('http://localhost:8090/?error=access_denied')),
         const AuthorizationDenied('access_denied'),
-      );
-    });
-
-    test('should strip the callback parameters from the address', () {
-      expect(
-        AuthorizationCallback.stripFrom(
-          Uri.parse('http://localhost:8090/app/?code=c1&state=s1#/'),
-        ).toString(),
-        'http://localhost:8090/app/',
       );
     });
   });
@@ -184,18 +190,51 @@ void main() {
       expect(merged.refreshExpiresAt, issuedAt);
     });
 
-    test('should round trip through storage', () {
-      final tokens = TokenSet(
-        accessToken: 'a',
-        refreshToken: 'r',
-        idToken: 'i',
-        expiresAt: issuedAt,
-        refreshExpiresAt: issuedAt.add(const Duration(minutes: 30)),
+    test('should know when it already expired', () {
+      final tokens = TokenSet(accessToken: 'a', expiresAt: issuedAt);
+      expect(tokens.isExpiredAt(issuedAt.subtract(const Duration(seconds: 1))), isFalse);
+      expect(tokens.isExpiredAt(issuedAt), isTrue);
+    });
+  });
+
+  group('IdTokenValidator', () {
+    final now = DateTime.utc(2026, 9, 22, 12);
+    final validator = IdTokenValidator(issuer: testIssuer, clientId: testClientId);
+
+    bool valid(String token, {String? nonce}) {
+      return validator.isValid(token, now: now, expectedNonce: nonce);
+    }
+
+    test('should accept a token for this client, issuer and nonce', () {
+      expect(
+        valid(
+          idTokenFor(now: now, nonce: 'n1'),
+          nonce: 'n1',
+        ),
+        isTrue,
       );
-      final restored = TokenSet.fromStorage(
-        JsonMap.parse(jsonDecode(jsonEncode(tokens.toStorage()))),
+      expect(valid(idTokenFor(now: now, audience: ['other', testClientId])), isTrue);
+      expect(valid(idTokenFor(now: now, nonce: 'n1')), isTrue);
+    });
+
+    test('should reject tokens with the wrong nonce, audience, issuer or expiry', () {
+      expect(
+        valid(
+          idTokenFor(now: now, nonce: 'n2'),
+          nonce: 'n1',
+        ),
+        isFalse,
       );
-      expect(restored, tokens);
+      expect(valid(idTokenFor(now: now), nonce: 'n1'), isFalse);
+      expect(valid(idTokenFor(now: now, audience: 'other')), isFalse);
+      expect(valid(idTokenFor(now: now, audience: 42)), isFalse);
+      expect(valid(idTokenFor(now: now, issuer: 'https://evil.example')), isFalse);
+      expect(valid(idTokenFor(now: now, validFor: Duration.zero)), isFalse);
+    });
+
+    test('should reject malformed tokens', () {
+      expect(valid('not-a-jwt'), isFalse);
+      expect(valid(jwt({'iss': '$testIssuer', 'aud': testClientId, 'exp': 'soon'})), isFalse);
     });
   });
 

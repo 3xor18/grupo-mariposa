@@ -6,6 +6,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:order_tracker/core/error/app_failure.dart';
 import 'package:order_tracker/core/result/result.dart';
 import 'package:order_tracker/features/auth/domain/auth_user.dart';
+import 'package:order_tracker/features/auth/domain/session_restoration.dart';
 import 'package:order_tracker/features/auth/presentation/auth_cubit.dart';
 import 'package:order_tracker/features/auth/presentation/auth_state.dart';
 
@@ -34,7 +35,7 @@ void main() {
 
   blocTest<AuthCubit, AuthState>(
     'should authenticate when a session is restored',
-    setUp: () => when(repository.restoreSession).thenAnswer((_) async => const Ok(user)),
+    setUp: () => when(repository.restoreSession).thenAnswer((_) async => const Ok(SignedIn(user))),
     build: buildCubit,
     act: (cubit) => cubit.initialize(),
     expect: () => const [AuthAuthenticated(user)],
@@ -42,11 +43,55 @@ void main() {
 
   blocTest<AuthCubit, AuthState>(
     'should ask for login when there is no session',
-    setUp: () => when(repository.restoreSession).thenAnswer((_) async => const Ok(null)),
+    setUp: () => when(repository.restoreSession).thenAnswer((_) async => const Ok(SignedOut())),
     build: buildCubit,
     act: (cubit) => cubit.initialize(),
     expect: () => const [AuthUnauthenticated()],
   );
+
+  blocTest<AuthCubit, AuthState>(
+    'should keep checking while a silent sign in redirects to keycloak',
+    setUp: () => when(
+      repository.restoreSession,
+    ).thenAnswer((_) async => const Ok(SigningInSilently())),
+    build: buildCubit,
+    act: (cubit) => cubit.initialize(),
+    expect: () => const <AuthState>[],
+  );
+
+  blocTest<AuthCubit, AuthState>(
+    'should fall back to the login screen when restoring throws',
+    setUp: () => when(repository.restoreSession).thenThrow(const FormatException('boom')),
+    build: buildCubit,
+    act: (cubit) => cubit.initialize(),
+    expect: () => const [
+      AuthUnauthenticated(
+        failure: AuthenticationFailure(AuthenticationFailureReason.unexpected),
+      ),
+    ],
+  );
+
+  test('should not emit after being closed while restoring', () async {
+    final pending = Completer<Result<SessionRestoration>>();
+    when(repository.restoreSession).thenAnswer((_) => pending.future);
+    final cubit = buildCubit();
+    final initialization = cubit.initialize();
+    await cubit.close();
+    pending.complete(const Ok(SignedIn(user)));
+    await initialization;
+    expect(cubit.state, const AuthChecking());
+  });
+
+  test('should not emit after being closed when restoring throws', () async {
+    final pending = Completer<Result<SessionRestoration>>();
+    when(repository.restoreSession).thenAnswer((_) => pending.future);
+    final cubit = buildCubit();
+    final initialization = cubit.initialize();
+    await cubit.close();
+    pending.completeError(const FormatException('late'));
+    await initialization;
+    expect(cubit.state, const AuthChecking());
+  });
 
   blocTest<AuthCubit, AuthState>(
     'should show the login failure when the callback fails',

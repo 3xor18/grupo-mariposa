@@ -88,6 +88,14 @@ void main() {
     );
   });
 
+  test('should report keycloak outages as transient server failures', () async {
+    respond(http.Response('unavailable', 503));
+    expect(
+      await client.refresh('r'),
+      const Err<TokenSet>(ServerFailure(statusCode: 503)),
+    );
+  });
+
   test('should fail with unexpected response when the body is malformed', () async {
     respond(http.Response('{"expires_in": 1}', 200));
     expect(await client.refresh('r'), const Err<TokenSet>(UnexpectedResponseFailure()));

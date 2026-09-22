@@ -21,6 +21,8 @@ extension type const JsonMap(Map<String, Object?> raw) {
 
   double? optionalDouble(String key) => _optional<num>(key)?.toDouble();
 
+  bool? optionalBool(String key) => _optional<bool>(key);
+
   DateTime requireDateTime(String key) => _require(key, optionalDateTime(key));
 
   DateTime? optionalDateTime(String key) {

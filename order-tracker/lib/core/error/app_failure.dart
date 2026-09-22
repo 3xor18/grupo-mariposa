@@ -94,7 +94,14 @@ final class AuthenticationFailure extends AppFailure {
   List<Object?> get props => [reason];
 }
 
-enum AuthenticationFailureReason { callbackRejected, stateMismatch, tokenExchange, sessionExpired }
+enum AuthenticationFailureReason {
+  callbackRejected,
+  stateMismatch,
+  tokenExchange,
+  invalidIdToken,
+  sessionExpired,
+  unexpected,
+}
 
 final class FieldError extends Equatable {
   const FieldError({required this.field, required this.message});

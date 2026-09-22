@@ -11,10 +11,23 @@ import 'package:order_tracker/core/theme/app_theme.dart';
 import 'package:order_tracker/features/auth/presentation/auth_cubit.dart';
 import 'package:order_tracker/features/auth/presentation/auth_gate.dart';
 
-class OrderTrackerApp extends StatelessWidget {
+class OrderTrackerApp extends StatefulWidget {
   const OrderTrackerApp({required this.dependencies, super.key});
 
   final AppDependencies dependencies;
+
+  @override
+  State<OrderTrackerApp> createState() => _OrderTrackerAppState();
+}
+
+class _OrderTrackerAppState extends State<OrderTrackerApp> {
+  AppDependencies get dependencies => widget.dependencies;
+
+  @override
+  void dispose() {
+    unawaited(dependencies.dispose());
+    super.dispose();
+  }
 
   AuthCubit _startAuth() {
     final cubit = AuthCubit(dependencies.authRepository);

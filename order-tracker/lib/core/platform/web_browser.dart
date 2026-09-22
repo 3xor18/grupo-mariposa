@@ -1,4 +1,5 @@
 import 'package:order_tracker/core/platform/browser_location.dart';
+import 'package:order_tracker/core/platform/key_value_store.dart';
 import 'package:web/web.dart' as web;
 
 final class WebBrowserLocation implements BrowserLocation {

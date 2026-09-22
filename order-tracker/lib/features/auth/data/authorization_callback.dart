@@ -17,8 +17,6 @@ sealed class AuthorizationCallback extends Equatable {
     return AuthorizationGranted(code: code, state: parameters[OidcParameters.state]);
   }
 
-  static Uri stripFrom(Uri uri) => Uri.parse('${uri.origin}${uri.path}');
-
   @override
   List<Object?> get props => [];
 }

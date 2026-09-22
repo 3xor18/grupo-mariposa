@@ -9,6 +9,7 @@ import 'package:order_tracker/core/l10n/app_strings.dart';
 import 'package:order_tracker/core/result/result.dart';
 import 'package:order_tracker/core/theme/app_theme.dart';
 import 'package:order_tracker/features/auth/domain/auth_user.dart';
+import 'package:order_tracker/features/auth/domain/session_restoration.dart';
 import 'package:order_tracker/features/auth/presentation/auth_cubit.dart';
 import 'package:order_tracker/features/auth/presentation/auth_gate.dart';
 import 'package:order_tracker/features/auth/presentation/auth_keys.dart';
@@ -59,7 +60,7 @@ void main() {
   });
 
   testWidgets('should show the login screen and start the login flow', (tester) async {
-    when(repository.restoreSession).thenAnswer((_) async => const Ok(null));
+    when(repository.restoreSession).thenAnswer((_) async => const Ok(SignedOut()));
     await pumpGate(tester);
     await cubit.initialize();
     await tester.pump();
@@ -84,7 +85,7 @@ void main() {
   });
 
   testWidgets('should show the user name and log out', (tester) async {
-    when(repository.restoreSession).thenAnswer((_) async => const Ok(user));
+    when(repository.restoreSession).thenAnswer((_) async => const Ok(SignedIn(user)));
     await pumpGate(tester);
     await cubit.initialize();
     await tester.pump();
@@ -96,7 +97,7 @@ void main() {
   });
 
   testWidgets('should show a generic name when the token has no profile', (tester) async {
-    when(repository.restoreSession).thenAnswer((_) async => const Ok(AuthUser()));
+    when(repository.restoreSession).thenAnswer((_) async => const Ok(SignedIn(AuthUser())));
     await pumpGate(tester);
     await cubit.initialize();
     await tester.pump();
@@ -104,7 +105,7 @@ void main() {
   });
 
   testWidgets('should show that the session expired', (tester) async {
-    when(repository.restoreSession).thenAnswer((_) async => const Ok(user));
+    when(repository.restoreSession).thenAnswer((_) async => const Ok(SignedIn(user)));
     await pumpGate(tester);
     await cubit.initialize();
     await tester.runAsync(() async {
