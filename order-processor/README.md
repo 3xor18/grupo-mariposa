@@ -109,6 +109,14 @@ max.poll.interval.ms`; `delivery.timeout.ms ≤ OUTBOX_SEND_TIMEOUT < OUTBOX_LEA
   es un requisito de negocio del order-tracker. Nunca se loguea ni viaja en `orders.processed.v1`.
 - Los errores inesperados se registran con tipo y mensaje sanitizado (sin secretos, tokens ni correos).
 
+## Índices MongoDB
+
+`orders`: `{status, processedAt}` y `{market, processedAt}` para `GET /orders`; `{processedAt}` para el
+listado sin filtros; `{client.clientId}` para búsquedas operativas de soporte por cliente (consultas ad hoc,
+todavía no expuestas en la API). `inbox` y `outbox` publicados tienen TTL (`INBOX_RETENTION`,
+`OUTBOX_RETENTION`); un cambio de retención se aplica con `collMod` al arrancar. `outbox` además indexa
+`{status, createdAt}` para el relay y `{orderId, eventVersion}` para el orden por pedido.
+
 ## Escalabilidad horizontal
 
 Las instancias no guardan estado de negocio en memoria: la deduplicación, el orden por versión y el lease
