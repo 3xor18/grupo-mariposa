@@ -19,6 +19,10 @@ cada equipo.
 | Prometheus | 9090 | 9090 |
 | Grafana | 3000 | 3001 |
 | Jaeger UI / OTLP gRPC / OTLP HTTP | 16686 / 4317 / 4318 | 16686 |
+| config-server | 8888 | 8888 |
+
+Todos los puertos publicados en el host se enlazan a `127.0.0.1`: nada de la plataforma local queda expuesto a
+la red del equipo.
 
 ## Tópicos Kafka
 
@@ -46,12 +50,15 @@ cada equipo.
 | `AUTH_ISSUER` | `http://localhost:8180/realms/mariposa` | claim `iss` esperado |
 | `AUTH_JWKS_URL` | `http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs` | llaves públicas (red interna) |
 | `AUTH_REQUIRED_ROLE` | `products-reader` / `clients-reader` | rol en `realm_access.roles` |
+| `AUTH_AUDIENCE` | `products-api` / `clients-api` / `order-processor` | claim `aud` exigido |
 
 Respuesta sin token o con token inválido → `401 UNAUTHORIZED`. Token válido sin el rol → `403 FORBIDDEN`.
 
 ## Inyección de fallos (para demostrar resiliencia)
 
-Variable `FAULT_RULES` en `products-api` y `clients-api`: lista separada por comas de `id:tipo[:veces]`.
+Variable `FAULT_RULES` en `products-api` y `clients-api`: lista separada por comas de `id:tipo[:veces]`. Sólo
+se aplica con `FAULT_INJECTION_ENABLED=true`, que únicamente activa el perfil `docker` del `config-repo`;
+staging y producción la fijan en `false` (y `clients-api` la rechaza con `NODE_ENV=production`).
 
 - `tipo`: `429`, `500`, `502`, `503`, `400`, `timeout`.
 - `veces`: la regla falla las primeras N solicitudes de ese id y después responde normal. Sin N falla siempre.

@@ -17,7 +17,7 @@ consciente y los riesgos que quedan.
 | `UNEXPECTED` | sólo DLT | también se registra como `TECHNICAL_FAILURE` | el contrato de la DLT lo declara reprocesable; así el pedido tiene un estado consultable |
 | Cliente HTTP | HTTP/2 por defecto del JDK | forzado a HTTP/1.1 | el *upgrade* h2c producía envíos duplicados contra servidores HTTP/1.1 |
 | Transacción con `DuplicateKey` | no contemplado | `setRollbackOnly()` explícito antes de clasificar | sin eso el commit falla con `NoSuchTransaction` etiquetado como transitorio y reintenta en bucle |
-| Protección de fuerza bruta en Keycloak | valores por defecto | umbrales ajustados | logins concurrentes del mismo usuario (tests en paralelo) bloqueaban la cuenta |
+| Protección de fuerza bruta en Keycloak | valores por defecto | `failureFactor` 10, `quickLoginCheckMilliSeconds` 100 | las suites E2E ahora corren en serie y Karate pide un token por usuario para toda la corrida (`callSingle`), así que ya no hay ráfagas de logins del mismo usuario |
 
 ## 2. Evidencia nueva y restricciones encontradas
 
@@ -61,3 +61,27 @@ consciente y los riesgos que quedan.
 2. Tests de contrato *consumer-driven* (Pact) entre `order-processor` y las dos APIs, publicados en un broker.
 3. Autoescalado del worker por **lag de consumo** (KEDA) en lugar de CPU.
 4. Endpoint de reproceso de la DLT con auditoría.
+
+## 7. Despliegue en EKS
+
+- **Kafka (MSK)**: el worker usa el listener TLS (puerto 9094) con `SPRING_KAFKA_SECURITY_PROTOCOL=SSL` y no crea
+  tópicos (`KAFKA_CREATE_TOPICS=false`, se aprovisionan con replicación 3). Siguiente paso: autenticación IAM
+  (puerto 9098, `SASL_SSL` + `AWS_MSK_IAM` con `aws-msk-iam-auth` y el rol de IRSA ya declarado en
+  `serviceAccount.roleArn`); requiere agregar la librería al servicio, por eso queda fuera de este cambio.
+- **Redis (ElastiCache)**: TLS en tránsito con `SPRING_DATA_REDIS_SSL_ENABLED=true` y la contraseña (AUTH token) en
+  `SPRING_DATA_REDIS_PASSWORD` desde Secrets Manager.
+- **Réplicas del worker**: `orders.created.v1` tiene 6 particiones y cada pod abre 3 consumidores
+  (`KAFKA_LISTENER_CONCURRENCY=3`), así que el HPA está acotado a 2 réplicas: un tercer pod sólo tendría
+  consumidores ociosos. Para escalar más hay que subir particiones y `maxReplicas` juntos, idealmente con KEDA por lag.
+- **Arranque y apagado**: `startupProbe` por servicio (el worker tolera hasta 150 s de arranque) y `preStop` con
+  `sleep` nativo de Kubernetes para que el Service deje de enviar tráfico antes del SIGTERM; el período de gracia
+  cubre `preStop` + drenaje + apagado de cada servicio.
+- **config-server**: 2 réplicas (3 en producción), backend git sobre este repositorio. `/actuator/prometheus` exige
+  las mismas credenciales básicas que la configuración; el scrape se configura con esas credenciales desde el
+  namespace de monitoreo.
+- **NetworkPolicy**: cada servicio acepta tráfico sólo de sus consumidores y del namespace de monitoreo, en el puerto
+  `http`. El ALB (target type `ip`) llega desde la VPC, por eso `order-tracker` permite el CIDR de la VPC
+  (placeholder `10.0.0.0/16`).
+- **Keycloak**: el realm de `infra/keycloak` es sólo para local. Los usuarios demo y el cliente `orders-cli` no se
+  despliegan; la rotación de refresh tokens (`revokeRefreshToken`) y las URIs exactas del `order-tracker` sí son
+  las mismas que se esperan en el realm de cada ambiente.

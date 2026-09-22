@@ -55,8 +55,9 @@ flowchart LR
 
 Este comando:
 1. Genera `.env` con **secretos aleatorios** si no existe. Nunca se commitea; ver `.env.example`.
-2. Construye las imágenes y levanta los 16 contenedores esperando sus healthchecks.
-3. Imprime las URLs y la contraseña de los usuarios demo.
+2. Construye las imágenes y levanta 14 contenedores esperando sus healthchecks: 13 de larga duración y
+   `kafka-init`, que crea los tópicos y termina (`datadog-agent` es un perfil opcional).
+3. Imprime las URLs. La contraseña de los usuarios demo sólo se muestra con `./mariposa.sh urls --show-secrets`.
 
 | URL | Qué hay |
 |---|---|
@@ -70,7 +71,12 @@ Este comando:
 | http://localhost:16686 | Jaeger (trazas) |
 | http://localhost:8888 | Config server (requiere credenciales del `.env`) |
 
-Otros comandos: `./mariposa.sh down | clean | status | logs [svc] | urls | token [usuario]`.
+Todos los puertos se publican sólo en `127.0.0.1`. Los usuarios demo (`analyst`, `admin`, `viewer`) y el cliente
+`orders-cli` (password grant, tokens de 15 minutos para herramientas) existen **sólo en el realm local**
+(`infra/keycloak/realm-mariposa.json`); en staging y producción el realm no los incluye y los usuarios vienen del
+proveedor de identidad corporativo.
+
+Otros comandos: `./mariposa.sh down | clean | status | logs [svc] | urls [--show-secrets] | token [usuario]`.
 
 ## Publicar un evento de ejemplo
 
@@ -112,7 +118,8 @@ curl -H "Authorization: Bearer $(./mariposa.sh token)" localhost:8080/orders/ORD
 | Carga | `./load/event-burst.sh` y `load/k6/apis.js` | ver `docs/load-test-results.md` | — |
 
 **Simulación de fallos**: `products-api` y `clients-api` aceptan reglas `FAULT_RULES=id:tipo[:veces]` (`429`, `500`,
-`502`, `503`, `400`, `timeout`) desde el `config-repo`. Por defecto `PRD-012` falla 2 veces y se recupera, `PRD-013`
+`502`, `503`, `400`, `timeout`) desde el `config-repo`, sólo con `FAULT_INJECTION_ENABLED=true` (perfil `docker`).
+En staging y producción está desactivada. Por defecto `PRD-012` falla 2 veces y se recupera, `PRD-013`
 hace timeout, `PRD-014` responde 400, `CLI-40001` falla 2 veces y `CLI-40002` siempre responde 503.
 
 ## Configuración
@@ -160,13 +167,21 @@ Documentos: [propuesta](docs/architecture-proposal.md) · [ADRs](docs/adr) ·
 
 ## Despliegue (preparado, no aplicado)
 
-- `deploy/helm/mariposa-service`: un único chart reutilizable (Deployment con securityContext restrictivo, Service,
-  HPA, PDB, NetworkPolicy, ExternalSecret, Ingress ALB) con un archivo de values por servicio.
-- `.github/workflows/ci.yml`: filtros por carpeta, lint, tests con umbral de cobertura, detección de cambios
-  incompatibles en contratos (`oasdiff`), build de imágenes con escaneo Trivy y E2E con Compose.
-- `.github/workflows/deploy.yml` y `Jenkinsfile`: build, push a ECR y `helm upgrade --atomic` sobre EKS con rol
-  asumido por OIDC (sin llaves estáticas).
-- Destino sugerido: EKS + MSK + MongoDB Atlas + ElastiCache + Secrets Manager.
+- `deploy/helm/mariposa-service`: un único chart reutilizable (Deployment con UID numérico por servicio, raíz de
+  sólo lectura, startupProbe y `preStop`; Service, HPA, PDB, NetworkPolicy, ExternalSecret, Ingress ALB).
+- `deploy/helm/values/<servicio>.yaml` tiene lo común (FQDN internos, tunables, llaves de secretos) y
+  `deploy/helm/values/<ambiente>/<servicio>.yaml` los hosts de staging y producción. Los dominios `example.com`, la
+  cuenta `ACCOUNT_ID` y el CIDR de la VPC son **placeholders** que se reemplazan al aprovisionar la cuenta.
+- Los cinco servicios (incluido `config-server`, 2 réplicas con backend git sobre `config-repo/`) leen su
+  configuración del config server con credenciales de External Secrets y el perfil del ambiente.
+- `.github/workflows/ci.yml`: filtros por carpeta, lint, tests con umbrales de cobertura, `oasdiff` contra la rama
+  base y `ajv` sobre esquemas y ejemplos, `helm lint` + `kubeconform`, imágenes con Trivy y E2E con Compose. Todas
+  las actions están fijadas por SHA.
+- `.github/workflows/deploy.yml` (sólo desde `main` o tags) y `Jenkinsfile`: servicios validados contra una lista
+  permitida, escaneo Trivy antes del push a ECR y `helm upgrade --atomic` con el overlay del ambiente, usando un rol
+  asumido (OIDC en GitHub, `sts assume-role` en Jenkins).
+- Destino sugerido: EKS + MSK (TLS) + MongoDB Atlas + ElastiCache (TLS) + Secrets Manager. Detalle y próximos pasos
+  en [implementation-notes](docs/implementation-notes.md#7-despliegue-en-eks).
 
 ## Limitaciones conocidas
 

@@ -26,14 +26,16 @@ db.outbox.find({ orderId: "<orderId>" }, { status: 1, attempts: 1, createdAt: 1,
 | no existe | nunca llegó a persistirse | paso 2 |
 
 ## 2. ¿Llegó a Kafka?
-- Logs de `order-processor` filtrados por `orderId` (en Grafana/Loki o Datadog: `@orderId:<orderId>`). La primera
+- Logs de `order-processor` filtrados por `orderId` (en el backend de logs: Datadog `@orderId:<orderId>` en EKS,
+  `./mariposa.sh logs order-processor | grep <orderId>` en local). La primera
   transición es `RECEIVED`. Si existe, el `traceId` lleva a la traza completa en Jaeger/Datadog APM.
 - Si no hay logs: buscar el mensaje en el tópico (Kafka UI → `orders.created.v1` → buscar por key `orderId`).
   - **No está en el tópico** → el problema es del productor (no publicó, publicó en otro tópico o con otra key).
   - **Está en el tópico pero sin logs** → paso 3.
 
 ## 3. ¿El consumidor está atrasado o detenido?
-- Métrica de lag del consumer group `order-processor` por partición (`kafka_consumergroup_lag`).
+- Métrica de lag del consumidor `order-processor` (`kafka_consumer_fetch_manager_records_lag_max`, panel
+  "Consumer lag" del dashboard y alerta en `infra/prometheus/alerts.yml`).
   Lag creciente en **una** partición = mensaje venenoso o bloqueo en esa partición.
 - `orders_processing_latency` p99 y `resilience4j_circuitbreaker_state`: un circuit breaker abierto frena el
   procesamiento con reintentos a nivel de registro.
