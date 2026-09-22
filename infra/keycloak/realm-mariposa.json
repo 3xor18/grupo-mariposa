@@ -114,6 +114,9 @@
       "publicClient": true,
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": true,
+      "attributes": {
+        "access.token.lifespan": "900"
+      },
       "protocol": "openid-connect",
       "protocolMappers": [
         {
