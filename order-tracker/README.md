@@ -78,22 +78,64 @@ At startup the app fetches `config.json` from the web root, with a cache-busting
 { "apiBaseUrl": "/api", "keycloakUrl": "http://localhost:8180", "realm": "mariposa", "clientId": "order-tracker" }
 ```
 
-The container renders it from environment variables when it starts, so the same image works in
-any environment. `web/config.json` is only the default for `flutter run`.
+The container renders it at startup, so the same image works in any environment.
+`web/config.json` is only the default for `flutter run`. The Dart app only reads that public file.
+Config-server credentials never leave the container.
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `API_BASE_URL` | `/api` | base URL the browser uses for the Orders API |
-| `KEYCLOAK_URL` | `http://localhost:8180` | public Keycloak URL (also added to CSP `connect-src`) |
-| `KEYCLOAK_REALM` / `KEYCLOAK_CLIENT_ID` | `mariposa` / `order-tracker` | OIDC settings |
-| `ORDERS_API_URL` | `http://order-processor:8080` | upstream behind the same-origin `/api/` proxy |
-| `NGINX_RESOLVER` | `127.0.0.11` | DNS used by the proxy (lazy resolution, so nginx starts before the API) |
+### Spring Cloud Config Server
+
+The hook `docker-entrypoint.d/10-order-tracker-config.envsh` runs
+`/usr/local/bin/order-tracker-config` (`nginx/order-tracker-config.sh`). The hook is sourced by the
+nginx entrypoint, so the values it exports reach the template step. When `CONFIG_SERVER_URL` is set,
+the script:
+
+1. Fetches `${CONFIG_SERVER_URL}/${CONFIG_APP_NAME}-${CONFIG_PROFILE}.properties` with curl,
+   using basic auth. The credentials go to curl through stdin (`--config -`), so they never show
+   up in the process list or the logs.
+2. Makes up to 4 attempts, each with `CONFIG_SERVER_TIMEOUT` seconds (default 5). Between
+   attempts it waits `CONFIG_SERVER_RETRY_DELAY` seconds, doubling each time (default 1, so
+   1 s, 2 s, 4 s).
+3. Parses Spring-flattened keys. The first unescaped `=` or `:` is the separator (the server
+   returns `key: value`), and both sides are trimmed. Keys are uppercased with `.` and `-` turned
+   into `_`, so `keycloak.client-id` becomes `KEYCLOAK_CLIENT_ID`. Unknown keys are ignored.
+4. Resolves each value with the precedence **explicit env var > config server > default**. It
+   writes `config.json`, and the resolved values feed `nginx/default.conf.template`: the `/api`
+   proxy upstream and the Keycloak origin in the CSP.
+
+If the server is unreachable, `CONFIG_SERVER_FAIL_FAST=true` stops the container with a non-zero
+exit. Otherwise the script logs a warning and continues with env vars and defaults. Values that
+contain `"` or `\` are rejected, so `config.json` is always valid JSON.
+
+| Config server key | Variable | Default | Purpose |
+|---|---|---|---|
+| `api-base-url` | `API_BASE_URL` | `/api` | base URL the browser uses for the Orders API |
+| `keycloak.url` | `KEYCLOAK_URL` | `http://localhost:8180` | public Keycloak URL, also in CSP `connect-src` |
+| `keycloak.realm` | `KEYCLOAK_REALM` | `mariposa` | OIDC realm |
+| `keycloak.client-id` | `KEYCLOAK_CLIENT_ID` | `order-tracker` | OIDC public client |
+| `orders-api-url` | `ORDERS_API_URL` | `http://order-processor:8080` | upstream behind `/api/` |
+| — | `NGINX_RESOLVER` | `127.0.0.11` | DNS for the lazy proxy resolution |
+
+| Config server variable | Default |
+|---|---|
+| `CONFIG_SERVER_URL` | empty (disabled) |
+| `CONFIG_APP_NAME` / `CONFIG_PROFILE` | `order-tracker` / `default` (Compose uses `docker`) |
+| `CONFIG_SERVER_USERNAME` / `CONFIG_SERVER_PASSWORD` | empty (no auth) |
+| `CONFIG_SERVER_TIMEOUT` / `CONFIG_SERVER_RETRY_DELAY` | `5` / `1` seconds |
+| `CONFIG_SERVER_FAIL_FAST` | `false` |
+
+`nginx/tests/order-tracker-config.test.sh` checks this logic with a stub properties file and a
+fake `curl`. It covers both separators, URLs that contain colons, precedence, retries, fail-fast,
+that the password is never exposed, and JSON-safety. The `runtime-config-test` Docker stage runs
+it together with `shellcheck`, and the runtime image depends on that stage, so a broken script
+fails the build.
 
 ## Container
 
 `Dockerfile` is multi-stage: `flutter build web --release --no-web-resources-cdn` runs in
-`ghcr.io/cirruslabs/flutter`, and the result is served by `nginxinc/nginx-unprivileged:alpine` as
-uid 101 on port 8080 with a `HEALTHCHECK` on `/healthz`.
+`ghcr.io/cirruslabs/flutter:3.44.0`, and the result is served by
+`nginxinc/nginx-unprivileged:1.31.6-alpine3.24` as uid 101 on port 8080 with a `HEALTHCHECK` on
+`/healthz`. Both base images are pinned by tag and digest (build args `FLUTTER_TAG`/
+`FLUTTER_DIGEST` and `NGINX_TAG`/`NGINX_DIGEST`), so builds are reproducible.
 
 - **SPA fallback**: unknown paths serve `index.html`.
 - **Caching**: `no-cache` (ETag revalidation) by default, including `index.html`,
@@ -108,6 +150,10 @@ uid 101 on port 8080 with a `HEALTHCHECK` on `/healthz`.
 docker build -t order-tracker .
 docker run --rm -p 8090:8080 -e ORDERS_API_URL=http://host.docker.internal:8080 order-tracker
 docker build --target test .
+docker build --target runtime-config-test .
+docker run --rm -p 8090:8080 -e CONFIG_SERVER_URL=http://config-server:8888 \
+  -e CONFIG_PROFILE=docker -e CONFIG_SERVER_USERNAME=reader \
+  -e CONFIG_SERVER_PASSWORD=... order-tracker
 ```
 
 The last command runs `flutter analyze` and `flutter test` inside the build.
