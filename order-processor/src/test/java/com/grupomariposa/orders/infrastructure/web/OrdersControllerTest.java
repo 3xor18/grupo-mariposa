@@ -45,6 +45,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 @Import({WebConfiguration.class, OrdersControllerTest.Support.class})
 @TestPropertySource(properties = {
     "app.security.enabled=true",
+    "spring.security.oauth2.resourceserver.jwt.audiences=order-processor",
     "app.security.allowed-origins=http://localhost:8090",
     "app.security.reader-role=orders-reader",
     "app.security.admin-role=orders-admin",

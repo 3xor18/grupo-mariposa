@@ -89,6 +89,18 @@ class WebSupportTest {
     }
 
     @Test
+    void should_fail_closed_without_audience_while_authentication_is_enabled() {
+        assertThatIllegalStateException().isThrownBy(() ->
+                SecurityModeGuard.requireAudienceWhenEnabled(true, List.of()));
+        assertThatIllegalStateException().isThrownBy(() ->
+                SecurityModeGuard.requireAudienceWhenEnabled(true, List.of(" ")));
+        assertThatIllegalStateException().isThrownBy(() ->
+                SecurityModeGuard.requireAudienceWhenEnabled(true, null));
+        SecurityModeGuard.requireAudienceWhenEnabled(true, List.of("order-processor"));
+        SecurityModeGuard.requireAudienceWhenEnabled(false, List.of());
+    }
+
+    @Test
     void should_build_problem_with_fallback_instance_and_generated_trace() {
         final TraceIds traces = mock(TraceIds.class);
         when(traces.currentTraceId()).thenReturn(Optional.empty());

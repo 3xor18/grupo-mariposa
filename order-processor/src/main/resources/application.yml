@@ -72,7 +72,7 @@ spring:
         jwt:
           issuer-uri: ${AUTH_ISSUER:http://localhost:8180/realms/mariposa}
           jwk-set-uri: ${AUTH_JWKS_URL:http://localhost:8180/realms/mariposa/protocol/openid-connect/certs}
-          audiences: ${AUTH_AUDIENCE:}
+          audiences: ${AUTH_AUDIENCE:${spring.application.name}}
 
 management:
   endpoints:

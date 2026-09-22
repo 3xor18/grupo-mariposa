@@ -17,6 +17,7 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import java.time.Clock;
+import org.springframework.boot.autoconfigure.security.oauth2.resource.OAuth2ResourceServerProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -72,9 +73,12 @@ public class WebConfiguration {
     public SecurityFilterChain securityFilterChain(final HttpSecurity http,
                                                    final WebSecurityProperties properties,
                                                    final ProblemSecurityHandler problems,
-                                                   final Environment environment)
+                                                   final Environment environment,
+                                                   final OAuth2ResourceServerProperties jwtSettings)
             throws Exception {
         SecurityModeGuard.requireLocalWhenDisabled(properties.enabled(), environment);
+        SecurityModeGuard.requireAudienceWhenEnabled(properties.enabled(),
+                jwtSettings.getJwt().getAudiences());
         statelessApi(http, problems);
         if (!properties.enabled()) {
             return http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll()).build();
