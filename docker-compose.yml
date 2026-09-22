@@ -135,6 +135,20 @@ services:
       start_period: 30s
     logging: *default-logging
 
+  config-server:
+    build:
+      context: ./config-server
+    environment:
+      CONFIG_BACKEND: native
+      CONFIG_REPO_LOCATION: file:/config-repo
+      CONFIG_SERVER_USERNAME: ${CONFIG_SERVER_USERNAME}
+      CONFIG_SERVER_PASSWORD: ${CONFIG_SERVER_PASSWORD}
+    volumes:
+      - ./config-repo:/config-repo:ro
+    ports:
+      - "8888:8888"
+    logging: *default-logging
+
   products-api:
     build:
       context: ./products-api
@@ -177,6 +191,10 @@ services:
     environment:
       <<: *auth-env
       SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: docker
+      CONFIG_SERVER_URL: http://config-server:8888
+      SPRING_CLOUD_CONFIG_USERNAME: ${CONFIG_SERVER_USERNAME}
+      SPRING_CLOUD_CONFIG_PASSWORD: ${CONFIG_SERVER_PASSWORD}
       MONGODB_URI: mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongo:27017/orders?replicaSet=rs0&authSource=orders
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       REDIS_HOST: redis
@@ -195,6 +213,8 @@ services:
     ports:
       - "8080:8080"
     depends_on:
+      config-server:
+        condition: service_healthy
       mongo:
         condition: service_healthy
       kafka-init:

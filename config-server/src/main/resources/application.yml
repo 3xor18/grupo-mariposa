@@ -1,0 +1,40 @@
+server:
+  port: ${SERVER_PORT:8888}
+  shutdown: graceful
+
+spring:
+  application:
+    name: config-server
+  profiles:
+    active: ${CONFIG_BACKEND:native}
+  security:
+    user:
+      name: ${CONFIG_SERVER_USERNAME}
+      password: ${CONFIG_SERVER_PASSWORD}
+  cloud:
+    config:
+      server:
+        native:
+          search-locations: ${CONFIG_REPO_LOCATION:file:/config-repo}
+        git:
+          uri: ${CONFIG_GIT_URI:}
+          default-label: ${CONFIG_GIT_LABEL:main}
+          search-paths: ${CONFIG_GIT_SEARCH_PATHS:config-repo}
+        awsparamstore:
+          region: ${AWS_REGION:us-east-1}
+          prefix: ${CONFIG_PARAM_STORE_PREFIX:/grupo-mariposa}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  structured:
+    format:
+      console: ecs

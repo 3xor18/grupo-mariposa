@@ -10,7 +10,8 @@ readonly INPUT_TOPIC=orders.created.v1
 readonly KEYCLOAK_TOKEN_PATH=/realms/mariposa/protocol/openid-connect/token
 readonly FLUTTER_IMAGE=ghcr.io/cirruslabs/flutter:stable
 readonly SECRET_KEYS=(MONGO_ROOT_PASSWORD MONGO_APP_PASSWORD REDIS_PASSWORD KEYCLOAK_ADMIN_PASSWORD
-  ORDER_PROCESSOR_CLIENT_SECRET DEMO_USER_PASSWORD GRAFANA_ADMIN_PASSWORD)
+  ORDER_PROCESSOR_CLIENT_SECRET DEMO_USER_PASSWORD GRAFANA_ADMIN_PASSWORD
+  CONFIG_SERVER_PASSWORD)
 
 random_secret() { head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32; }
 random_aes_key() { head -c 32 /dev/urandom | base64 | tr -d '\n'; }
