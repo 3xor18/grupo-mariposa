@@ -49,6 +49,7 @@ autoscaling:
 
 podDisruptionBudget:
   minAvailable: 1
+  maxUnavailable: ""
 
 env: {}
 

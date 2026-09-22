@@ -31,7 +31,11 @@ metadata:
   labels:
     {{- include "mariposa.labels" . | nindent 4 }}
 spec:
+  {{- with .Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ . }}
+  {{- else }}
   minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "mariposa.selectorLabels" . | nindent 6 }}
@@ -115,6 +119,9 @@ spec:
                   name: http
 {{- end }}
 {{- if .Values.networkPolicy.enabled }}
+{{- if and .Values.ingress.enabled (empty .Values.networkPolicy.allowedCidrs) }}
+{{- fail "networkPolicy.allowedCidrs must list the VPC CIDR when ingress is enabled" }}
+{{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
