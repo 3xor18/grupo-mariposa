@@ -49,6 +49,10 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
     "app.security.reader-role=orders-reader",
     "app.security.admin-role=orders-admin",
     "app.security.api-docs-enabled=false",
+    "app.security.public-paths=/actuator/health/**,/livez,/readyz,/error",
+    "app.security.cors-allowed-methods=GET,OPTIONS",
+    "app.security.cors-allowed-headers=Authorization,traceparent",
+    "app.api.problems.type-base=https://contracts.grupomariposa.dev/problems/",
     "app.api.orders.default-page-size=20",
     "app.api.orders.max-page-size=100",
     "app.api.orders.max-offset=10000"
@@ -208,7 +212,8 @@ class OrdersControllerTest {
     }
 
     @TestConfiguration
-    @EnableConfigurationProperties({WebSecurityProperties.class, OrdersApiProperties.class})
+    @EnableConfigurationProperties({WebSecurityProperties.class, OrdersApiProperties.class,
+        ProblemProperties.class})
     static class Support {
 
         @Bean

@@ -229,6 +229,8 @@ app:
     price-max-scale: ${VALIDATION_PRICE_MAX_SCALE:4}
     price-max-value: ${VALIDATION_PRICE_MAX_VALUE:1000000000000}
   api:
+    problems:
+      type-base: ${API_PROBLEM_TYPE_BASE:https://contracts.grupomariposa.dev/problems/}
     orders:
       default-page-size: ${API_DEFAULT_PAGE_SIZE:20}
       max-page-size: ${API_MAX_PAGE_SIZE:100}
@@ -239,3 +241,6 @@ app:
     reader-role: ${AUTH_READER_ROLE:orders-reader}
     admin-role: ${AUTH_ADMIN_ROLE:orders-admin}
     api-docs-enabled: ${API_DOCS_ENABLED:false}
+    public-paths: ${AUTH_PUBLIC_PATHS:/actuator/health,/actuator/health/**,/actuator/prometheus,/health/**,/livez,/readyz,/error}
+    cors-allowed-methods: ${CORS_ALLOWED_METHODS:GET,OPTIONS}
+    cors-allowed-headers: ${CORS_ALLOWED_HEADERS:Authorization,Content-Type,traceparent,X-Request-Id}

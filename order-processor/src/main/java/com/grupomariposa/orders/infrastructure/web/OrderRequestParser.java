@@ -7,8 +7,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.function.IntPredicate;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 public final class OrderRequestParser {
 
@@ -43,51 +44,64 @@ public final class OrderRequestParser {
 
     public OrderSearchCriteria criteria(final String status, final String market,
                                         final String page, final String size) {
-        final List<FieldViolation> violations = new ArrayList<>();
-        final OrderStatus parsedStatus = enumValue(OrderStatus.class, STATUS, status, violations);
-        final Market parsedMarket = enumValue(Market.class, MARKET, market, violations);
-        final int parsedPage = number(page, FIRST_PAGE)
-                .filter(value -> value >= 0).orElseGet(() -> invalid(PAGE, MIN_PAGE, violations));
-        final int parsedSize = number(size, limits.defaultPageSize())
-                .filter(value -> value >= 1 && value <= limits.maxPageSize())
-                .orElseGet(() -> invalid(SIZE, SIZE_RANGE.formatted(limits.maxPageSize()),
-                        violations));
-        if (violations.isEmpty() && (long) parsedPage * parsedSize > limits.maxOffset()) {
+        final Parsed<OrderStatus> parsedStatus = enumValue(OrderStatus.class, STATUS, status);
+        final Parsed<Market> parsedMarket = enumValue(Market.class, MARKET, market);
+        final Parsed<Integer> parsedPage = number(PAGE, page, FIRST_PAGE,
+                value -> value >= FIRST_PAGE, MIN_PAGE);
+        final Parsed<Integer> parsedSize = number(SIZE, size, limits.defaultPageSize(),
+                value -> value >= 1 && value <= limits.maxPageSize(),
+                SIZE_RANGE.formatted(limits.maxPageSize()));
+        final List<FieldViolation> violations = new ArrayList<>(Parsed.violations(
+                parsedStatus, parsedMarket, parsedPage, parsedSize));
+        if (violations.isEmpty()
+                && (long) parsedPage.value() * parsedSize.value() > limits.maxOffset()) {
             violations.add(new FieldViolation(PAGE, OFFSET_TOO_DEEP.formatted(limits.maxOffset())));
         }
         if (!violations.isEmpty()) {
             throw new InvalidRequestException(violations);
         }
-        return new OrderSearchCriteria(parsedStatus, parsedMarket, parsedPage, parsedSize);
+        return new OrderSearchCriteria(parsedStatus.value(), parsedMarket.value(),
+                parsedPage.value(), parsedSize.value());
     }
 
-    private static <E extends Enum<E>> E enumValue(final Class<E> type, final String field,
-                                                   final String raw,
-                                                   final List<FieldViolation> violations) {
+    private static <E extends Enum<E>> Parsed<E> enumValue(final Class<E> type,
+                                                           final String field,
+                                                           final String raw) {
         if (raw == null) {
-            return null;
+            return Parsed.valid(null);
         }
         return Arrays.stream(type.getEnumConstants())
                 .filter(constant -> constant.name().equals(raw))
                 .findFirst()
-                .orElseGet(() -> {
-                    violations.add(new FieldViolation(field,
-                            ONE_OF.formatted(Arrays.toString(type.getEnumConstants()))));
-                    return null;
-                });
+                .map(Parsed::valid)
+                .orElseGet(() -> Parsed.invalid(new FieldViolation(field,
+                        ONE_OF.formatted(Arrays.toString(type.getEnumConstants())))));
     }
 
-    private static Optional<Integer> number(final String raw, final int fallback) {
+    private static Parsed<Integer> number(final String field, final String raw,
+                                          final int fallback, final IntPredicate accepted,
+                                          final String message) {
         if (raw == null) {
-            return Optional.of(fallback);
+            return Parsed.valid(fallback);
         }
-        return DIGITS.matcher(raw).matches()
-                ? Optional.of(Integer.parseInt(raw)) : Optional.empty();
+        if (DIGITS.matcher(raw).matches() && accepted.test(Integer.parseInt(raw))) {
+            return Parsed.valid(Integer.parseInt(raw));
+        }
+        return Parsed.invalid(new FieldViolation(field, message));
     }
 
-    private static int invalid(final String field, final String message,
-                               final List<FieldViolation> violations) {
-        violations.add(new FieldViolation(field, message));
-        return 0;
+    private record Parsed<T>(T value, FieldViolation violation) {
+
+        static <T> Parsed<T> valid(final T value) {
+            return new Parsed<>(value, null);
+        }
+
+        static <T> Parsed<T> invalid(final FieldViolation violation) {
+            return new Parsed<>(null, violation);
+        }
+
+        static List<FieldViolation> violations(final Parsed<?>... parsed) {
+            return Stream.of(parsed).map(Parsed::violation).filter(Objects::nonNull).toList();
+        }
     }
 }

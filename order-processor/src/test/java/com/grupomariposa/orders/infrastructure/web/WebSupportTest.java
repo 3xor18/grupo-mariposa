@@ -92,7 +92,8 @@ class WebSupportTest {
     void should_build_problem_with_fallback_instance_and_generated_trace() {
         final TraceContext traces = mock(TraceContext.class);
         when(traces.currentTraceId()).thenReturn(Optional.empty());
-        final ProblemFactory factory = new ProblemFactory(Clock.systemUTC(), traces);
+        final ProblemFactory factory = new ProblemFactory(Clock.systemUTC(), traces,
+                "https://contracts.grupomariposa.dev/problems/");
 
         final ProblemDetail problem = factory.create(HttpStatus.NOT_FOUND,
                 ApiErrorCode.ORDER_NOT_FOUND, "missing", "bad path with spaces");
