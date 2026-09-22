@@ -20,6 +20,9 @@ spring:
           uri: ${CONFIG_GIT_URI:}
           default-label: ${CONFIG_GIT_LABEL:main}
           search-paths: ${CONFIG_GIT_SEARCH_PATHS:config-repo}
+          username: ${CONFIG_GIT_USERNAME:}
+          password: ${CONFIG_GIT_PASSWORD:}
+          clone-on-start: ${CONFIG_GIT_CLONE_ON_START:true}
         awsparamstore:
           region: ${AWS_REGION:us-east-1}
           prefix: ${CONFIG_PARAM_STORE_PREFIX:/grupo-mariposa}

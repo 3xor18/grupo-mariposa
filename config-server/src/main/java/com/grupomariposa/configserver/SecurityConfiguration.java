@@ -10,7 +10,7 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 public class SecurityConfiguration {
 
-    private static final String[] PUBLIC_PATHS = {"/actuator/health/**", "/actuator/prometheus"};
+    private static final String[] PUBLIC_PATHS = {"/actuator/health/**"};
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
