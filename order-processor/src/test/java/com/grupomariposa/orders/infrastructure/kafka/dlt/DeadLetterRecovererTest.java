@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -26,6 +27,7 @@ import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 
@@ -42,10 +44,14 @@ class DeadLetterRecovererTest {
             new ConsumerRecord<>("orders.created.v1", 0, 1L, ORDER_ID, new byte[] {1});
 
     @Test
-    void should_record_technical_failure_before_dead_lettering_dependency_errors() {
+    void should_dead_letter_before_recording_technical_failure_of_dependency_errors() {
         final RecordProcessingFailure failure = failure(ErrorCategory.EXTERNAL_TRANSIENT, true);
 
         recoverer.accept(consumerRecord, failure);
+
+        final InOrder order = inOrder(deadLetters, technicalFailures);
+        order.verify(deadLetters).accept(eq(consumerRecord), any(DescribedFailure.class));
+        order.verify(technicalFailures).record(any(), any());
 
         verify(technicalFailures).record(goldenCommand(),
                 new FailureDetails("EXTERNAL_TRANSIENT", "products-api responded 503", 1));
