@@ -55,19 +55,19 @@ public final class OrderCreatedListener {
     @KafkaListener(id = LISTENER_ID, topics = "#{@orderListenerSettings.topic()}",
             groupId = "#{@orderListenerSettings.groupId()}",
             concurrency = "#{@orderListenerSettings.concurrency()}")
-    public void onMessage(final ConsumerRecord<String, byte[]> record) {
+    public void onMessage(final ConsumerRecord<String, byte[]> consumerRecord) {
         final Timer.Sample sample = metrics.start();
         try {
-            handle(record);
+            handle(consumerRecord);
         } finally {
             metrics.stop(sample);
         }
     }
 
-    private void handle(final ConsumerRecord<String, byte[]> record) {
+    private void handle(final ConsumerRecord<String, byte[]> consumerRecord) {
         final Reception reception = new Reception(timeProvider.now(),
                 traceIds.currentTraceId().orElse(null));
-        final OrderCreatedMessage message = reader.read(record.value());
+        final OrderCreatedMessage message = reader.read(consumerRecord.value());
         final MessageIds ids = new MessageIds(message.orderId(), message.eventId());
         try (LogContext ignored = LogContext.bind(message.orderId(), message.eventId())) {
             observer.stage(ProcessingStage.RECEIVED, message.orderId(), message.eventId());

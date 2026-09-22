@@ -34,8 +34,8 @@ public final class TopicProbe implements AutoCloseable {
         consumer.seekToBeginning(partitions);
     }
 
-    public static String header(final ConsumerRecord<?, ?> record, final String name) {
-        final Header header = record.headers().lastHeader(name);
+    public static String header(final ConsumerRecord<?, ?> consumerRecord, final String name) {
+        final Header header = consumerRecord.headers().lastHeader(name);
         return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
     }
 
@@ -54,7 +54,7 @@ public final class TopicProbe implements AutoCloseable {
     }
 
     public List<ConsumerRecord<String, byte[]>> awaitKey(final String key, final int expected) {
-        return await(record -> key.equals(record.key()), expected, Duration.ofSeconds(45),
+        return await(received -> key.equals(received.key()), expected, Duration.ofSeconds(45),
                 Duration.ofSeconds(2));
     }
 

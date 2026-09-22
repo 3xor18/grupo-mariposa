@@ -1,11 +1,11 @@
 package com.grupomariposa.orders.infrastructure.kafka.dlt;
 
-import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.grupomariposa.orders.application.error.ErrorCategory;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.MessageIds;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.RecordProcessingFailure;
+import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -48,12 +48,12 @@ class DltSupportTest {
 
     @Test
     void should_build_contract_headers_from_record_failures() {
-        final ConsumerRecord<String, byte[]> record = record(3);
+        final ConsumerRecord<String, byte[]> consumerRecord = consumerRecord(3);
         final RecordProcessingFailure failure = RecordProcessingFailure.of(
                 ErrorCategory.EXTERNAL_TRANSIENT, "products-api responded 503",
                 new MessageIds("ORD-1", "EVT-1"), null, null);
 
-        final Headers built = headers.create(record,
+        final Headers built = headers.create(consumerRecord,
                 new ListenerExecutionFailedException("wrapped", failure));
 
         assertThat(text(built, DltHeaders.ERROR_CATEGORY)).isEqualTo("EXTERNAL_TRANSIENT");
@@ -67,7 +67,7 @@ class DltSupportTest {
 
     @Test
     void should_describe_unknown_failures_as_unexpected_without_ids() {
-        final Headers built = headers.create(record(0),
+        final Headers built = headers.create(consumerRecord(0),
                 new IllegalStateException("wrapper", new NullPointerException("secret data")));
 
         assertThat(text(built, DltHeaders.ERROR_CATEGORY)).isEqualTo("UNEXPECTED");
@@ -81,7 +81,7 @@ class DltSupportTest {
         final RecordProcessingFailure failure = RecordProcessingFailure.of(
                 ErrorCategory.VALIDATION, "bad", new MessageIds("<>", "  "), null, null);
 
-        final Headers built = headers.create(record(1), failure);
+        final Headers built = headers.create(consumerRecord(1), failure);
 
         assertThat(built.lastHeader(DltHeaders.ORDER_ID)).isNull();
         assertThat(built.lastHeader(DltHeaders.EVENT_ID)).isNull();
@@ -92,7 +92,7 @@ class DltSupportTest {
         final FailureDescription description = new FailureDescription(
                 ErrorCategory.PERSISTENCE, "mongo down", new MessageIds("ORD-9", "EVT-9"), null);
 
-        final Headers built = headers.create(record(2),
+        final Headers built = headers.create(consumerRecord(2),
                 new DescribedFailure(new IllegalStateException(), description));
 
         assertThat(text(built, DltHeaders.ERROR_CATEGORY)).isEqualTo("PERSISTENCE");
@@ -102,22 +102,22 @@ class DltSupportTest {
 
     @Test
     void should_read_delivery_attempts_defensively() {
-        final ConsumerRecord<String, byte[]> malformed = record(0);
+        final ConsumerRecord<String, byte[]> malformed = consumerRecord(0);
         malformed.headers().add(KafkaHeaders.DELIVERY_ATTEMPT, new byte[] {1});
 
-        assertThat(DeliveryAttempts.of(record(4))).isEqualTo(4);
+        assertThat(DeliveryAttempts.of(consumerRecord(4))).isEqualTo(4);
         assertThat(DeliveryAttempts.of(malformed)).isEqualTo(1);
-        assertThat(DeliveryAttempts.of(record(0))).isEqualTo(1);
+        assertThat(DeliveryAttempts.of(consumerRecord(0))).isEqualTo(1);
     }
 
-    private static ConsumerRecord<String, byte[]> record(final int attempt) {
-        final ConsumerRecord<String, byte[]> record =
+    private static ConsumerRecord<String, byte[]> consumerRecord(final int attempt) {
+        final ConsumerRecord<String, byte[]> consumerRecord =
                 new ConsumerRecord<>("orders.created.v1", 1, 42L, "ORD-1", new byte[] {1});
         if (attempt > 0) {
-            record.headers().add(KafkaHeaders.DELIVERY_ATTEMPT,
+            consumerRecord.headers().add(KafkaHeaders.DELIVERY_ATTEMPT,
                     ByteBuffer.allocate(Integer.BYTES).putInt(attempt).array());
         }
-        return record;
+        return consumerRecord;
     }
 
     private static String text(final Headers headers, final String name) {

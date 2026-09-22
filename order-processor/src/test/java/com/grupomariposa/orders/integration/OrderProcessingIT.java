@@ -52,20 +52,20 @@ class OrderProcessingIT extends IntegrationTest {
         final String storedName = order.get("client", Document.class).getString("encryptedName");
         assertThat(storedName).startsWith("k1:").doesNotContain("Distribuidora");
         try (TopicProbe processed = probe(ORDERS_PROCESSED)) {
-            final ConsumerRecord<String, byte[]> record =
+            final ConsumerRecord<String, byte[]> consumerRecord =
                     processed.awaitKey(event.orderId(), 1).getFirst();
-            final JsonNode payload = objectMapper.readTree(record.value());
+            final JsonNode payload = objectMapper.readTree(consumerRecord.value());
             assertThat(Contracts.validateEvent(PROCESSED_SCHEMA, payload)).isEmpty();
             assertThat(payload.get("status").asText()).isEqualTo("APPROVED");
             assertThat(payload.get("reason").isNull()).isTrue();
             assertThat(payload.get("sourceEventId").asText()).isEqualTo(event.eventId());
             assertThat(payload.at("/totals/grandTotal").decimalValue())
                     .isEqualByComparingTo("2100.11");
-            assertThat(new String(record.value(), StandardCharsets.UTF_8))
+            assertThat(new String(consumerRecord.value(), StandardCharsets.UTF_8))
                     .contains("\"grossSubtotal\":1836.00").contains("\"discount\":25.56")
                     .doesNotContain("Distribuidora");
-            assertThat(header(record, "eventType")).isEqualTo("OrderProcessed");
-            assertThat(header(record, "traceparent")).isNotBlank();
+            assertThat(header(consumerRecord, "eventType")).isEqualTo("OrderProcessed");
+            assertThat(header(consumerRecord, "traceparent")).isNotBlank();
         }
         await().atMost(Duration.ofSeconds(10)).until(() ->
                 "PUBLISHED".equals(outbox(event.orderId()).getFirst().getString("status")));
@@ -113,19 +113,21 @@ class OrderProcessingIT extends IntegrationTest {
         publish(event);
 
         try (TopicProbe dlt = probe(DLT)) {
-            final ConsumerRecord<String, byte[]> record = dlt.awaitKey(event.orderId(), 1)
+            final ConsumerRecord<String, byte[]> consumerRecord = dlt.awaitKey(event.orderId(), 1)
                     .getFirst();
-            assertThat(record.value()).isEqualTo(event.bytes());
-            assertThat(header(record, "x-error-category")).isEqualTo("VALIDATION");
-            assertThat(header(record, "x-error-cause")).contains("currency").hasSizeLessThan(257);
-            assertThat(header(record, "x-attempts")).isEqualTo("1");
-            assertThat(header(record, "x-component")).isEqualTo("order-processor");
-            assertThat(header(record, "x-order-id")).isEqualTo(event.orderId());
-            assertThat(header(record, "x-event-id")).isEqualTo(event.eventId());
-            assertThat(Instant.parse(header(record, "x-failed-at"))).isNotNull();
-            assertThat(header(record, "kafka_dlt-original-topic")).isEqualTo(ORDERS_CREATED);
-            assertThat(header(record, "kafka_dlt-original-offset")).isNotNull();
-            assertThat(header(record, "kafka_deliveryAttempt")).isNull();
+            assertThat(consumerRecord.value()).isEqualTo(event.bytes());
+            assertThat(header(consumerRecord, "x-error-category")).isEqualTo("VALIDATION");
+            assertThat(header(consumerRecord, "x-error-cause")).contains("currency")
+                    .hasSizeLessThan(257);
+            assertThat(header(consumerRecord, "x-attempts")).isEqualTo("1");
+            assertThat(header(consumerRecord, "x-component")).isEqualTo("order-processor");
+            assertThat(header(consumerRecord, "x-order-id")).isEqualTo(event.orderId());
+            assertThat(header(consumerRecord, "x-event-id")).isEqualTo(event.eventId());
+            assertThat(Instant.parse(header(consumerRecord, "x-failed-at"))).isNotNull();
+            assertThat(header(consumerRecord, "kafka_dlt-original-topic"))
+                    .isEqualTo(ORDERS_CREATED);
+            assertThat(header(consumerRecord, "kafka_dlt-original-offset")).isNotNull();
+            assertThat(header(consumerRecord, "kafka_deliveryAttempt")).isNull();
         }
         assertThat(order(event.orderId())).isNull();
     }
@@ -157,11 +159,11 @@ class OrderProcessingIT extends IntegrationTest {
         publish(event);
 
         try (TopicProbe dlt = probe(DLT)) {
-            final ConsumerRecord<String, byte[]> record = dlt.awaitKey(event.orderId(), 1)
+            final ConsumerRecord<String, byte[]> consumerRecord = dlt.awaitKey(event.orderId(), 1)
                     .getFirst();
-            assertThat(header(record, "x-error-category")).isEqualTo("DESERIALIZATION");
-            assertThat(header(record, "x-error-cause")).contains("items[0].quantity");
-            assertThat(header(record, "x-event-id")).isEqualTo(event.eventId());
+            assertThat(header(consumerRecord, "x-error-category")).isEqualTo("DESERIALIZATION");
+            assertThat(header(consumerRecord, "x-error-cause")).contains("items[0].quantity");
+            assertThat(header(consumerRecord, "x-event-id")).isEqualTo(event.eventId());
         }
         assertThat(order(event.orderId())).isNull();
     }
@@ -176,7 +178,7 @@ class OrderProcessingIT extends IntegrationTest {
 
         awaitOrder(event.orderId(), "APPROVED");
         try (TopicProbe processed = probe(ORDERS_PROCESSED)) {
-            assertThat(processed.await(record -> event.orderId().equals(record.key()), 2,
+            assertThat(processed.await(received -> event.orderId().equals(received.key()), 2,
                     Duration.ofSeconds(8), SHORT)).hasSize(1);
         }
         assertThat(outbox(event.orderId())).hasSize(1);
@@ -196,10 +198,10 @@ class OrderProcessingIT extends IntegrationTest {
         publish(second);
 
         try (TopicProbe dlt = probe(DLT)) {
-            final ConsumerRecord<String, byte[]> record = dlt.awaitKey(first.orderId(), 1)
+            final ConsumerRecord<String, byte[]> consumerRecord = dlt.awaitKey(first.orderId(), 1)
                     .getFirst();
-            assertThat(header(record, "x-error-category")).isEqualTo("VERSION_CONFLICT");
-            assertThat(header(record, "x-event-id")).isEqualTo(second.eventId());
+            assertThat(header(consumerRecord, "x-error-category")).isEqualTo("VERSION_CONFLICT");
+            assertThat(header(consumerRecord, "x-event-id")).isEqualTo(second.eventId());
         }
         assertThat(order(first.orderId()).getString("sourceEventId")).isEqualTo(first.eventId());
         assertThat(outbox(first.orderId())).hasSize(1);
@@ -263,11 +265,11 @@ class OrderProcessingIT extends IntegrationTest {
         assertThat(failure.getString("category")).isEqualTo("EXTERNAL_TRANSIENT");
         assertThat(failure.getInteger("attempts")).isEqualTo(4);
         try (TopicProbe dlt = probe(DLT)) {
-            final ConsumerRecord<String, byte[]> record = dlt.awaitKey(event.orderId(), 1)
+            final ConsumerRecord<String, byte[]> consumerRecord = dlt.awaitKey(event.orderId(), 1)
                     .getFirst();
-            assertThat(header(record, "x-error-category")).isEqualTo("EXTERNAL_TRANSIENT");
-            assertThat(header(record, "x-attempts")).isEqualTo("4");
-            assertThat(record.value()).isEqualTo(event.bytes());
+            assertThat(header(consumerRecord, "x-error-category")).isEqualTo("EXTERNAL_TRANSIENT");
+            assertThat(header(consumerRecord, "x-attempts")).isEqualTo("4");
+            assertThat(consumerRecord.value()).isEqualTo(event.bytes());
         }
         assertThat(inbox(event.eventId())).isNull();
         assertThat(outbox(event.orderId())).isEmpty();
@@ -295,10 +297,10 @@ class OrderProcessingIT extends IntegrationTest {
         assertThat(failed.get("failure", Document.class).getString("category"))
                 .isEqualTo("EXTERNAL_PERMANENT");
         try (TopicProbe dlt = probe(DLT)) {
-            final ConsumerRecord<String, byte[]> record = dlt.awaitKey(event.orderId(), 1)
+            final ConsumerRecord<String, byte[]> consumerRecord = dlt.awaitKey(event.orderId(), 1)
                     .getFirst();
-            assertThat(header(record, "x-error-category")).isEqualTo("EXTERNAL_PERMANENT");
-            assertThat(header(record, "x-attempts")).isEqualTo("1");
+            assertThat(header(consumerRecord, "x-error-category")).isEqualTo("EXTERNAL_PERMANENT");
+            assertThat(header(consumerRecord, "x-attempts")).isEqualTo("1");
         }
     }
 

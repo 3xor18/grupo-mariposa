@@ -1,6 +1,5 @@
 package com.grupomariposa.orders.infrastructure.config;
 
-import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import com.grupomariposa.orders.application.port.in.ProcessOrderUseCase;
 import com.grupomariposa.orders.application.port.in.PublishPendingEventsUseCase;
 import com.grupomariposa.orders.application.port.in.RecordTechnicalFailureUseCase;
@@ -8,11 +7,11 @@ import com.grupomariposa.orders.application.port.out.ProcessingObserver;
 import com.grupomariposa.orders.application.port.out.TimeProvider;
 import com.grupomariposa.orders.application.validation.OrderCommandValidator;
 import com.grupomariposa.orders.infrastructure.kafka.MessagingProperties;
+import com.grupomariposa.orders.infrastructure.kafka.OutboxRelayProperties;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.DeadLetterProducer;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.DeadLetterRecoverer;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.DltHeadersFactory;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.OrderDeadLetterPublisher;
-import com.grupomariposa.orders.infrastructure.kafka.OutboxRelayProperties;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.ListenerSettings;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderCreatedListener;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderMessageMapper;
@@ -21,6 +20,7 @@ import com.grupomariposa.orders.infrastructure.kafka.inbound.RetryableRecordFail
 import com.grupomariposa.orders.infrastructure.kafka.outbound.KafkaEventPublisher;
 import com.grupomariposa.orders.infrastructure.kafka.outbound.OutboxRelayScheduler;
 import com.grupomariposa.orders.infrastructure.kafka.outbound.RelaySchedule;
+import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
 import com.grupomariposa.orders.infrastructure.observability.TraceIds;
 import io.micrometer.core.instrument.MeterRegistry;

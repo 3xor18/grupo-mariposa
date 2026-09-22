@@ -107,7 +107,7 @@ class OutboxLeaseIT extends IntegrationTest {
         try (TopicProbe processed = new TopicProbe(KAFKA.getBootstrapServers(),
                 ORDERS_PROCESSED)) {
             final List<ConsumerRecord<String, byte[]>> records = processed.await(
-                    record -> record.key() != null && record.key().startsWith(prefix), EVENTS,
+                    received -> received.key() != null && received.key().startsWith(prefix), EVENTS,
                     Duration.ofSeconds(20), Duration.ofSeconds(2));
             assertThat(records).hasSize(EVENTS);
             assertThat(records).extracting(ConsumerRecord::key).doesNotHaveDuplicates();

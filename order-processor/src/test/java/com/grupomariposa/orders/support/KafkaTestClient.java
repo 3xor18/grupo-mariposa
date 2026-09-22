@@ -57,9 +57,9 @@ public final class KafkaTestClient implements AutoCloseable {
             consumer.subscribe(List.of(topic));
             final long deadline = System.nanoTime() + window.toNanos();
             while (System.nanoTime() < deadline) {
-                consumer.poll(POLL).forEach(record -> {
-                    if (filter.test(record)) {
-                        matches.add(record);
+                consumer.poll(POLL).forEach(consumerRecord -> {
+                    if (filter.test(consumerRecord)) {
+                        matches.add(consumerRecord);
                     }
                 });
             }
