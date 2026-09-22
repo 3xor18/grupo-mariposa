@@ -1,4 +1,4 @@
-import { DynamicModule, Module } from '@nestjs/common';
+import { DynamicModule, Module, Provider } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { ClientsModule } from './clients/clients.module';
@@ -14,8 +14,20 @@ import { FaultInjectionModule } from './shared/fault-injection/fault-injection.m
 import { buildLoggerParams } from './shared/observability/logger.params';
 import { ObservabilityModule } from './shared/observability/observability.module';
 import { TraceContextStore } from './shared/observability/trace-context';
-import { RateLimitGuard } from './shared/rate-limit/rate-limit.guard';
+import {
+  ClientAddressRateLimitGuard,
+  PrincipalRateLimitGuard,
+} from './shared/rate-limit/rate-limit.guard';
 import { RateLimitModule } from './shared/rate-limit/rate-limit.module';
+
+const REQUEST_PIPELINE: readonly Provider[] = Object.freeze([
+  { provide: APP_PIPE, useFactory: createValidationPipe },
+  { provide: APP_FILTER, useClass: ProblemDetailsFilter },
+  { provide: APP_GUARD, useClass: ClientAddressRateLimitGuard },
+  { provide: APP_GUARD, useClass: JwtAuthGuard },
+  { provide: APP_GUARD, useClass: PrincipalRateLimitGuard },
+  { provide: APP_INTERCEPTOR, useClass: FaultInjectionInterceptor },
+]);
 
 @Module({})
 export class AppModule {
@@ -35,13 +47,7 @@ export class AppModule {
         HealthModule,
         ClientsModule,
       ],
-      providers: [
-        { provide: APP_PIPE, useFactory: createValidationPipe },
-        { provide: APP_FILTER, useClass: ProblemDetailsFilter },
-        { provide: APP_GUARD, useClass: RateLimitGuard },
-        { provide: APP_GUARD, useClass: JwtAuthGuard },
-        { provide: APP_INTERCEPTOR, useClass: FaultInjectionInterceptor },
-      ],
+      providers: [...REQUEST_PIPELINE],
     };
   }
 }
