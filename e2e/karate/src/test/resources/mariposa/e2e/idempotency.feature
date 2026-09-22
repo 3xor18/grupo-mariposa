@@ -2,27 +2,33 @@ Feature: duplicates, concurrent deliveries, version conflicts and stale versions
 
   Background:
     * def orderEvent = read('common/order-event.js')
-    * def sourceEventIds = function(records) { return karate.map(records, function(r) { return karate.fromString(r.value).sourceEventId }) }
+    * def publishOrder = read('common/publish-order.feature')
+    * def waitOrder = read('common/wait-order.feature')
+    * def sourceEventId = function(record) { return karate.fromString(record.value).sourceEventId }
+    * def sourceEventIds = function(records) { return karate.map(records, sourceEventId) }
+    * def line = function(q, p) { return [{ productId: 'PRD-001', quantity: q, unitPrice: p }] }
 
   Scenario: the same eventId delivered many times produces exactly one effect
-    * def event = orderEvent({ orderId: 'ORD-MX-E2EI' + runId + 'DUP' })
+    * def orderId = 'ORD-MX-E2EI' + runId + 'DUP'
+    * def event = orderEvent({ orderId: orderId })
     * string payload = event
     * def processedMark = kafka.mark(topics.processed)
-    * def publishMany = function(n) { for (var i = 0; i < n; i++) kafka.publish(topics.created, event.orderId, payload) }
-    * eval publishMany(10)
-    * call read('common/wait-order.feature') { orderId: '#(event.orderId)', expectedStatus: 'APPROVED' }
-    * def oneMoreThanExpected = 2
-    * def published = kafka.readAfter(processedMark, event.orderId, oneMoreThanExpected, waits.quietMillis)
+    * def deliveries = 10
+    * def publishOnce = function() { kafka.publish(topics.created, orderId, payload) }
+    * eval karate.repeat(deliveries, publishOnce)
+    * call waitOrder { orderId: '#(orderId)', expectedStatus: 'APPROVED' }
+    * def duplicateProbe = 2
+    * def published = kafka.readAfter(processedMark, orderId, duplicateProbe, waits.quietMillis)
     And match published == '#[1]'
 
-  Scenario: a different event with the same orderId and eventVersion is a conflict and the first wins
+  Scenario: a different event with the same orderId and version is a conflict and the first wins
     * def orderId = 'ORD-MX-E2EI' + runId + 'CON'
     * def first = orderEvent({ orderId: orderId })
-    * call read('common/publish-order.feature') { event: '#(first)' }
-    * call read('common/wait-order.feature') { orderId: '#(orderId)', expectedStatus: 'APPROVED' }
-    * def second = orderEvent({ orderId: orderId, items: [{ productId: 'PRD-001', quantity: 1, unitPrice: 1.0 }] })
+    * call publishOrder { event: '#(first)' }
+    * call waitOrder { orderId: '#(orderId)', expectedStatus: 'APPROVED' }
+    * def second = orderEvent({ orderId: orderId, items: line(1, 1.0) })
     * def dltMark = kafka.mark(topics.dlt)
-    * call read('common/publish-order.feature') { event: '#(second)' }
+    * call publishOrder { event: '#(second)' }
     * def dead = kafka.readAfter(dltMark, orderId, 1, waits.eventMillis)
     And match dead == '#[1]'
     And match dead[0].headers['x-error-category'] == 'VERSION_CONFLICT'
@@ -37,18 +43,21 @@ Feature: duplicates, concurrent deliveries, version conflicts and stale versions
   Scenario: a newer version supersedes and a later stale version is ignored
     * def orderId = 'ORD-MX-E2EI' + runId + 'VER'
     * def v1 = orderEvent({ orderId: orderId })
-    * def v2 = orderEvent({ orderId: orderId, eventVersion: 2, items: [{ productId: 'PRD-001', quantity: 48, unitPrice: 35.5 }] })
-    * def stale = orderEvent({ orderId: orderId, eventVersion: 1, items: [{ productId: 'PRD-001', quantity: 999, unitPrice: 1.0 }] })
-    * def sentinel = orderEvent({ orderId: orderId, eventVersion: 3, items: [{ productId: 'PRD-001', quantity: 30, unitPrice: 35.5 }] })
+    * def v2 = orderEvent({ orderId: orderId, eventVersion: 2, items: line(48, 35.5) })
+    * def stale = orderEvent({ orderId: orderId, eventVersion: 1, items: line(999, 1.0) })
+    * def sentinel = orderEvent({ orderId: orderId, eventVersion: 3, items: line(30, 35.5) })
     * def processedMark = kafka.mark(topics.processed)
-    * call read('common/publish-order.feature') { event: '#(v1)' }
-    * call read('common/wait-order.feature') { orderId: '#(orderId)', expectedStatus: 'APPROVED' }
-    * call read('common/publish-order.feature') { event: '#(v2)' }
-    * def afterV2 = call read('common/wait-order.feature') { orderId: '#(orderId)', expectedStatus: 'APPROVED', expectedVersion: 2 }
+    * call publishOrder { event: '#(v1)' }
+    * call waitOrder { orderId: '#(orderId)', expectedStatus: 'APPROVED' }
+    * call publishOrder { event: '#(v2)' }
+    * def v2Wait = { orderId: '#(orderId)', expectedStatus: 'APPROVED', expectedVersion: 2 }
+    * def afterV2 = call waitOrder v2Wait
     And match afterV2.order.sourceEventId == v2.eventId
-    * call read('common/publish-order.feature') { event: '#(stale)' }
-    * call read('common/publish-order.feature') { event: '#(sentinel)' }
-    * def afterSentinel = call read('common/wait-order.feature') { orderId: '#(orderId)', expectedStatus: 'APPROVED', expectedVersion: 3 }
+    * call publishOrder { event: '#(stale)' }
+    * call publishOrder { event: '#(sentinel)' }
+    * def sentinelWait = { orderId: '#(orderId)', expectedStatus: 'APPROVED', expectedVersion: 3 }
+    * def afterSentinel = call waitOrder sentinelWait
     And match afterSentinel.order.sourceEventId == sentinel.eventId
     * def published = kafka.readAfter(processedMark, orderId, 3, waits.eventMillis)
-    And match sourceEventIds(published) contains only ['#(v1.eventId)', '#(v2.eventId)', '#(sentinel.eventId)']
+    * def expectedIds = ['#(v1.eventId)', '#(v2.eventId)', '#(sentinel.eventId)']
+    And match sourceEventIds(published) contains only expectedIds
