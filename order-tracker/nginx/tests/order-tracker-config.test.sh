@@ -7,6 +7,9 @@ WORK=$(mktemp -d)
 FAKE_BIN="$WORK/bin"
 PASSED=0
 FAILED=0
+REQUIRED_ORDERS="ORDERS_API_URL=http://orders:8080"
+REQUIRED_KEYCLOAK="KEYCLOAK_URL=http://sso:8180"
+REQUIRED_REDIRECT="REDIRECT_URI=http://app:8090/"
 
 trap 'rm -rf "$WORK"' EXIT
 
@@ -20,7 +23,10 @@ if [ "$1" = "--config" ]; then
 fi
 calls=$(($(cat "$FAKE_CALLS" 2>/dev/null || echo 0) + 1))
 echo "$calls" > "$FAKE_CALLS"
-[ "$calls" -gt "${FAKE_FAILURES:-0}" ] || exit 7
+if [ "$calls" -le "${FAKE_FAILURES:-0}" ]; then
+  echo "curl: (7) Failed to connect to config port 8888" >&2
+  exit 7
+fi
 while [ "$#" -gt 1 ]; do
   [ "$1" = "--output" ] && output="$2"
   shift
@@ -39,6 +45,10 @@ orders-api-url: http://orders.internal:8080
 keycloak.url: https://sso.example.com:8443/auth
 keycloak.realm=mariposa-docker
 keycloak.client-id : tracker-docker
+redirect-uri: https\://tracker.example.com\:8443/
+enable-semantics: true
+hsts-max-age: 31536000
+escaped\:key: ignored
 unknown.key: ignored
 no-separator-line
 PROPS
@@ -51,6 +61,16 @@ run_case() {
     FAKE_LOG="$WORK/argv" FAKE_STDIN_LOG="$WORK/stdin" FAKE_CALLS="$WORK/calls" \
     FAKE_BODY="$WORK/body.properties" CONFIG_SERVER_RETRY_DELAY=0 \
     "$@" sh "$SCRIPT" 2> "$WORK/stderr"
+}
+
+run_local() {
+  run_case "$REQUIRED_ORDERS" "$REQUIRED_KEYCLOAK" "$REQUIRED_REDIRECT" "$@"
+}
+
+status_of() {
+  status=0
+  "$@" || status=$?
+  printf '%s' "$status"
 }
 
 value_of() {
@@ -67,11 +87,26 @@ check() {
 }
 
 test_defaults_without_config_server() {
-  run_case
+  run_local
   check "default api base url" "$(value_of API_BASE_URL)" "/api"
-  check "default orders api" "$(value_of ORDERS_API_URL)" "http://order-processor:8080"
+  check "default realm" "$(value_of KEYCLOAK_REALM)" "mariposa"
   check "default resolver" "$(value_of NGINX_RESOLVER)" "127.0.0.11"
+  check "semantics off by default" "$(value_of ENABLE_SEMANTICS)" "false"
+  check "hsts off by default" "$(value_of HSTS_HEADER)" ""
+  check "csp keycloak origin" "$(value_of CSP_CONNECT_SOURCES)" "http://sso:8180"
   check "no remote call" "$(cat "$WORK/calls" 2>/dev/null || echo 0)" "0"
+  check "config.json boolean" \
+    "$(grep -c '"enableSemantics": false' "$WORK/out/config.json")" "1"
+}
+
+test_required_values_have_no_defaults() {
+  check "missing keycloak url" \
+    "$(status_of run_case "$REQUIRED_ORDERS" "$REQUIRED_REDIRECT")" "1"
+  check "reports missing key" "$(grep -c 'KEYCLOAK_URL is required' "$WORK/stderr")" "1"
+  check "missing orders api" \
+    "$(status_of run_case "$REQUIRED_KEYCLOAK" "$REQUIRED_REDIRECT")" "1"
+  check "missing redirect" \
+    "$(status_of run_case "$REQUIRED_ORDERS" "$REQUIRED_KEYCLOAK")" "1"
 }
 
 test_values_from_config_server() {
@@ -81,10 +116,25 @@ test_values_from_config_server() {
   check "equals separator" "$(value_of KEYCLOAK_REALM)" "mariposa-docker"
   check "trimmed key" "$(value_of KEYCLOAK_CLIENT_ID)" "tracker-docker"
   check "orders api" "$(value_of ORDERS_API_URL)" "http://orders.internal:8080"
-  check "unknown key ignored" "$(grep -c UNKNOWN "$WORK/out/runtime.env" || true)" "0"
+  check "unescaped colons" "$(value_of REDIRECT_URI)" "https://tracker.example.com:8443/"
+  check "semantics flag" "$(value_of ENABLE_SEMANTICS)" "true"
+  check "hsts header" "$(value_of HSTS_HEADER)" "max-age=31536000; includeSubDomains"
+  check "csp keycloak origin only" "$(value_of CSP_CONNECT_SOURCES)" \
+    "https://sso.example.com:8443"
+  check "unknown keys ignored" \
+    "$(grep -cE 'UNKNOWN|ESCAPED' "$WORK/out/runtime.env" || true)" "0"
   expected_url='http://config:8888/order-tracker-docker.properties'
   check "profile url" "$(grep -c "$expected_url" "$WORK/argv")" "1"
-  check "config.json realm" "$(grep -c '"realm": "mariposa-docker"' "$WORK/out/config.json")" "1"
+  check "config.json realm" \
+    "$(grep -c '"realm": "mariposa-docker"' "$WORK/out/config.json")" "1"
+  check "config.json redirect" \
+    "$(grep -c '"redirectUri": "https://tracker.example.com:8443/"' "$WORK/out/config.json")" "1"
+}
+
+test_absolute_api_base_joins_csp() {
+  run_local API_BASE_URL=https://api.example.com/orders-api
+  check "csp api origin" "$(value_of CSP_CONNECT_SOURCES)" \
+    "http://sso:8180 https://api.example.com"
 }
 
 test_explicit_environment_wins() {
@@ -99,19 +149,19 @@ test_retries_until_success() {
   run_case CONFIG_SERVER_URL=http://config:8888 FAKE_FAILURES=3
   check "fourth attempt succeeds" "$(cat "$WORK/calls")" "4"
   check "value after retries" "$(value_of KEYCLOAK_REALM)" "mariposa-docker"
+  check "curl error surfaced" "$(grep -c 'Failed to connect' "$WORK/stderr")" "3"
 }
 
-test_unreachable_server_continues() {
-  run_case CONFIG_SERVER_URL=http://config:8888 FAKE_FAILURES=9
+test_unreachable_server_fails_fast_by_default() {
+  check "fail fast by default" \
+    "$(status_of run_local CONFIG_SERVER_URL=http://config:8888 FAKE_FAILURES=9)" "1"
   check "stops after four attempts" "$(cat "$WORK/calls")" "4"
-  check "falls back to defaults" "$(value_of KEYCLOAK_REALM)" "mariposa"
 }
 
-test_unreachable_server_fails_fast() {
-  status=0
-  run_case CONFIG_SERVER_URL=http://config:8888 FAKE_FAILURES=9 \
-    CONFIG_SERVER_FAIL_FAST=true || status=$?
-  check "fail fast exit status" "$status" "1"
+test_unreachable_server_can_continue() {
+  run_local CONFIG_SERVER_URL=http://config:8888 FAKE_FAILURES=9 CONFIG_SERVER_FAIL_FAST=false
+  check "falls back to environment" "$(value_of KEYCLOAK_URL)" "http://sso:8180"
+  check "falls back to defaults" "$(value_of KEYCLOAK_REALM)" "mariposa"
 }
 
 test_password_is_never_exposed() {
@@ -122,30 +172,33 @@ test_password_is_never_exposed() {
   check "credentials via stdin" "$(cat "$WORK/stdin")" 'user = "reader:s3cr\"et"'
 }
 
-test_unsafe_json_value_is_rejected() {
-  status=0
-  run_case KEYCLOAK_REALM='bad"realm' || status=$?
-  check "json unsafe quote rejected" "$status" "1"
-  status=0
-  run_case API_BASE_URL='/api\x' || status=$?
-  check "json unsafe backslash rejected" "$status" "1"
-}
-
-test_quotes_survive_env_file() {
-  run_case ORDERS_API_URL="http://o'hara:8080"
-  check "single quote round trip" "$(value_of ORDERS_API_URL)" "http://o'hara:8080"
+test_unsafe_values_are_rejected() {
+  check "semicolon in url" "$(status_of run_local ORDERS_API_URL='http://o:1;evil')" "1"
+  check "reported invalid" "$(grep -c 'ORDERS_API_URL has an invalid value' "$WORK/stderr")" "1"
+  check "space in url" "$(status_of run_local KEYCLOAK_URL='http://sso 8180')" "1"
+  check "dollar in url" "$(status_of run_local REDIRECT_URI='http://app/$host')" "1"
+  check "quote in realm" "$(status_of run_local KEYCLOAK_REALM='bad"realm')" "1"
+  check "backslash in base" "$(status_of run_local API_BASE_URL='/api\x')" "1"
+  check "non http url" "$(status_of run_local ORDERS_API_URL='file:///etc/passwd')" "1"
+  check "resolver with directive" \
+    "$(status_of run_local NGINX_RESOLVER='127.0.0.11; include /tmp/x')" "1"
+  check "boolean flag" "$(status_of run_local ENABLE_SEMANTICS=yes)" "1"
+  check "numeric max age" "$(status_of run_local HSTS_MAX_AGE=forever)" "1"
+  check "multi line value" "$(status_of run_local KEYCLOAK_CLIENT_ID="a
+b")" "1"
 }
 
 install_fake_curl
 write_properties
 test_defaults_without_config_server
+test_required_values_have_no_defaults
 test_values_from_config_server
+test_absolute_api_base_joins_csp
 test_explicit_environment_wins
 test_retries_until_success
-test_unreachable_server_continues
-test_unreachable_server_fails_fast
+test_unreachable_server_fails_fast_by_default
+test_unreachable_server_can_continue
 test_password_is_never_exposed
-test_unsafe_json_value_is_rejected
-test_quotes_survive_env_file
+test_unsafe_values_are_rejected
 printf 'order-tracker-config: %s passed, %s failed\n' "$PASSED" "$FAILED"
 [ "$FAILED" -eq 0 ]

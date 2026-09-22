@@ -3,8 +3,14 @@ map $uri $order_tracker_cache_control {
     ~*\.(?:png|ico|otf|ttf|woff2?)$ "public, max-age=86400";
 }
 
+map $uri $order_tracker_problem_instance {
+    default "/api";
+    "~^(?<json_safe_uri>[A-Za-z0-9/._~%-]+)$" $json_safe_uri;
+}
+
 server {
     listen 8080;
+    listen [::]:8080;
     server_name _;
     root /usr/share/nginx/html;
     index index.html;
@@ -24,12 +30,14 @@ server {
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Strict-Transport-Security "${HSTS_HEADER}" always;
     set $csp_base "default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'";
     set $csp_scripts "script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:";
     set $csp_styles "style-src 'self' 'unsafe-inline'";
     set $csp_fonts "font-src 'self' data: https://fonts.gstatic.com";
     set $csp_media "img-src 'self' data: blob:; manifest-src 'self'; frame-ancestors 'none'";
-    set $csp_connect "connect-src 'self' ${KEYCLOAK_URL} https://fonts.gstatic.com";
+    set $csp_connect "connect-src 'self' ${CSP_CONNECT_SOURCES} https://fonts.gstatic.com";
     add_header Content-Security-Policy
         "${csp_base}; ${csp_scripts}; ${csp_styles}; ${csp_fonts}; ${csp_media}; ${csp_connect}"
         always;
@@ -61,7 +69,8 @@ server {
     location @orders_api_unavailable {
         set $problem_head '{"type":"about:blank","title":"Bad Gateway","status":502';
         set $problem_body '"code":"BAD_GATEWAY","detail":"Orders API is unreachable"';
-        set $problem_meta '"instance":"$uri","traceId":"$request_id","timestamp":"$time_iso8601"';
+        set $problem_trace '"traceId":"$request_id","timestamp":"$time_iso8601"';
+        set $problem_meta '"instance":"$order_tracker_problem_instance",$problem_trace';
         default_type application/problem+json;
         return 502 '${problem_head},${problem_body},${problem_meta}}';
     }

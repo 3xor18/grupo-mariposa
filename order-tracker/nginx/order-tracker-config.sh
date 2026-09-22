@@ -3,9 +3,20 @@ set -eu
 
 RUNTIME_DIR="${ORDER_TRACKER_RUNTIME_DIR:-/tmp/order-tracker}"
 CONFIG_TEMPLATE="${ORDER_TRACKER_CONFIG_TEMPLATE:-/etc/order-tracker/config.json.template}"
-CLIENT_KEYS="API_BASE_URL KEYCLOAK_URL KEYCLOAK_REALM KEYCLOAK_CLIENT_ID"
-MANAGED_KEYS="$CLIENT_KEYS ORDERS_API_URL NGINX_RESOLVER"
+DEFAULT_TIMEOUT_SECONDS=5
+DEFAULT_RETRY_DELAY_SECONDS=1
 MAX_ATTEMPTS=4
+HSTS_DIRECTIVES='includeSubDomains'
+MANAGED_KEYS="API_BASE_URL ORDERS_API_URL KEYCLOAK_URL KEYCLOAK_REALM KEYCLOAK_CLIENT_ID
+REDIRECT_URI ENABLE_SEMANTICS HSTS_MAX_AGE NGINX_RESOLVER"
+URL_PATTERN='^https?://[A-Za-z0-9._~:/?#@!&()*+,=%-]+$'
+PATH_PATTERN='^/[A-Za-z0-9._~/-]*$'
+NAME_PATTERN='^[A-Za-z0-9._-]+$'
+HOST_PATTERN='^[]A-Za-z0-9.:[-]+$'
+BOOLEAN_PATTERN='^(true|false)$'
+NUMBER_PATTERN='^[0-9]+$'
+NEWLINE='
+'
 
 log() {
   printf 'order-tracker-config: %s\n' "$*" >&2
@@ -14,17 +25,38 @@ log() {
 default_for() {
   case "$1" in
     API_BASE_URL) printf '%s' '/api' ;;
-    ORDERS_API_URL) printf '%s' 'http://order-processor:8080' ;;
-    KEYCLOAK_URL) printf '%s' 'http://localhost:8180' ;;
     KEYCLOAK_REALM) printf '%s' 'mariposa' ;;
     KEYCLOAK_CLIENT_ID) printf '%s' 'order-tracker' ;;
+    ENABLE_SEMANTICS) printf '%s' 'false' ;;
+    HSTS_MAX_AGE) printf '%s' '0' ;;
     NGINX_RESOLVER) printf '%s' '127.0.0.11' ;;
+    *) printf '%s' '' ;;
+  esac
+}
+
+pattern_for() {
+  case "$1" in
+    API_BASE_URL) printf '%s|%s' "$URL_PATTERN" "$PATH_PATTERN" ;;
+    KEYCLOAK_REALM | KEYCLOAK_CLIENT_ID) printf '%s' "$NAME_PATTERN" ;;
+    ENABLE_SEMANTICS) printf '%s' "$BOOLEAN_PATTERN" ;;
+    HSTS_MAX_AGE) printf '%s' "$NUMBER_PATTERN" ;;
+    NGINX_RESOLVER) printf '%s' "$HOST_PATTERN" ;;
+    *) printf '%s' "$URL_PATTERN" ;;
   esac
 }
 
 properties_to_env() {
   awk '
     function trim(text) { gsub(/^[ \t\r]+|[ \t\r]+$/, "", text); return text }
+    function unescape(text,    i, c, out) {
+      out = ""
+      for (i = 1; i <= length(text); i++) {
+        c = substr(text, i, 1)
+        if (c == "\\" && i < length(text)) { i++; c = substr(text, i, 1) }
+        out = out c
+      }
+      return out
+    }
     function separator(line,    i, c) {
       for (i = 1; i <= length(line); i++) {
         c = substr(line, i, 1)
@@ -38,9 +70,9 @@ properties_to_env() {
       if (line == "" || line ~ /^[#!]/) { next }
       at = separator(line)
       if (at == 0) { next }
-      key = toupper(trim(substr(line, 1, at - 1)))
+      key = toupper(unescape(trim(substr(line, 1, at - 1))))
       gsub(/[.-]/, "_", key)
-      print key "=" trim(substr(line, at + 1))
+      print key "=" unescape(trim(substr(line, at + 1)))
     }
   '
 }
@@ -68,24 +100,25 @@ curl_credentials() {
 }
 
 download_properties() {
+  timeout="${CONFIG_SERVER_TIMEOUT:-$DEFAULT_TIMEOUT_SECONDS}"
   if [ -n "${CONFIG_SERVER_USERNAME:-}" ]; then
     curl_credentials | curl --config - --silent --show-error --fail \
-      --max-time "${CONFIG_SERVER_TIMEOUT:-5}" --output "$2" "$1"
+      --max-time "$timeout" --output "$2" "$1"
   else
-    curl --silent --show-error --fail --max-time "${CONFIG_SERVER_TIMEOUT:-5}" --output "$2" "$1"
+    curl --silent --show-error --fail --max-time "$timeout" --output "$2" "$1"
   fi
 }
 
 fetch_properties() {
   url=$(properties_url)
-  delay="${CONFIG_SERVER_RETRY_DELAY:-1}"
+  delay="${CONFIG_SERVER_RETRY_DELAY:-$DEFAULT_RETRY_DELAY_SECONDS}"
   attempt=1
   while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
-    if download_properties "$url" "$1" 2>/dev/null; then
+    if error=$(download_properties "$url" "$1" 2>&1); then
       log "loaded $url"
       return 0
     fi
-    log "attempt $attempt/$MAX_ATTEMPTS to reach $url failed"
+    log "attempt $attempt/$MAX_ATTEMPTS to reach $url failed: ${error:-no details}"
     [ "$attempt" -lt "$MAX_ATTEMPTS" ] && sleep "$delay"
     delay=$((delay * 2))
     attempt=$((attempt + 1))
@@ -103,7 +136,7 @@ load_remote_properties() {
     return 0
   fi
   rm -f "$raw"
-  if [ "${CONFIG_SERVER_FAIL_FAST:-false}" = "true" ]; then
+  if [ "${CONFIG_SERVER_FAIL_FAST:-true}" = "true" ]; then
     log "config server unreachable and CONFIG_SERVER_FAIL_FAST=true"
     return 1
   fi
@@ -124,34 +157,63 @@ resolve() {
   default_for "$1"
 }
 
+validate() {
+  case "$2" in
+    '')
+      log "$1 is required (environment variable or config server key)"
+      return 1
+      ;;
+    *"$NEWLINE"*)
+      log "$1 must be a single line"
+      return 1
+      ;;
+  esac
+  if ! printf '%s' "$2" | grep -Eq "$(pattern_for "$1")"; then
+    log "$1 has an invalid value"
+    return 1
+  fi
+}
+
 shell_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
+origin_of() {
+  printf '%s' "$1" | sed -nE 's#^(https?://[^/?#]+).*#\1#p'
+}
+
+hsts_header() {
+  if [ "$1" -gt 0 ]; then
+    printf 'max-age=%s; %s' "$1" "$HSTS_DIRECTIVES"
+  fi
+}
+
 write_env_file() {
   for key in $MANAGED_KEYS; do
-    printf 'export %s=%s\n' "$key" "$(shell_quote "$(resolve "$key" "$1")")"
+    value=$(resolve "$key" "$1")
+    validate "$key" "$value"
+    printf 'export %s=%s\n' "$key" "$(shell_quote "$value")"
   done > "$RUNTIME_DIR/runtime.env"
 }
 
-assert_json_safe() {
-  for key in $CLIENT_KEYS; do
-    case "$(printenv "$key")" in
-      *'"'* | *"\\"*)
-        log "$key contains characters that are not allowed in config.json"
-        return 1
-        ;;
-    esac
-  done
+derived_values() {
+  . "$1"
+  sources="$(origin_of "$KEYCLOAK_URL") $(origin_of "$API_BASE_URL")"
+  printf 'export CSP_CONNECT_SOURCES=%s\n' "$(shell_quote "${sources% }")"
+  printf 'export HSTS_HEADER=%s\n' "$(shell_quote "$(hsts_header "$HSTS_MAX_AGE")")"
+}
+
+append_derived_values() {
+  derived=$(derived_values "$RUNTIME_DIR/runtime.env")
+  printf '%s\n' "$derived" >> "$RUNTIME_DIR/runtime.env"
 }
 
 write_config_json() {
   (
     set -a
     . "$RUNTIME_DIR/runtime.env"
-    assert_json_safe
-    envsubst '${API_BASE_URL} ${KEYCLOAK_URL} ${KEYCLOAK_REALM} ${KEYCLOAK_CLIENT_ID}' \
-      < "$CONFIG_TEMPLATE" > "$RUNTIME_DIR/config.json"
+    envsubst '${API_BASE_URL} ${KEYCLOAK_URL} ${KEYCLOAK_REALM} ${KEYCLOAK_CLIENT_ID}
+      ${REDIRECT_URI} ${ENABLE_SEMANTICS}' < "$CONFIG_TEMPLATE" > "$RUNTIME_DIR/config.json"
   )
 }
 
@@ -160,6 +222,7 @@ main() {
   remote="$RUNTIME_DIR/remote.env"
   load_remote_properties "$remote"
   write_env_file "$remote"
+  append_derived_values
   write_config_json
   rm -f "$remote"
   log "runtime config written to $RUNTIME_DIR"
