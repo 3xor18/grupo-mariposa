@@ -12,10 +12,10 @@ cada equipo.
 | clients-api | 3000 | 8082 |
 | order-tracker (nginx + PWA) | 8080 | 8090 |
 | Keycloak | 8080 | 8180 |
-| Kafka (externo / interno) | 19092 / 9092 | 9092 |
+| Kafka (interno / externo) | 9092 / 19092 | 19092 |
 | Kafka UI | 8080 | 8085 |
 | MongoDB (replica set `rs0`) | 27017 | 27017 |
-| Redis | 6379 | 6379 |
+| Redis | 6379 | — (sólo red interna) |
 | Prometheus | 9090 | 9090 |
 | Grafana | 3000 | 3001 |
 | Jaeger UI / OTLP gRPC / OTLP HTTP | 16686 / 4317 / 4318 | 16686 |

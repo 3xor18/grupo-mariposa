@@ -1,0 +1,23 @@
+init_config:
+
+instances:
+  - openmetrics_endpoint: http://order-processor:8080/actuator/prometheus
+    namespace: mariposa
+    metrics:
+      - orders_.*
+      - outbox_.*
+      - resilience4j_.*
+    tags:
+      - service:order-processor
+  - openmetrics_endpoint: http://products-api:8081/metrics
+    namespace: mariposa
+    metrics:
+      - http_.*
+    tags:
+      - service:products-api
+  - openmetrics_endpoint: http://clients-api:3000/metrics
+    namespace: mariposa
+    metrics:
+      - http_.*
+    tags:
+      - service:clients-api
