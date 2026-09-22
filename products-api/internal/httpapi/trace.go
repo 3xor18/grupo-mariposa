@@ -12,16 +12,20 @@ import (
 )
 
 const (
-	traceparentHeader  = "traceparent"
-	requestIDHeader    = "X-Request-Id"
+	headerTraceparent  = "traceparent"
+	headerRequestID    = "X-Request-Id"
 	traceparentVersion = "00"
 	defaultTraceFlags  = "01"
 	traceparentSep     = "-"
 	traceIDBytes       = 16
 	spanIDBytes        = 8
+	hexCharsPerByte    = 2
 	invalidVersion     = "ff"
 	maxRequestIDLength = 128
+	zeroHexDigit       = "0"
+	versionGroup       = 1
 	traceIDGroup       = 2
+	spanGroup          = 3
 	flagsGroup         = 4
 )
 
@@ -29,21 +33,19 @@ var (
 	traceparentPattern = regexp.MustCompile(
 		`^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$`)
 	requestIDPattern = regexp.MustCompile(`^[A-Za-z0-9._:\-]+$`)
-	zeroTraceID      = strings.Repeat("0", traceIDBytes*2)
-	zeroSpanID       = strings.Repeat("0", spanIDBytes*2)
 )
 
 type requestIDKey struct{}
 
 func traceContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		traceID, flags := parseTraceparent(r.Header.Get(traceparentHeader))
-		reqID := sanitizeRequestID(r.Header.Get(requestIDHeader), traceID)
+		traceID, flags := parseTraceparent(r.Header.Get(headerTraceparent))
+		reqID := sanitizeRequestID(r.Header.Get(headerRequestID), traceID)
 		ctx := telemetry.WithTraceID(r.Context(), traceID)
 		ctx = context.WithValue(ctx, requestIDKey{}, reqID)
-		w.Header().Set(traceparentHeader, strings.Join(
+		w.Header().Set(headerTraceparent, strings.Join(
 			[]string{traceparentVersion, traceID, randomHex(spanIDBytes), flags}, traceparentSep))
-		w.Header().Set(requestIDHeader, reqID)
+		w.Header().Set(headerRequestID, reqID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -57,14 +59,17 @@ func parseTraceparent(header string) (traceID, flags string) {
 }
 
 func validTraceparent(groups []string) bool {
-	const versionGroup, spanGroup = 1, 3
 	return groups[versionGroup] != invalidVersion &&
-		groups[traceIDGroup] != zeroTraceID &&
-		groups[spanGroup] != zeroSpanID
+		groups[traceIDGroup] != zeros(traceIDBytes) &&
+		groups[spanGroup] != zeros(spanIDBytes)
+}
+
+func zeros(bytes int) string {
+	return strings.Repeat(zeroHexDigit, bytes*hexCharsPerByte)
 }
 
 func sanitizeRequestID(header, fallback string) string {
-	if len(header) == 0 || len(header) > maxRequestIDLength || !requestIDPattern.MatchString(header) {
+	if header == "" || len(header) > maxRequestIDLength || !requestIDPattern.MatchString(header) {
 		return fallback
 	}
 	return header

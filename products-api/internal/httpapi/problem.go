@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,89 +13,123 @@ import (
 )
 
 const (
-	contentTypeHeader  = "Content-Type"
-	contentTypeJSON    = "application/json"
-	contentTypeProblem = "application/problem+json"
-	retryAfterHeader   = "Retry-After"
-	authenticateHeader = "WWW-Authenticate"
-	bearerChallenge    = "Bearer"
-	problemTypeBase    = "https://contracts.grupomariposa.dev/problems/"
-	timestampLayout    = "2006-01-02T15:04:05.000Z07:00"
-	codeWordSeparator  = "_"
-	slugWordSeparator  = "-"
+	headerContentType         = "Content-Type"
+	headerCacheControl        = "Cache-Control"
+	headerRetryAfter          = "Retry-After"
+	headerAuthenticate        = "WWW-Authenticate"
+	headerAllow               = "Allow"
+	contentTypeJSON           = "application/json"
+	contentTypeProblem        = "application/problem+json"
+	cacheNoStore              = "no-store"
+	bearerChallenge           = "Bearer"
+	timestampLayout           = "2006-01-02T15:04:05.000Z07:00"
+	codeWordSeparator         = "_"
+	slugWordSeparator         = "-"
+	statusClientClosedRequest = 499
+	minRetryAfterSeconds      = 1
 )
 
-type Code string
+type code string
 
 const (
-	CodeValidation         Code = "VALIDATION_ERROR"
-	CodeProductNotFound    Code = "PRODUCT_NOT_FOUND"
-	CodeResourceNotFound   Code = "RESOURCE_NOT_FOUND"
-	CodeUnauthorized       Code = "UNAUTHORIZED"
-	CodeForbidden          Code = "FORBIDDEN"
-	CodeRateLimited        Code = "RATE_LIMITED"
-	CodeInternal           Code = "INTERNAL_ERROR"
-	CodeBadGateway         Code = "BAD_GATEWAY"
-	CodeServiceUnavailable Code = "SERVICE_UNAVAILABLE"
+	codeValidation         code = "VALIDATION_ERROR"
+	codeProductNotFound    code = "PRODUCT_NOT_FOUND"
+	codeResourceNotFound   code = "RESOURCE_NOT_FOUND"
+	codeMethodNotAllowed   code = "METHOD_NOT_ALLOWED"
+	codeUnauthorized       code = "UNAUTHORIZED"
+	codeForbidden          code = "FORBIDDEN"
+	codeRateLimited        code = "RATE_LIMITED"
+	codeClientClosed       code = "CLIENT_CLOSED_REQUEST"
+	codeInternal           code = "INTERNAL_ERROR"
+	codeBadGateway         code = "BAD_GATEWAY"
+	codeServiceUnavailable code = "SERVICE_UNAVAILABLE"
 )
 
-type problemKind struct {
+type problemKind int
+
+const (
+	kindValidation problemKind = iota
+	kindNotFound
+	kindNoRoute
+	kindMethodNotAllowed
+	kindUnauthorized
+	kindForbidden
+	kindRateLimited
+	kindClientClosed
+	kindInternal
+	kindBadGateway
+	kindUnavailable
+	kindCount
+)
+
+type definition struct {
 	status int
-	code   Code
+	code   code
 	title  string
 }
 
-var (
-	kindValidation   = problemKind{http.StatusBadRequest, CodeValidation, "Validation failed"}
-	kindNotFound     = problemKind{http.StatusNotFound, CodeProductNotFound, "Product not found"}
-	kindNoRoute      = problemKind{http.StatusNotFound, CodeResourceNotFound, "Resource not found"}
-	kindUnauthorized = problemKind{http.StatusUnauthorized, CodeUnauthorized, "Unauthorized"}
-	kindForbidden    = problemKind{http.StatusForbidden, CodeForbidden, "Forbidden"}
-	kindRateLimited  = problemKind{http.StatusTooManyRequests, CodeRateLimited, "Too many requests"}
-	kindInternal     = problemKind{http.StatusInternalServerError, CodeInternal, "Internal error"}
-	kindBadGateway   = problemKind{http.StatusBadGateway, CodeBadGateway, "Bad gateway"}
-	kindUnavailable  = problemKind{
-		http.StatusServiceUnavailable, CodeServiceUnavailable, "Service unavailable",
+func definitions() [kindCount]definition {
+	return [kindCount]definition{
+		kindValidation:       {http.StatusBadRequest, codeValidation, "Validation failed"},
+		kindNotFound:         {http.StatusNotFound, codeProductNotFound, "Product not found"},
+		kindNoRoute:          {http.StatusNotFound, codeResourceNotFound, "Resource not found"},
+		kindMethodNotAllowed: {http.StatusMethodNotAllowed, codeMethodNotAllowed, "Method not allowed"},
+		kindUnauthorized:     {http.StatusUnauthorized, codeUnauthorized, "Unauthorized"},
+		kindForbidden:        {http.StatusForbidden, codeForbidden, "Forbidden"},
+		kindRateLimited:      {http.StatusTooManyRequests, codeRateLimited, "Too many requests"},
+		kindClientClosed:     {statusClientClosedRequest, codeClientClosed, "Client closed request"},
+		kindInternal:         {http.StatusInternalServerError, codeInternal, "Internal error"},
+		kindBadGateway:       {http.StatusBadGateway, codeBadGateway, "Bad gateway"},
+		kindUnavailable: {
+			http.StatusServiceUnavailable, codeServiceUnavailable, "Service unavailable",
+		},
 	}
-)
+}
 
-type Problem struct {
+func (k problemKind) definition() definition {
+	return definitions()[k]
+}
+
+type problem struct {
 	Type      string       `json:"type"`
 	Title     string       `json:"title"`
 	Status    int          `json:"status"`
-	Code      Code         `json:"code"`
+	Code      code         `json:"code"`
 	Detail    string       `json:"detail"`
 	Instance  string       `json:"instance"`
 	TraceID   string       `json:"traceId"`
 	Timestamp string       `json:"timestamp"`
-	Errors    []FieldError `json:"errors,omitempty"`
+	Errors    []fieldError `json:"errors,omitempty"`
 }
 
-type FieldError struct {
+type fieldError struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
 }
 
 type responder struct {
-	clock  func() time.Time
-	logger *slog.Logger
+	clock    func() time.Time
+	logger   *slog.Logger
+	typeBase string
 }
 
 func (rs responder) problem(w http.ResponseWriter, r *http.Request, kind problemKind,
-	detail string, fields ...FieldError,
+	detail string, fields ...fieldError,
 ) {
-	body := Problem{
-		Type:      problemTypeBase + slug(kind.code),
-		Title:     kind.title,
-		Status:    kind.status,
-		Code:      kind.code,
+	d := kind.definition()
+	body := problem{
+		Type:      rs.typeBase + slug(d.code),
+		Title:     d.title,
+		Status:    d.status,
+		Code:      d.code,
 		Detail:    detail,
 		Instance:  r.URL.Path,
 		TraceID:   telemetry.TraceID(r.Context()),
 		Timestamp: rs.clock().UTC().Format(timestampLayout),
 		Errors:    fields,
 	}
-	rs.write(w, r, kind.status, contentTypeProblem, body)
+	w.Header().Set(headerCacheControl, cacheNoStore)
+	rs.write(w, r, d.status, contentTypeProblem, body)
 }
 
 func (rs responder) json(w http.ResponseWriter, r *http.Request, status int, body any) {
@@ -104,17 +139,18 @@ func (rs responder) json(w http.ResponseWriter, r *http.Request, status int, bod
 func (rs responder) write(w http.ResponseWriter, r *http.Request, status int,
 	contentType string, body any,
 ) {
-	w.Header().Set(contentTypeHeader, contentType)
+	w.Header().Set(headerContentType, contentType)
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(body); err != nil {
-		rs.logger.WarnContext(r.Context(), logWriteFailed, logKeyError, err)
+		rs.logger.WarnContext(r.Context(), logWriteFailed, logKeyError, err.Error())
 	}
 }
 
-func setRetryAfter(w http.ResponseWriter, seconds int) {
-	w.Header().Set(retryAfterHeader, strconv.Itoa(seconds))
+func setRetryAfter(w http.ResponseWriter, wait time.Duration) {
+	seconds := max(minRetryAfterSeconds, int(math.Ceil(wait.Seconds())))
+	w.Header().Set(headerRetryAfter, strconv.Itoa(seconds))
 }
 
-func slug(code Code) string {
-	return strings.ReplaceAll(strings.ToLower(string(code)), codeWordSeparator, slugWordSeparator)
+func slug(c code) string {
+	return strings.ReplaceAll(strings.ToLower(string(c)), codeWordSeparator, slugWordSeparator)
 }

@@ -16,6 +16,7 @@ const (
 	detailValidation   = "The request has invalid parameters."
 	detailNotFound     = "Product %s is not available in market %s."
 	detailTimeout      = "The request could not be completed in time."
+	detailClientClosed = "The client closed the request before it completed."
 	detailInternal     = "An unexpected error occurred."
 	logLookupFailed    = "product lookup failed"
 	logLookupCancelled = "product lookup cancelled"
@@ -58,11 +59,14 @@ func (h productHandler) fail(w http.ResponseWriter, r *http.Request, q catalog.Q
 		h.problem(w, r, kindValidation, detailValidation, toFieldErrors(invalid)...)
 	case errors.Is(err, product.ErrNotFound):
 		h.problem(w, r, kindNotFound, fmt.Sprintf(detailNotFound, q.ProductID, q.Market))
-	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
-		h.logger.WarnContext(r.Context(), logLookupCancelled, logKeyError, err)
+	case errors.Is(err, context.DeadlineExceeded):
+		h.logger.WarnContext(r.Context(), logLookupCancelled, logKeyError, err.Error())
 		h.problem(w, r, kindUnavailable, detailTimeout)
+	case errors.Is(err, context.Canceled):
+		h.logger.InfoContext(r.Context(), logLookupCancelled, logKeyError, err.Error())
+		h.problem(w, r, kindClientClosed, detailClientClosed)
 	default:
-		h.logger.ErrorContext(r.Context(), logLookupFailed, logKeyError, err)
+		h.logger.ErrorContext(r.Context(), logLookupFailed, logKeyError, err.Error())
 		h.problem(w, r, kindInternal, detailInternal)
 	}
 }
@@ -77,10 +81,10 @@ func toResponse(p product.Product) productResponse {
 	}
 }
 
-func toFieldErrors(invalid *catalog.ValidationError) []FieldError {
-	fields := make([]FieldError, 0, len(invalid.Violations))
+func toFieldErrors(invalid *catalog.ValidationError) []fieldError {
+	fields := make([]fieldError, 0, len(invalid.Violations))
 	for _, v := range invalid.Violations {
-		fields = append(fields, FieldError{Field: v.Field, Message: v.Message})
+		fields = append(fields, fieldError{Field: v.Field, Message: v.Message})
 	}
 	return fields
 }

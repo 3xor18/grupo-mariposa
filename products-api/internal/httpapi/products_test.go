@@ -15,8 +15,7 @@ import (
 )
 
 func TestGetProductReturnsProduct(t *testing.T) {
-	h := newHarness(t)
-	rec := h.get(t, "/products/PRD-001?market=PE")
+	rec := newHarness(t).get(t, "/products/PRD-001?market=PE")
 	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("unexpected response %d %s", rec.Code, rec.Header().Get("Content-Type"))
 	}
@@ -28,10 +27,24 @@ func TestGetProductReturnsProduct(t *testing.T) {
 		"productId": "PRD-001", "name": "Bebida 600 ml", "sku": "BEB-600-PET",
 		"status": "ACTIVE", "taxCategory": "STANDARD",
 	}
+	if len(body) != len(want) {
+		t.Fatalf("want exactly %d fields, got %v", len(want), body)
+	}
 	for key, value := range want {
 		if body[key] != value {
 			t.Fatalf("field %s: want %q, got %q", key, value, body[key])
 		}
+	}
+	if rec.Header().Get("Cache-Control") != "" {
+		t.Fatal("successful responses must not be marked no-store")
+	}
+}
+
+func TestHeadProductHasNoBody(t *testing.T) {
+	h := newHarness(t)
+	rec := h.do(t, newRequest(t, http.MethodHead, productPath))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200 for HEAD, got %d", rec.Code)
 	}
 }
 
@@ -52,9 +65,8 @@ func TestGetProductValidation(t *testing.T) {
 	h := newHarness(t)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rec := h.get(t, tc.target)
-			assertProblem(t, rec, http.StatusBadRequest, httpapi.CodeValidation)
-			problem := decodeProblem(t, rec)
+			problem := assertProblem(t, h.get(t, tc.target), http.StatusBadRequest,
+				httpapi.CodeValidation)
 			if len(problem.Errors) != len(tc.fields) {
 				t.Fatalf("want %d errors, got %+v", len(tc.fields), problem.Errors)
 			}
@@ -69,15 +81,15 @@ func TestGetProductValidation(t *testing.T) {
 
 func TestGetProductNotFound(t *testing.T) {
 	h := newHarness(t)
-	for _, target := range []string{"/products/PRD-999?market=MX", "/products/PRD-002?market=CO"} {
-		rec := h.get(t, target)
-		assertProblem(t, rec, http.StatusNotFound, httpapi.CodeProductNotFound)
-		problem := decodeProblem(t, rec)
-		if !strings.HasPrefix(target, problem.Instance) || len(problem.Errors) != 0 {
+	cases := map[string]string{
+		"/products/PRD-999?market=MX": "/products/PRD-999",
+		"/products/PRD-002?market=CO": "/products/PRD-002",
+	}
+	for target, instance := range cases {
+		problem := assertProblem(t, h.get(t, target), http.StatusNotFound,
+			httpapi.CodeProductNotFound)
+		if problem.Instance != instance || len(problem.Errors) != 0 {
 			t.Fatalf("unexpected problem %+v", problem)
-		}
-		if problem.Type != "https://contracts.grupomariposa.dev/problems/product-not-found" {
-			t.Fatalf("unexpected type %q", problem.Type)
 		}
 	}
 }
@@ -89,11 +101,11 @@ func TestGetProductMapsFinderErrors(t *testing.T) {
 		status int
 		code   httpapi.Code
 	}{
-		{name: "should_map_deadline", err: context.DeadlineExceeded,
+		{name: "should_map_deadline_to_503", err: context.DeadlineExceeded,
 			status: http.StatusServiceUnavailable, code: httpapi.CodeServiceUnavailable},
-		{name: "should_map_cancel", err: context.Canceled,
-			status: http.StatusServiceUnavailable, code: httpapi.CodeServiceUnavailable},
-		{name: "should_map_unexpected", err: errors.New("disk on fire"),
+		{name: "should_map_client_cancel_to_499", err: context.Canceled,
+			status: httpapi.StatusClientClosed, code: httpapi.CodeClientClosed},
+		{name: "should_map_unexpected_to_500", err: errors.New("disk on fire"),
 			status: http.StatusInternalServerError, code: httpapi.CodeInternal},
 	}
 	for _, tc := range cases {
@@ -107,8 +119,9 @@ func TestGetProductMapsFinderErrors(t *testing.T) {
 }
 
 func TestGetProductHonoursRequestTimeout(t *testing.T) {
+	const timeout = 20 * time.Millisecond
 	h := newHarness(t, func(d *httpapi.Dependencies) {
-		d.RequestTimeout = 20 * time.Millisecond
+		d.RequestTimeout = timeout
 		d.Products = finderFunc(func(ctx context.Context, _ catalog.Query) (product.Product, error) {
 			<-ctx.Done()
 			return product.Product{}, ctx.Err()
@@ -117,8 +130,8 @@ func TestGetProductHonoursRequestTimeout(t *testing.T) {
 	started := time.Now()
 	assertProblem(t, h.get(t, productPath), http.StatusServiceUnavailable,
 		httpapi.CodeServiceUnavailable)
-	if time.Since(started) > defaultTimeout {
-		t.Fatal("request timeout was not enforced")
+	if elapsed := time.Since(started); elapsed < timeout || elapsed > defaultTimeout {
+		t.Fatalf("request timeout not enforced, took %v", elapsed)
 	}
 }
 
@@ -127,7 +140,7 @@ func TestPanicIsRecoveredAsInternalError(t *testing.T) {
 		panic("boom")
 	}))
 	assertProblem(t, h.get(t, productPath), http.StatusInternalServerError, httpapi.CodeInternal)
-	if !strings.Contains(h.logs.String(), "panic recovered") {
+	if !strings.Contains(h.logs.String(), `"message":"panic recovered"`) {
 		t.Fatal("panic must be logged")
 	}
 	if got := h.recorder.last(); got.status != http.StatusInternalServerError {
@@ -135,24 +148,49 @@ func TestPanicIsRecoveredAsInternalError(t *testing.T) {
 	}
 }
 
-func TestUnknownRouteReturnsProblem(t *testing.T) {
+func TestPanicAfterHeaderDoesNotRewriteResponse(t *testing.T) {
+	h := newHarness(t, func(d *httpapi.Dependencies) {
+		d.MetricsHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusAccepted)
+			panic("late")
+		})
+	})
+	rec := h.get(t, "/metrics")
+	if rec.Code != http.StatusAccepted || rec.Body.Len() != 0 {
+		t.Fatalf("response must not be rewritten, got %d %q", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(h.logs.String(), "panic recovered after response started") {
+		t.Fatal("late panic must be logged")
+	}
+}
+
+func TestUnknownPathReturnsStaticNotFound(t *testing.T) {
 	h := newHarness(t)
-	assertProblem(t, h.get(t, "/nope"), http.StatusNotFound, httpapi.CodeResourceNotFound)
-	rec := h.do(t, mustRequest(t, http.MethodPost, productPath))
-	assertProblem(t, rec, http.StatusNotFound, httpapi.CodeResourceNotFound)
+	for _, target := range []string{"/nope", "/products/", "/products/PRD-001/x",
+		"/%3Cscript%3E"} {
+		problem := assertProblem(t, h.get(t, target), http.StatusNotFound,
+			httpapi.CodeResourceNotFound)
+		if strings.Contains(problem.Detail, "/") || strings.Contains(problem.Detail, "script") {
+			t.Fatalf("detail must not reflect input: %q", problem.Detail)
+		}
+	}
+}
+
+func TestWrongMethodOnKnownRouteReturns405(t *testing.T) {
+	h := newHarness(t)
+	for _, target := range []string{productPath, "/health/live", "/health/ready", "/metrics"} {
+		for _, method := range []string{http.MethodPost, http.MethodDelete, "BREW"} {
+			rec := h.do(t, newRequest(t, method, target))
+			assertProblem(t, rec, http.StatusMethodNotAllowed, httpapi.CodeMethodNotAllowed)
+			if rec.Header().Get("Allow") != "GET, HEAD" {
+				t.Fatalf("%s %s: unexpected Allow %q", method, target, rec.Header().Get("Allow"))
+			}
+		}
+	}
 }
 
 func withFinder(
 	f func(context.Context, catalog.Query) (product.Product, error),
 ) func(*httpapi.Dependencies) {
 	return func(d *httpapi.Dependencies) { d.Products = finderFunc(f) }
-}
-
-func mustRequest(t *testing.T, method, target string) *http.Request {
-	t.Helper()
-	req, err := http.NewRequestWithContext(context.Background(), method, target, nil)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
-	return req
 }

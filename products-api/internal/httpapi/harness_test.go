@@ -4,18 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/grupomariposa/platform/products-api/internal/catalog"
-	"github.com/grupomariposa/platform/products-api/internal/fault"
 	"github.com/grupomariposa/platform/products-api/internal/httpapi"
 	"github.com/grupomariposa/platform/products-api/internal/product"
+	"github.com/grupomariposa/platform/products-api/internal/ratelimit"
 	"github.com/grupomariposa/platform/products-api/internal/storage/memory"
 	"github.com/grupomariposa/platform/products-api/internal/telemetry"
 )
@@ -23,10 +23,13 @@ import (
 const (
 	productPath      = "/products/PRD-001?market=MX"
 	fixedTimestamp   = "2026-09-22T10:00:00.000Z"
-	generousRPS      = 1e6
+	problemTypeBase  = "https://contracts.grupomariposa.dev/problems/"
+	generousRate     = 1e6
 	generousBurst    = 1e6
+	limiterCapacity  = 100
 	defaultTimeout   = time.Second
 	defaultFaultHold = 10 * time.Millisecond
+	testRemoteAddr   = "192.0.2.10:4321"
 )
 
 var fixedTime = time.Date(2026, 9, 22, 10, 0, 0, 0, time.UTC)
@@ -63,12 +66,6 @@ func (r *recorder) last() observation {
 	return r.seen[len(r.seen)-1]
 }
 
-type harness struct {
-	handler  http.Handler
-	logs     *syncBuffer
-	recorder *recorder
-}
-
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -86,18 +83,29 @@ func (s *syncBuffer) String() string {
 	return s.buf.String()
 }
 
-func defaultDependencies(logs io.Writer, rec *recorder) httpapi.Dependencies {
+type harness struct {
+	handler  http.Handler
+	logs     *syncBuffer
+	recorder *recorder
+}
+
+func generousLimiter() *ratelimit.Keyed {
+	return ratelimit.NewKeyed(generousRate, generousBurst, limiterCapacity)
+}
+
+func defaultDependencies(logs *syncBuffer, rec *recorder) httpapi.Dependencies {
 	return httpapi.Dependencies{
-		Products:       catalog.NewService(memory.NewSeededRepository()),
-		Faults:         fault.NewInjector(nil),
-		FaultHold:      defaultFaultHold,
-		RateLimit:      httpapi.RateLimit{RPS: generousRPS, Burst: generousBurst},
-		RequestTimeout: defaultTimeout,
-		Readiness:      readiness{ready: true},
-		Recorder:       rec,
-		MetricsHandler: telemetry.NewMetrics().Handler(),
-		Logger:         telemetry.NewLogger(logs, slog.LevelDebug),
-		Clock:          func() time.Time { return fixedTime },
+		Products:         catalog.NewService(memory.NewSeededRepository()),
+		FaultHold:        defaultFaultHold,
+		ClientLimiter:    generousLimiter(),
+		PrincipalLimiter: generousLimiter(),
+		RequestTimeout:   defaultTimeout,
+		Readiness:        readiness{ready: true},
+		Recorder:         rec,
+		MetricsHandler:   telemetry.NewMetrics().Handler(),
+		Logger:           telemetry.NewLogger(logs, slog.LevelDebug),
+		Clock:            func() time.Time { return fixedTime },
+		ProblemTypeBase:  problemTypeBase,
 	}
 }
 
@@ -118,7 +126,9 @@ func (h harness) get(t *testing.T, target string, headers ...string) *httptest.R
 
 func newRequest(t *testing.T, method, target string) *http.Request {
 	t.Helper()
-	return httptest.NewRequestWithContext(t.Context(), method, target, nil)
+	req := httptest.NewRequestWithContext(t.Context(), method, target, nil)
+	req.RemoteAddr = testRemoteAddr
+	return req
 }
 
 func (h harness) do(t *testing.T, req *http.Request, headers ...string) *httptest.ResponseRecorder {
@@ -143,16 +153,24 @@ func decodeProblem(t *testing.T, rec *httptest.ResponseRecorder) httpapi.Problem
 	return problem
 }
 
-func assertProblem(t *testing.T, rec *httptest.ResponseRecorder, status int, code httpapi.Code) {
+func assertProblem(t *testing.T, rec *httptest.ResponseRecorder, status int,
+	code httpapi.Code,
+) httpapi.Problem {
 	t.Helper()
 	if rec.Code != status {
 		t.Fatalf("want status %d, got %d (%s)", status, rec.Code, rec.Body.String())
 	}
 	problem := decodeProblem(t, rec)
-	if problem.Status != status || problem.Code != code || problem.Timestamp != fixedTimestamp {
+	wantType := problemTypeBase + strings.ReplaceAll(strings.ToLower(string(code)), "_", "-")
+	if problem.Status != status || problem.Code != code || problem.Timestamp != fixedTimestamp ||
+		problem.Type != wantType {
 		t.Fatalf("unexpected problem %+v", problem)
 	}
 	if problem.TraceID == "" || problem.Title == "" || problem.Detail == "" {
 		t.Fatalf("incomplete problem %+v", problem)
 	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("problems must not be cached")
+	}
+	return problem
 }

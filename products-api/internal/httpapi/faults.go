@@ -9,25 +9,32 @@ import (
 )
 
 const (
-	detailInjected     = "Injected fault for resilience testing."
-	logFaultInjected   = "fault injected"
-	logKeyFault        = "fault"
-	faultRetryAfterSec = 1
+	detailInjected   = "Injected fault for resilience testing."
+	logFaultInjected = "fault injected"
+	logKeyFault      = "fault"
+	faultRetryAfter  = time.Second
 )
 
 type FaultInjector interface {
 	Next(id string) (fault.Kind, bool)
 }
 
-var faultProblems = map[fault.Kind]problemKind{
-	fault.KindBadRequest:         kindValidation,
-	fault.KindTooManyRequests:    kindRateLimited,
-	fault.KindInternalError:      kindInternal,
-	fault.KindBadGateway:         kindBadGateway,
-	fault.KindServiceUnavailable: kindUnavailable,
+func faultProblem(kind fault.Kind) problemKind {
+	switch kind {
+	case fault.KindBadRequest:
+		return kindValidation
+	case fault.KindTooManyRequests:
+		return kindRateLimited
+	case fault.KindBadGateway:
+		return kindBadGateway
+	case fault.KindServiceUnavailable:
+		return kindUnavailable
+	default:
+		return kindInternal
+	}
 }
 
-func (rs responder) injectFault(injector FaultInjector, hold time.Duration) Middleware {
+func (rs responder) injectFault(injector FaultInjector, hold time.Duration) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			kind, ok := injector.Next(r.PathValue(pathProductID))
@@ -41,14 +48,14 @@ func (rs responder) injectFault(injector FaultInjector, hold time.Duration) Midd
 				next.ServeHTTP(w, r)
 				return
 			}
-			rs.failWith(w, r, faultProblems[kind])
+			rs.failWith(w, r, faultProblem(kind))
 		})
 	}
 }
 
 func (rs responder) failWith(w http.ResponseWriter, r *http.Request, kind problemKind) {
-	if kind.status == http.StatusTooManyRequests {
-		setRetryAfter(w, faultRetryAfterSec)
+	if kind == kindRateLimited {
+		setRetryAfter(w, faultRetryAfter)
 	}
 	rs.problem(w, r, kind, detailInjected)
 }
@@ -62,7 +69,7 @@ func wait(ctx context.Context, hold time.Duration) {
 	}
 }
 
-func deadline(timeout time.Duration) Middleware {
+func deadline(timeout time.Duration) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), timeout)

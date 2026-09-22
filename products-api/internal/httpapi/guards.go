@@ -3,44 +3,46 @@ package httpapi
 import (
 	"context"
 	"errors"
-	"math"
+	"net"
 	"net/http"
 	"strings"
-
-	"golang.org/x/time/rate"
+	"time"
 
 	"github.com/grupomariposa/platform/products-api/internal/auth"
 )
 
 const (
-	authorizationHeader = "Authorization"
+	headerAuthorization = "Authorization"
 	bearerPrefix        = "bearer "
 	detailUnauthorized  = "A valid bearer token is required."
 	detailForbidden     = "The token does not grant access to this resource."
+	detailAuthDown      = "Authentication is temporarily unavailable."
 	detailRateLimited   = "Request rate limit exceeded."
 	logAuthRejected     = "authentication rejected"
+	logAuthUnavailable  = "authentication unavailable"
 	logAuthFailed       = "authentication failed"
-	minRetryAfterSecond = 1
 )
 
 type TokenVerifier interface {
-	Verify(ctx context.Context, token string) error
+	Verify(ctx context.Context, token string) (auth.Principal, error)
 }
 
-type RateLimit struct {
-	RPS   float64
-	Burst int
+type KeyedLimiter interface {
+	Delay(key string) time.Duration
 }
 
-func (rs responder) authenticate(verifier TokenVerifier) Middleware {
+type principalKey struct{}
+
+func (rs responder) authenticate(verifier TokenVerifier) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			err := verifier.Verify(r.Context(), bearerToken(r))
-			if err == nil {
-				next.ServeHTTP(w, r)
+			principal, err := verifier.Verify(r.Context(), bearerToken(r))
+			if err != nil {
+				rs.rejectAuth(w, r, err)
 				return
 			}
-			rs.rejectAuth(w, r, err)
+			ctx := context.WithValue(r.Context(), principalKey{}, principal.ID)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
@@ -48,20 +50,23 @@ func (rs responder) authenticate(verifier TokenVerifier) Middleware {
 func (rs responder) rejectAuth(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, auth.ErrForbidden):
-		rs.logger.WarnContext(r.Context(), logAuthRejected, logKeyError, err)
+		rs.logger.WarnContext(r.Context(), logAuthRejected, logKeyError, err.Error())
 		rs.problem(w, r, kindForbidden, detailForbidden)
 	case errors.Is(err, auth.ErrUnauthenticated):
-		rs.logger.WarnContext(r.Context(), logAuthRejected, logKeyError, err)
-		w.Header().Set(authenticateHeader, bearerChallenge)
+		rs.logger.WarnContext(r.Context(), logAuthRejected, logKeyError, err.Error())
+		w.Header().Set(headerAuthenticate, bearerChallenge)
 		rs.problem(w, r, kindUnauthorized, detailUnauthorized)
+	case errors.Is(err, auth.ErrUnavailable):
+		rs.logger.ErrorContext(r.Context(), logAuthUnavailable, logKeyError, err.Error())
+		rs.problem(w, r, kindUnavailable, detailAuthDown)
 	default:
-		rs.logger.ErrorContext(r.Context(), logAuthFailed, logKeyError, err)
+		rs.logger.ErrorContext(r.Context(), logAuthFailed, logKeyError, err.Error())
 		rs.problem(w, r, kindInternal, detailInternal)
 	}
 }
 
 func bearerToken(r *http.Request) string {
-	header := r.Header.Get(authorizationHeader)
+	header := r.Header.Get(headerAuthorization)
 	prefixLength := len(bearerPrefix)
 	if len(header) < prefixLength || !strings.EqualFold(header[:prefixLength], bearerPrefix) {
 		return ""
@@ -69,21 +74,28 @@ func bearerToken(r *http.Request) string {
 	return strings.TrimSpace(header[prefixLength:])
 }
 
-func (rs responder) rateLimit(limit RateLimit) Middleware {
-	limiter := rate.NewLimiter(rate.Limit(limit.RPS), limit.Burst)
-	retryAfter := retryAfterSeconds(limit.RPS)
+func (rs responder) limitBy(limiter KeyedLimiter, keyOf func(*http.Request) string) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if limiter.Allow() {
-				next.ServeHTTP(w, r)
+			if wait := limiter.Delay(keyOf(r)); wait > 0 {
+				setRetryAfter(w, wait)
+				rs.problem(w, r, kindRateLimited, detailRateLimited)
 				return
 			}
-			setRetryAfter(w, retryAfter)
-			rs.problem(w, r, kindRateLimited, detailRateLimited)
+			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-func retryAfterSeconds(rps float64) int {
-	return max(minRetryAfterSecond, int(math.Ceil(1/rps)))
+func clientAddress(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+func principalOf(r *http.Request) string {
+	id, _ := r.Context().Value(principalKey{}).(string)
+	return id
 }
