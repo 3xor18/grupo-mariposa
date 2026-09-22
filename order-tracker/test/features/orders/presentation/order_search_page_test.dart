@@ -62,15 +62,20 @@ void main() {
     await search(tester, 'ord-mx-000147');
     await tester.pumpAndSettle();
     expect(find.text(approvedOrderId), findsOneWidget);
-    expect(find.bySemanticsLabel('Estado: Aprobado'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(AppStrings.statusSemantics(AppStrings.statusApproved)),
+      findsOneWidget,
+    );
     await tester.ensureVisible(find.byKey(OrdersKeys.grandTotal));
     await tester.pumpAndSettle();
-    expect(find.bySemanticsLabel(r'Total del pedido: $2,100.11'), findsOneWidget);
+    expect(find.bySemanticsLabel(AppStrings.grandTotalSemantics(r'$2,100.11')), findsOneWidget);
     expect(find.text(r'$2,100.11'), findsOneWidget);
     expect(find.text('Bebida 600 ml'), findsOneWidget);
     expect(find.text('PRD-008'), findsOneWidget);
     expect(find.textContaining('24 ×'), findsOneWidget);
     expect(find.text('Distribuidora Central · CLI-99821'), findsOneWidget);
+    expect(find.text(AppStrings.marketMx), findsOneWidget);
+    expect(find.text(AppStrings.eventVersion), findsOneWidget);
     expect(find.byKey(OrdersKeys.rejectionCard), findsNothing);
     verify(() => repository.findById(approvedOrderId)).called(1);
   });
@@ -80,7 +85,10 @@ void main() {
     await pumpPage(tester);
     await search(tester, rejectedOrderId);
     await tester.pumpAndSettle();
-    expect(find.bySemanticsLabel('Estado: Rechazado'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(AppStrings.statusSemantics(AppStrings.statusRejected)),
+      findsOneWidget,
+    );
     expect(find.byKey(OrdersKeys.rejectionCard), findsOneWidget);
     expect(find.text('CLIENT_BLOCKED'), findsWidgets);
     expect(find.text('Producto descontinuado'), findsOneWidget);

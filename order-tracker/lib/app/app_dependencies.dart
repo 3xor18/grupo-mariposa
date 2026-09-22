@@ -4,6 +4,7 @@ import 'package:order_tracker/core/format/app_formatters.dart';
 import 'package:order_tracker/core/http/api_client.dart';
 import 'package:order_tracker/core/http/authenticated_http_client.dart';
 import 'package:order_tracker/core/platform/browser_location.dart';
+import 'package:order_tracker/core/platform/key_value_store.dart';
 import 'package:order_tracker/features/auth/data/auth_repository_impl.dart';
 import 'package:order_tracker/features/auth/data/oidc_client.dart';
 import 'package:order_tracker/features/auth/data/oidc_endpoints.dart';
@@ -19,6 +20,7 @@ final class AppDependencies {
     required this.searchOrder,
     required this.listOrders,
     required this.formatters,
+    this._onDispose,
   });
 
   factory AppDependencies.create({
@@ -31,6 +33,7 @@ final class AppDependencies {
     final authRepository = AuthRepositoryImpl(
       oidcClient: OidcClient(httpClient, endpoints),
       endpoints: endpoints,
+      redirectUri: config.redirect,
       store: store,
       location: location,
     );
@@ -44,6 +47,10 @@ final class AppDependencies {
       searchOrder: SearchOrder(orderRepository),
       listOrders: ListOrders(orderRepository),
       formatters: AppFormatters(),
+      onDispose: () async {
+        httpClient.close();
+        await authRepository.dispose();
+      },
     );
   }
 
@@ -51,4 +58,7 @@ final class AppDependencies {
   final SearchOrder searchOrder;
   final ListOrders listOrders;
   final AppFormatters formatters;
+  final Future<void> Function()? _onDispose;
+
+  Future<void> dispose() async => _onDispose?.call();
 }

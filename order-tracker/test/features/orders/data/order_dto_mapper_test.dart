@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:order_tracker/core/json/json_map.dart';
+import 'package:order_tracker/core/money/money.dart';
 import 'package:order_tracker/features/orders/data/dto/order_dto.dart';
 import 'package:order_tracker/features/orders/data/dto/order_page_dto.dart';
 import 'package:order_tracker/features/orders/data/mappers/order_codes.dart';
@@ -42,6 +43,21 @@ void main() {
       expect(OrderDto.fromJson(JsonMap(json)).toDomain().status, OrderStatus.unknown);
     });
 
+    test('should parse amounts into money of the order currency', () {
+      final order = OrderDto.fromJson(JsonMap(approvedOrderJson())).toDomain();
+      expect(order.totals.grandTotal, const Money(minorUnits: 210011, currency: 'MXN'));
+      expect(order.lines.last.unitPrice.minorUnits, 8200);
+      expect(order.eventVersion, 1);
+      expect(order.market, Market.mx);
+    });
+
+    test('should reject amounts with more than two decimals when mapping', () {
+      final json = approvedOrderJson();
+      (json['totals']! as Map<String, Object?>)['grandTotal'] = 2100.111;
+      final dto = OrderDto.fromJson(JsonMap(json));
+      expect(dto.toDomain, throwsFormatException);
+    });
+
     test('should reject documents missing required members', () {
       final missingTotals = approvedOrderJson()..remove('totals');
       final wrongType = approvedOrderJson()..['eventVersion'] = 'one';
@@ -77,7 +93,9 @@ void main() {
       expect(OrderStatusCodes.toCode(OrderStatus.rejected), 'REJECTED');
       expect(OrderStatusCodes.toCode(OrderStatus.technicalFailure), 'TECHNICAL_FAILURE');
       expect(OrderStatusCodes.toCode(OrderStatus.unknown), isNull);
-      expect(Market.values.map(MarketCodes.toCode), ['MX', 'CO', 'PE']);
+      expect(Market.values.map(MarketCodes.toCode), ['MX', 'CO', 'PE', null]);
+      expect(MarketCodes.toDomain('BR'), Market.unknown);
+      expect(MarketCodes.toDomain('PE'), Market.pe);
     });
   });
 }

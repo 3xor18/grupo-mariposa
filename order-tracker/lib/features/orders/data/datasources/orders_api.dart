@@ -51,7 +51,7 @@ final class OrdersApi {
     try {
       return Result.ok(fromJson(JsonMap.parse(body)));
     } on FormatException {
-      return const Result.err(UnexpectedResponseFailure());
+      return Result<T>.err(const UnexpectedResponseFailure());
     }
   }
 }

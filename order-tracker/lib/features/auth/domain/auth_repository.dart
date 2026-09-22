@@ -1,10 +1,10 @@
 import 'package:order_tracker/core/result/result.dart';
-import 'package:order_tracker/features/auth/domain/auth_user.dart';
+import 'package:order_tracker/features/auth/domain/session_restoration.dart';
 
 abstract interface class AuthRepository {
   Stream<void> get sessionExpired;
 
-  Future<Result<AuthUser?>> restoreSession();
+  Future<Result<SessionRestoration>> restoreSession();
 
   Future<void> login();
 

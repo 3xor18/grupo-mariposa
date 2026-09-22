@@ -1,10 +1,11 @@
 import 'package:intl/intl.dart';
 import 'package:order_tracker/core/format/app_locale.dart';
 import 'package:order_tracker/core/format/money_formatter.dart';
+import 'package:order_tracker/core/money/money.dart';
 
 final class AppFormatters {
   AppFormatters()
-    : money = MoneyFormatter(),
+    : _money = MoneyFormatter(),
       _dateTime = DateFormat.yMMMd(AppLocale.languageCode).add_Hm(),
       _percent = NumberFormat.decimalPercentPattern(
         locale: AppLocale.languageCode,
@@ -13,11 +14,11 @@ final class AppFormatters {
 
   static const _percentDigits = 1;
 
-  final MoneyFormatter money;
+  final MoneyFormatter _money;
   final DateFormat _dateTime;
   final NumberFormat _percent;
 
-  String currency(double amount, String currency) => money.format(amount, currency);
+  String money(Money value) => _money.format(value);
 
   String dateTime(DateTime value) => _dateTime.format(value.toLocal());
 

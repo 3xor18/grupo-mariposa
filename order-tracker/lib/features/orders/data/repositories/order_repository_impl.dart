@@ -1,9 +1,10 @@
+import 'package:order_tracker/core/error/app_failure.dart';
 import 'package:order_tracker/core/result/result.dart';
 import 'package:order_tracker/features/orders/data/datasources/orders_api.dart';
 import 'package:order_tracker/features/orders/data/mappers/order_codes.dart';
 import 'package:order_tracker/features/orders/data/mappers/order_mapper.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
-import 'package:order_tracker/features/orders/domain/entities/order_summary.dart';
+import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
 import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart';
 import 'package:order_tracker/features/orders/domain/repositories/order_repository.dart';
 
@@ -14,8 +15,7 @@ final class OrderRepositoryImpl implements OrderRepository {
 
   @override
   Future<Result<Order>> findById(String orderId) async {
-    final result = await _api.getOrder(orderId);
-    return result.map((dto) => dto.toDomain());
+    return _toDomain(await _api.getOrder(orderId), (dto) => dto.toDomain());
   }
 
   @override
@@ -24,14 +24,26 @@ final class OrderRepositoryImpl implements OrderRepository {
     required int page,
     required int size,
   }) async {
-    final status = filter.status;
-    final market = filter.market;
     final result = await _api.listOrders(
       page: page,
       size: size,
-      status: status == null ? null : OrderStatusCodes.toCode(status),
-      market: market == null ? null : MarketCodes.toCode(market),
+      status: switch (filter.status) {
+        final status? => OrderStatusCodes.toCode(status),
+        null => null,
+      },
+      market: switch (filter.market) {
+        final market? => MarketCodes.toCode(market),
+        null => null,
+      },
     );
-    return result.map((dto) => dto.toDomain());
+    return _toDomain(result, (dto) => dto.toDomain());
+  }
+
+  Result<T> _toDomain<D, T>(Result<D> result, T Function(D dto) map) {
+    try {
+      return result.map(map);
+    } on FormatException {
+      return Result<T>.err(const UnexpectedResponseFailure());
+    }
   }
 }

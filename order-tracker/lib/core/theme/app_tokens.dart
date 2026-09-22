@@ -9,6 +9,10 @@ abstract final class AppSpacing {
   static const xl = 32.0;
 }
 
+abstract final class AppInsets {
+  static const pageHeader = EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0);
+}
+
 abstract final class AppBreakpoints {
   static const medium = 600.0;
   static const expanded = 840.0;
@@ -37,6 +41,7 @@ abstract final class AppFlex {
 
 abstract final class AppColors {
   static const seed = Color(0xFF5B3FA8);
+  static const splashBackground = Color(0xFFFFFBFF);
   static const approvedSeed = Color(0xFF2E7D32);
   static const rejectedSeed = Color(0xFFC62828);
   static const failureSeed = Color(0xFFEF6C00);

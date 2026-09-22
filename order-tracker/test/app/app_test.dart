@@ -8,14 +8,18 @@ import 'package:mocktail/mocktail.dart';
 import 'package:order_tracker/app/app_dependencies.dart';
 import 'package:order_tracker/app/bootstrap.dart';
 import 'package:order_tracker/app/config_error_app.dart';
-import 'package:order_tracker/app/home_shell.dart';
 import 'package:order_tracker/app/order_tracker_app.dart';
+import 'package:order_tracker/app/shell_keys.dart';
+import 'package:order_tracker/app/silent_sign_in_view.dart';
 import 'package:order_tracker/core/config/app_config.dart';
 import 'package:order_tracker/core/format/app_formatters.dart';
 import 'package:order_tracker/core/l10n/app_strings.dart';
 import 'package:order_tracker/core/result/result.dart';
 import 'package:order_tracker/features/auth/data/auth_repository_impl.dart';
+import 'package:order_tracker/features/auth/data/auth_storage_keys.dart';
 import 'package:order_tracker/features/auth/domain/auth_user.dart';
+import 'package:order_tracker/features/auth/domain/session_restoration.dart';
+import 'package:order_tracker/features/auth/presentation/auth_cubit.dart';
 import 'package:order_tracker/features/auth/presentation/auth_keys.dart';
 import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart';
 import 'package:order_tracker/features/orders/domain/usecases/list_orders.dart';
@@ -53,16 +57,23 @@ void main() {
 
   tearDown(() => expirations.close());
 
+  var disposals = 0;
+
   Future<void> pumpApp(WidgetTester tester, {required Size size, AuthUser? user}) async {
-    when(authRepository.restoreSession).thenAnswer((_) async => Ok(user));
+    final restoration = user == null ? const SignedOut() : SignedIn(user);
+    when(authRepository.restoreSession).thenAnswer((_) async => Ok(restoration));
     await tester.useSize(size);
+    final authCubit = AuthCubit(authRepository);
+    await authCubit.initialize();
     await tester.pumpWidget(
       OrderTrackerApp(
+        authCubit: authCubit,
         dependencies: AppDependencies(
           authRepository: authRepository,
           searchOrder: SearchOrder(orderRepository),
           listOrders: ListOrders(orderRepository),
           formatters: AppFormatters(),
+          onDispose: () async => disposals++,
         ),
       ),
     );
@@ -75,6 +86,36 @@ void main() {
     testWidgets('should ask for login without a session', (tester) async {
       await pumpApp(tester, size: phoneSize);
       expect(find.byKey(AuthKeys.loginPage), findsOneWidget);
+    });
+
+    testWidgets('should release its dependencies when removed', (tester) async {
+      await pumpApp(tester, size: phoneSize);
+      final before = disposals;
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(disposals, before + 1);
+    });
+
+    testWidgets('should load the orders list only when its tab is opened', (tester) async {
+      await pumpApp(tester, size: phoneSize, user: user);
+      verifyNever(
+        () => orderRepository.list(
+          filter: any(named: 'filter'),
+          page: any(named: 'page'),
+          size: any(named: 'size'),
+        ),
+      );
+      await tester.tap(find.text(AppStrings.navOrders).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(AppStrings.search).last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(OrdersKeys.searchField), findsOneWidget);
+      verify(
+        () => orderRepository.list(
+          filter: any(named: 'filter'),
+          page: any(named: 'page'),
+          size: any(named: 'size'),
+        ),
+      ).called(1);
     });
 
     testWidgets('should use a bottom navigation bar on phones', (tester) async {
@@ -100,20 +141,33 @@ void main() {
 
   group('AppBootstrap', () {
     late MockHttpClient httpClient;
-    final location = FakeBrowserLocation(Uri.parse('http://localhost:8090/'));
+    late FakeBrowserLocation location;
+    late InMemoryKeyValueStore store;
+    late int semanticsRequests;
 
-    setUp(() => httpClient = MockHttpClient());
+    setUp(() {
+      httpClient = MockHttpClient();
+      location = FakeBrowserLocation(Uri.parse('http://localhost:8090/'));
+      store = InMemoryKeyValueStore();
+      semanticsRequests = 0;
+    });
+
+    void returnFromFailedSilentSignIn() {
+      store.write(AuthStorageKeys.mode, AuthRedirectModes.silent);
+      location.current = Uri.parse('http://localhost:8090/?error=login_required&state=s');
+    }
 
     AppBootstrap bootstrap() {
       return AppBootstrap(
         location: location,
-        store: InMemoryKeyValueStore(),
+        store: store,
         httpClient: httpClient,
+        enableSemantics: () => semanticsRequests++,
         clock: () => DateTime.utc(2026),
       );
     }
 
-    test('should build the app from the runtime configuration', () async {
+    void respondConfig({required bool enableSemantics}) {
       when(() => httpClient.get(any())).thenAnswer(
         (_) async => http.Response(
           jsonEncode({
@@ -121,14 +175,42 @@ void main() {
             'keycloakUrl': 'http://localhost:8180',
             'realm': 'mariposa',
             'clientId': 'order-tracker',
+            'redirectUri': 'http://localhost:8090/',
+            'enableSemantics': enableSemantics,
           }),
           200,
         ),
       );
+    }
+
+    test('should start a silent sign in before building the app', () async {
+      respondConfig(enableSemantics: false);
+      final app = await bootstrap().createApp();
+      expect(app, isA<SilentSignInView>());
+      expect(location.assigned.single.queryParameters['prompt'], 'none');
+    });
+
+    testWidgets('should render the silent sign in splash without navigation', (tester) async {
+      await tester.pumpWidget(const SilentSignInView());
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(Navigator), findsNothing);
+    });
+
+    test('should build the app and enable semantics when configured', () async {
+      respondConfig(enableSemantics: true);
+      returnFromFailedSilentSignIn();
       final app = await bootstrap().createApp();
       expect(app, isA<OrderTrackerApp>());
       final dependencies = (app as OrderTrackerApp).dependencies;
       expect(dependencies.authRepository, isA<AuthRepositoryImpl>());
+      expect(semanticsRequests, 1);
+    });
+
+    test('should keep semantics off unless configured', () async {
+      respondConfig(enableSemantics: false);
+      returnFromFailedSilentSignIn();
+      await bootstrap().createApp();
+      expect(semanticsRequests, 0);
     });
 
     testWidgets('should explain when the runtime configuration is missing', (tester) async {
@@ -140,19 +222,33 @@ void main() {
     });
   });
 
-  test('should wire the dependency graph from the configuration', () {
+  test('should wire the dependency graph and release it on dispose', () async {
+    final httpClient = MockHttpClient();
     final dependencies = AppDependencies.create(
       config: const AppConfig(
         apiBaseUrl: '/api',
         keycloakUrl: 'http://localhost:8180',
         realm: 'mariposa',
         clientId: 'order-tracker',
+        redirectUri: 'http://localhost:8090/',
       ),
       location: FakeBrowserLocation(Uri.parse('http://localhost:8090/')),
       store: InMemoryKeyValueStore(),
-      httpClient: MockHttpClient(),
+      httpClient: httpClient,
     );
     expect(dependencies.searchOrder, isA<SearchOrder>());
     expect(dependencies.listOrders, isA<ListOrders>());
+    await dependencies.dispose();
+    verify(httpClient.close).called(1);
+  });
+
+  test('should tolerate disposing dependencies without resources', () async {
+    final dependencies = AppDependencies(
+      authRepository: MockAuthRepository(),
+      searchOrder: SearchOrder(MockOrderRepository()),
+      listOrders: ListOrders(MockOrderRepository()),
+      formatters: AppFormatters(),
+    );
+    await expectLater(dependencies.dispose(), completes);
   });
 }

@@ -39,6 +39,20 @@ void main() {
       expect(() => json.requireDouble('text'), throwsFormatException);
     });
 
+    test('should read numbers as decimal text', () {
+      expect(json.requireDecimal('decimal'), '2.5');
+      expect(json.requireDecimal('integer'), '3');
+      expect(json.optionalDecimal('nothing'), isNull);
+      expect(() => json.requireDecimal('missing'), throwsFormatException);
+      expect(() => json.requireDecimal('text'), throwsFormatException);
+    });
+
+    test('should read booleans', () {
+      expect(const JsonMap({'flag': true}).optionalBool('flag'), isTrue);
+      expect(json.optionalBool('missing'), isNull);
+      expect(() => json.optionalBool('text'), throwsFormatException);
+    });
+
     test('should read dates and reject invalid dates', () {
       expect(json.requireDateTime('date'), DateTime.utc(2026, 9, 18, 15, 42, 12));
       expect(json.optionalDateTime('nothing'), isNull);

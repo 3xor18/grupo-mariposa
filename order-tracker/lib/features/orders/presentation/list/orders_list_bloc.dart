@@ -1,7 +1,7 @@
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:order_tracker/core/result/result.dart';
-import 'package:order_tracker/features/orders/domain/entities/order_summary.dart';
+import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
 import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart';
 import 'package:order_tracker/features/orders/domain/usecases/list_orders.dart';
 import 'package:order_tracker/features/orders/presentation/list/orders_list_event.dart';
@@ -21,14 +21,14 @@ class OrdersListBloc extends Bloc<OrdersListEvent, OrdersListState> {
     emit(_startingState(filter, keepsItems: keepsItems));
     final result = await _listOrders(filter: filter, page: OrdersFilter.firstPage);
     emit(switch (result) {
-      Ok<OrderPage>(:final value) => state.withPage(value, append: false),
+      Ok<OrderPage>(:final value) => state.withFirstPage(value),
       Err<OrderPage>(:final failure) when keepsItems => state.copyWith(
         isRefreshing: false,
-        refreshFailure: failure,
+        refreshFailure: () => failure,
       ),
       Err<OrderPage>(:final failure) => state.copyWith(
         status: OrdersListStatus.failure,
-        failure: failure,
+        failure: () => failure,
       ),
     });
   }
@@ -41,16 +41,16 @@ class OrdersListBloc extends Bloc<OrdersListEvent, OrdersListState> {
       return;
     }
     final requested = state;
-    emit(requested.copyWith(isLoadingMore: true));
+    emit(requested.copyWith(isLoadingMore: true, nextPageFailure: OrdersListState.clearFailure));
     final result = await _listOrders(filter: requested.filter, page: requested.page + 1);
     if (state.generation != requested.generation) {
       return;
     }
     emit(switch (result) {
-      Ok<OrderPage>(:final value) => state.withPage(value, append: true),
+      Ok<OrderPage>(:final value) => state.withNextPage(value),
       Err<OrderPage>(:final failure) => state.copyWith(
         isLoadingMore: false,
-        nextPageFailure: failure,
+        nextPageFailure: () => failure,
       ),
     });
   }

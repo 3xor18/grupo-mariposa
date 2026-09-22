@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +16,8 @@ void main() {
     keycloakUrl: 'http://localhost:8180/',
     realm: 'mariposa',
     clientId: 'order-tracker',
+    redirectUri: 'http://localhost:8090/',
+    enableSemantics: true,
   );
   final appUri = Uri.parse('http://localhost:8090/?code=abc');
 
@@ -28,9 +31,25 @@ void main() {
           'keycloakUrl': 'http://localhost:8180/',
           'realm': 'mariposa',
           'clientId': 'order-tracker',
+          'redirectUri': 'http://localhost:8090/',
+          'enableSemantics': true,
         }),
       );
       expect(parsed, config);
+    });
+
+    test('should keep semantics disabled unless configured', () {
+      final parsed = AppConfig.fromJson(
+        const JsonMap({
+          'apiBaseUrl': '/api',
+          'keycloakUrl': 'http://localhost:8180',
+          'realm': 'mariposa',
+          'clientId': 'order-tracker',
+          'redirectUri': 'http://localhost:8090/',
+        }),
+      );
+      expect(parsed.enableSemantics, isFalse);
+      expect(parsed.redirect, Uri.parse('http://localhost:8090/'));
     });
 
     test('should derive the issuer and api base uris', () {
@@ -60,6 +79,8 @@ void main() {
             'keycloakUrl': 'http://localhost:8180/',
             'realm': 'mariposa',
             'clientId': 'order-tracker',
+            'redirectUri': 'http://localhost:8090/',
+            'enableSemantics': true,
           }),
           200,
         ),
@@ -81,6 +102,15 @@ void main() {
       respond(http.Response('{"realm": 1}', 200));
       await expectLater(
         loader.load(appUri: appUri, cacheBuster: '1'),
+        throwsA(isA<ConfigLoadException>()),
+      );
+    });
+
+    test('should fail when the configuration does not arrive in time', () async {
+      final slowLoader = ConfigLoader(httpClient, timeout: Duration.zero);
+      when(() => httpClient.get(any())).thenAnswer((_) => Completer<http.Response>().future);
+      await expectLater(
+        slowLoader.load(appUri: appUri, cacheBuster: '1'),
         throwsA(isA<ConfigLoadException>()),
       );
     });

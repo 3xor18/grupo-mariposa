@@ -2,5 +2,7 @@
   "apiBaseUrl": "/api",
   "keycloakUrl": "http://localhost:8180",
   "realm": "mariposa",
-  "clientId": "order-tracker"
+  "clientId": "order-tracker",
+  "redirectUri": "http://localhost:8090/",
+  "enableSemantics": true
 }

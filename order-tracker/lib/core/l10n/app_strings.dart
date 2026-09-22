@@ -1,7 +1,7 @@
 abstract final class AppStrings {
   static const appTitle = 'Mariposa Order Tracker';
 
-  static const navSearch = 'Buscar';
+  static const search = 'Buscar';
   static const navOrders = 'Pedidos';
 
   static const loginSubtitle =
@@ -16,7 +16,6 @@ abstract final class AppStrings {
 
   static const orderIdLabel = 'ID del pedido';
   static const orderIdHint = 'Ej. ORD-MX-000147';
-  static const searchButton = 'Buscar';
   static const clearSearch = 'Limpiar búsqueda';
   static const orderIdRequired = 'Ingresa un ID de pedido';
   static const searchIdleTitle = 'Consulta un pedido';
@@ -33,6 +32,7 @@ abstract final class AppStrings {
   static const client = 'Cliente';
   static const market = 'Mercado';
   static const channel = 'Canal';
+  static const eventVersion = 'Versión del evento';
   static const segment = 'Segmento';
   static const occurredAt = 'Emitido';
   static const receivedAt = 'Recibido';
@@ -54,7 +54,6 @@ abstract final class AppStrings {
 
   static const recentOrders = 'Pedidos recientes';
   static const filterStatus = 'Estado';
-  static const filterMarket = 'Mercado';
   static const loadMore = 'Cargar más';
   static const loadingOrders = 'Cargando pedidos…';
   static const emptyListTitle = 'Sin pedidos';
@@ -67,6 +66,7 @@ abstract final class AppStrings {
   static const marketMx = 'México';
   static const marketCo = 'Colombia';
   static const marketPe = 'Perú';
+  static const marketUnknown = 'Otro mercado';
 
   static const errorTitle = 'Algo salió mal';
   static const networkError = 'No hay conexión con el servidor. Revisa tu red e intenta de nuevo.';

@@ -18,7 +18,7 @@ class OrderSearchPage extends StatelessWidget {
         child: Column(
           children: [
             Padding(
-              padding: EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
+              padding: AppInsets.pageHeader,
               child: OrderSearchBar(),
             ),
             Expanded(child: OrderSearchResult(idle: OrderSearchIdleView())),

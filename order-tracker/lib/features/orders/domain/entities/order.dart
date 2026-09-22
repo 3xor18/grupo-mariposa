@@ -1,10 +1,13 @@
 import 'package:equatable/equatable.dart';
+import 'package:order_tracker/core/money/money.dart';
+import 'package:order_tracker/features/orders/domain/entities/market.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_line.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
 
 final class Order extends Equatable {
   const Order({
     required this.orderId,
+    required this.eventVersion,
     required this.status,
     required this.market,
     required this.currency,
@@ -22,8 +25,9 @@ final class Order extends Equatable {
   });
 
   final String orderId;
+  final int eventVersion;
   final OrderStatus status;
-  final String market;
+  final Market market;
   final String currency;
   final String? channel;
   final OrderClient client;
@@ -44,6 +48,7 @@ final class Order extends Equatable {
   @override
   List<Object?> get props => [
     orderId,
+    eventVersion,
     status,
     market,
     currency,
@@ -91,11 +96,11 @@ final class OrderTotals extends Equatable {
     required this.grandTotal,
   });
 
-  final double grossSubtotal;
-  final double discount;
-  final double netSubtotal;
-  final double tax;
-  final double grandTotal;
+  final Money grossSubtotal;
+  final Money discount;
+  final Money netSubtotal;
+  final Money tax;
+  final Money grandTotal;
 
   @override
   List<Object?> get props => [grossSubtotal, discount, netSubtotal, tax, grandTotal];

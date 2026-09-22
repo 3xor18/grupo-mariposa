@@ -4,6 +4,7 @@ import 'package:order_tracker/core/theme/app_tokens.dart';
 import 'package:order_tracker/core/theme/status_palette.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/presentation/widgets/labeled_value.dart';
+import 'package:order_tracker/features/orders/presentation/widgets/section_card.dart';
 
 class OrderRejectionCard extends StatelessWidget {
   const OrderRejectionCard({required this.reason, required this.violations, super.key});
@@ -13,7 +14,7 @@ class OrderRejectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tone = Theme.of(context).extension<StatusPalette>()!.rejected;
+    final tone = context.statusPalette.rejected;
     final reason = this.reason;
     return SectionCard(
       title: AppStrings.rejectionTitle,
@@ -65,7 +66,7 @@ class OrderFailureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tone = Theme.of(context).extension<StatusPalette>()!.failure;
+    final tone = context.statusPalette.failure;
     return SectionCard(
       title: AppStrings.failureTitle,
       icon: Icons.warning_amber_outlined,

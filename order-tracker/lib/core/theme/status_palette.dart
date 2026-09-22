@@ -58,3 +58,10 @@ final class StatusPalette extends ThemeExtension<StatusPalette> {
 
   static const _halfway = 0.5;
 }
+
+extension StatusPaletteContext on BuildContext {
+  StatusPalette get statusPalette {
+    final theme = Theme.of(this);
+    return theme.extension<StatusPalette>() ?? StatusPalette.of(theme.brightness);
+  }
+}

@@ -6,11 +6,11 @@ import 'package:order_tracker/core/platform/web_browser.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SemanticsBinding.instance.ensureSemantics();
   final bootstrap = AppBootstrap(
     location: const WebBrowserLocation(),
     store: const WebSessionStore(),
     httpClient: http.Client(),
+    enableSemantics: SemanticsBinding.instance.ensureSemantics,
   );
   runApp(await bootstrap.createApp());
 }

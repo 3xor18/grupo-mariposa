@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:order_tracker/core/l10n/app_strings.dart';
 import 'package:order_tracker/core/theme/app_tokens.dart';
-import 'package:order_tracker/features/orders/domain/entities/market.dart';
 import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart';
 import 'package:order_tracker/features/orders/presentation/list/orders_list_bloc.dart';
 import 'package:order_tracker/features/orders/presentation/list/orders_list_event.dart';
@@ -35,9 +34,9 @@ class OrdersFilterBar extends StatelessWidget {
             ],
           ),
           _ChipGroup(
-            label: AppStrings.filterMarket,
+            label: AppStrings.market,
             chips: [
-              for (final market in Market.values)
+              for (final market in MarketPresentation.filterable)
                 FilterChip(
                   key: OrdersKeys.marketFilter(market),
                   label: Text(market.label),

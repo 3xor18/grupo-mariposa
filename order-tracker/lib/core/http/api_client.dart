@@ -5,16 +5,15 @@ import 'package:http/http.dart' as http;
 import 'package:order_tracker/core/error/app_failure.dart';
 import 'package:order_tracker/core/error/failure_mapper.dart';
 import 'package:order_tracker/core/error/problem_details.dart';
+import 'package:order_tracker/core/http/app_timeouts.dart';
 import 'package:order_tracker/core/http/http_headers.dart';
 import 'package:order_tracker/core/http/http_status_codes.dart';
 import 'package:order_tracker/core/json/json_map.dart';
 import 'package:order_tracker/core/result/result.dart';
 
 final class ApiClient {
-  ApiClient(this._httpClient, this._baseUri, {Duration? timeout})
-    : _timeout = timeout ?? defaultTimeout;
+  ApiClient(this._httpClient, this._baseUri, {this._timeout = AppTimeouts.network});
 
-  static const defaultTimeout = Duration(seconds: 15);
   static const Map<String, String> _headers = {
     HttpHeaderNames.accept: '${HttpMediaTypes.json}, ${HttpMediaTypes.problemJson}',
   };

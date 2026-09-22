@@ -15,6 +15,8 @@ abstract final class OidcParameters {
   static const refreshToken = 'refresh_token';
   static const idTokenHint = 'id_token_hint';
   static const postLogoutRedirectUri = 'post_logout_redirect_uri';
+  static const nonce = 'nonce';
+  static const prompt = 'prompt';
   static const error = 'error';
 }
 
@@ -23,6 +25,7 @@ abstract final class OidcValues {
   static const scope = 'openid profile email';
   static const authorizationCodeGrant = 'authorization_code';
   static const refreshTokenGrant = 'refresh_token';
+  static const silentPrompt = 'none';
 }
 
 final class OidcEndpoints {
@@ -46,6 +49,8 @@ final class OidcEndpoints {
     required Uri redirectUri,
     required String state,
     required String codeChallenge,
+    required String nonce,
+    String? prompt,
   }) {
     return _endpoint(_authorizationPath).replace(
       queryParameters: {
@@ -56,6 +61,8 @@ final class OidcEndpoints {
         OidcParameters.state: state,
         OidcParameters.codeChallenge: codeChallenge,
         OidcParameters.codeChallengeMethod: PkceGenerator.challengeMethod,
+        OidcParameters.nonce: nonce,
+        OidcParameters.prompt: ?prompt,
       },
     );
   }

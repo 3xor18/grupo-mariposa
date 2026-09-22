@@ -14,7 +14,7 @@ class OrderStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tone = status.toneIn(theme.extension<StatusPalette>()!);
+    final tone = status.toneIn(context.statusPalette);
     final textStyle = compact ? theme.textTheme.labelSmall : theme.textTheme.labelLarge;
     return Semantics(
       container: true,

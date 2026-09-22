@@ -1,5 +1,9 @@
 abstract interface class AccessTokenProvider {
   Future<String?> validAccessToken();
 
-  void onUnauthorized();
+  void onUnauthorized(String? rejectedToken);
+}
+
+final class AccessTokenUnavailableException implements Exception {
+  const AccessTokenUnavailableException();
 }

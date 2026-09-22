@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:mocktail/mocktail.dart';
+import 'package:order_tracker/core/http/access_token_provider.dart';
 import 'package:order_tracker/core/http/authenticated_http_client.dart';
 
 import '../../helpers/mocks.dart';
@@ -34,7 +35,7 @@ void main() {
     respondWith(200);
     await client.get(uri);
     expect(sentRequest().headers['authorization'], 'Bearer token-123');
-    verifyNever(tokens.onUnauthorized);
+    verifyNever(() => tokens.onUnauthorized(any()));
   });
 
   test('should send the request without authorization when there is no token', () async {
@@ -49,7 +50,22 @@ void main() {
     respondWith(401);
     final response = await client.get(uri);
     expect(response.statusCode, 401);
-    verify(tokens.onUnauthorized).called(1);
+    verify(() => tokens.onUnauthorized('expired')).called(1);
+  });
+
+  test('should turn an unavailable token into a transport error', () async {
+    when(tokens.validAccessToken).thenThrow(const AccessTokenUnavailableException());
+    await expectLater(
+      client.get(uri),
+      throwsA(
+        isA<http.ClientException>().having(
+          (error) => error.message,
+          'message',
+          AuthenticatedHttpClient.tokenUnavailableMessage,
+        ),
+      ),
+    );
+    verifyNever(() => inner.send(any()));
   });
 
   test('should close the inner client', () {

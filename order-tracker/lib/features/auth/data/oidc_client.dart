@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:order_tracker/core/error/app_failure.dart';
+import 'package:order_tracker/core/http/app_timeouts.dart';
 import 'package:order_tracker/core/http/http_status_codes.dart';
 import 'package:order_tracker/core/json/json_map.dart';
 import 'package:order_tracker/core/result/result.dart';
@@ -15,10 +16,8 @@ final class OidcClient {
     this._httpClient,
     this._endpoints, {
     this._clock = systemClock,
-    this._timeout = defaultTimeout,
+    this._timeout = AppTimeouts.network,
   });
-
-  static const defaultTimeout = Duration(seconds: 15);
 
   final http.Client _httpClient;
   final OidcEndpoints _endpoints;
@@ -51,7 +50,11 @@ final class OidcClient {
     try {
       final issuedAt = _clock();
       final response = await _httpClient.post(_endpoints.token, body: form).timeout(_timeout);
-      if (!HttpStatusCodes.isSuccess(response.statusCode)) {
+      final status = response.statusCode;
+      if (HttpStatusCodes.isServerError(status)) {
+        return Result.err(ServerFailure(statusCode: status));
+      }
+      if (!HttpStatusCodes.isSuccess(status)) {
         return const Result.err(AuthenticationFailure(AuthenticationFailureReason.tokenExchange));
       }
       final json = JsonMap.parse(jsonDecode(utf8.decode(response.bodyBytes)));

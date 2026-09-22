@@ -9,14 +9,6 @@ abstract final class _TokenResponseFields {
   static const refreshExpiresIn = 'refresh_expires_in';
 }
 
-abstract final class _StoredFields {
-  static const accessToken = 'accessToken';
-  static const refreshToken = 'refreshToken';
-  static const idToken = 'idToken';
-  static const expiresAt = 'expiresAt';
-  static const refreshExpiresAt = 'refreshExpiresAt';
-}
-
 final class TokenSet extends Equatable {
   const TokenSet({
     required this.accessToken,
@@ -37,16 +29,6 @@ final class TokenSet extends Equatable {
     );
   }
 
-  factory TokenSet.fromStorage(JsonMap json) {
-    return TokenSet(
-      accessToken: json.requireString(_StoredFields.accessToken),
-      refreshToken: json.optionalString(_StoredFields.refreshToken),
-      idToken: json.optionalString(_StoredFields.idToken),
-      expiresAt: json.requireDateTime(_StoredFields.expiresAt),
-      refreshExpiresAt: json.optionalDateTime(_StoredFields.refreshExpiresAt),
-    );
-  }
-
   final String accessToken;
   final String? refreshToken;
   final String? idToken;
@@ -54,6 +36,8 @@ final class TokenSet extends Equatable {
   final DateTime? refreshExpiresAt;
 
   bool expiresWithin(DateTime now, Duration margin) => !now.add(margin).isBefore(expiresAt);
+
+  bool isExpiredAt(DateTime now) => !now.isBefore(expiresAt);
 
   bool canRefreshAt(DateTime now) {
     final refreshExpiresAt = this.refreshExpiresAt;
@@ -69,14 +53,6 @@ final class TokenSet extends Equatable {
       refreshExpiresAt: refreshed.refreshExpiresAt ?? refreshExpiresAt,
     );
   }
-
-  Map<String, Object?> toStorage() => {
-    _StoredFields.accessToken: accessToken,
-    _StoredFields.refreshToken: refreshToken,
-    _StoredFields.idToken: idToken,
-    _StoredFields.expiresAt: expiresAt.toUtc().toIso8601String(),
-    _StoredFields.refreshExpiresAt: refreshExpiresAt?.toUtc().toIso8601String(),
-  };
 
   static DateTime? _refreshExpiry(DateTime issuedAt, int? seconds) {
     return seconds == null || seconds <= 0 ? null : issuedAt.add(Duration(seconds: seconds));

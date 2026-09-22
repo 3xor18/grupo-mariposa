@@ -5,13 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:mocktail/mocktail.dart';
 import 'package:order_tracker/core/error/app_failure.dart';
+import 'package:order_tracker/core/http/access_token_provider.dart';
 import 'package:order_tracker/core/result/result.dart';
 import 'package:order_tracker/features/auth/data/auth_repository_impl.dart';
+import 'package:order_tracker/features/auth/data/auth_storage_keys.dart';
 import 'package:order_tracker/features/auth/data/oidc_client.dart';
 import 'package:order_tracker/features/auth/data/oidc_endpoints.dart';
 import 'package:order_tracker/features/auth/data/pkce.dart';
-import 'package:order_tracker/features/auth/data/token_set.dart';
 import 'package:order_tracker/features/auth/domain/auth_user.dart';
+import 'package:order_tracker/features/auth/domain/session_restoration.dart';
 
 import '../../../helpers/mocks.dart';
 import '../../../helpers/tokens.dart';
@@ -22,33 +24,27 @@ void main() {
   late FakeBrowserLocation location;
   late DateTime now;
   late AuthRepositoryImpl repository;
-  final appUri = Uri.parse('http://localhost:8090/');
-  final endpoints = OidcEndpoints(
-    issuer: Uri.parse('http://localhost:8180/realms/mariposa'),
-    clientId: 'order-tracker',
-  );
-  final idToken = jwt({'name': 'Ana Analista', 'preferred_username': 'analyst'});
+  final redirect = Uri.parse('http://localhost:8090/');
+  final endpoints = OidcEndpoints(issuer: testIssuer, clientId: testClientId);
   const analyst = AuthUser(name: 'Ana Analista', username: 'analyst');
+  const signedIn = Ok<SessionRestoration>(SignedIn(analyst));
 
   setUpAll(registerCommonFallbacks);
-
-  AuthRepositoryImpl buildRepository() {
-    DateTime clock() => now;
-    return AuthRepositoryImpl(
-      oidcClient: OidcClient(httpClient, endpoints, clock: clock),
-      endpoints: endpoints,
-      store: store,
-      location: location,
-      clock: clock,
-    );
-  }
 
   setUp(() {
     httpClient = MockHttpClient();
     store = InMemoryKeyValueStore();
-    location = FakeBrowserLocation(appUri);
+    location = FakeBrowserLocation(redirect);
     now = DateTime.utc(2026, 9, 22, 12);
-    repository = buildRepository();
+    DateTime clock() => now;
+    repository = AuthRepositoryImpl(
+      oidcClient: OidcClient(httpClient, endpoints, clock: clock),
+      endpoints: endpoints,
+      redirectUri: redirect,
+      store: store,
+      location: location,
+      clock: clock,
+    );
   });
 
   tearDown(() => repository.dispose());
@@ -59,186 +55,268 @@ void main() {
     ).thenAnswer((_) async => http.Response(jsonEncode(body), status));
   }
 
-  void storeSession(TokenSet tokens) {
-    store.write(AuthStorageKeys.tokens, jsonEncode(tokens.toStorage()));
+  Completer<http.Response> holdTokenResponse() {
+    final response = Completer<http.Response>();
+    when(
+      () => httpClient.post(any(), body: any(named: 'body')),
+    ).thenAnswer((_) => response.future);
+    return response;
   }
 
-  TokenSet session({
-    Duration expiresIn = const Duration(minutes: 5),
-    String? refreshToken = 'refresh-1',
-  }) {
-    return TokenSet(
-      accessToken: 'access-1',
-      refreshToken: refreshToken,
-      idToken: idToken,
-      expiresAt: now.add(expiresIn),
-    );
+  void failTokensWithNetworkError() {
+    when(
+      () => httpClient.post(any(), body: any(named: 'body')),
+    ).thenThrow(http.ClientException('offline'));
   }
 
-  group('login', () {
-    test('should store a pkce verifier and redirect to the authorization endpoint', () async {
+  String idToken({String nonce = 'nonce-1'}) => idTokenFor(now: now, nonce: nonce);
+
+  void prepareCallback({String state = 'state-1'}) {
+    store
+      ..write(AuthStorageKeys.verifier, 'verifier-1')
+      ..write(AuthStorageKeys.state, 'state-1')
+      ..write(AuthStorageKeys.nonce, 'nonce-1')
+      ..write(AuthStorageKeys.mode, AuthRedirectModes.interactive);
+    location.current = redirect.replace(queryParameters: {'state': state, 'code': 'code-1'});
+  }
+
+  Future<void> signIn() async {
+    prepareCallback();
+    respondTokens(tokenResponse(idToken: idToken()));
+    expect(await repository.restoreSession(), signedIn);
+  }
+
+  void closeToExpiry() => now = now.add(const Duration(minutes: 4, seconds: 45));
+
+  group('redirects', () {
+    test('should store pkce, state and nonce and start an interactive login', () async {
       await repository.login();
-      final verifier = store.read(AuthStorageKeys.verifier)!;
-      final state = store.read(AuthStorageKeys.state)!;
-      final redirect = location.assigned.single;
-      expect(redirect.path, '/realms/mariposa/protocol/openid-connect/auth');
-      expect(redirect.queryParameters['code_challenge'], PkceGenerator.challengeFor(verifier));
-      expect(redirect.queryParameters['state'], state);
-      expect(redirect.queryParameters['redirect_uri'], 'http://localhost:8090/');
+      final uri = location.assigned.single;
+      expect(uri.path, '/realms/mariposa/protocol/openid-connect/auth');
+      expect(uri.queryParameters['redirect_uri'], '$redirect');
+      expect(
+        uri.queryParameters['code_challenge'],
+        PkceGenerator.challengeFor(store.read(AuthStorageKeys.verifier) ?? ''),
+      );
+      expect(uri.queryParameters['state'], store.read(AuthStorageKeys.state));
+      expect(uri.queryParameters['nonce'], store.read(AuthStorageKeys.nonce));
+      expect(uri.queryParameters.containsKey('prompt'), isFalse);
+      expect(store.read(AuthStorageKeys.mode), AuthRedirectModes.interactive);
+    });
+
+    test('should try a silent sign in when the page loads without a session', () async {
+      expect(await repository.restoreSession(), const Ok<SessionRestoration>(SigningInSilently()));
+      expect(location.assigned.single.queryParameters['prompt'], 'none');
+      expect(store.read(AuthStorageKeys.mode), AuthRedirectModes.silent);
     });
   });
 
-  group('restoreSession with a callback', () {
-    setUp(() {
-      store
-        ..write(AuthStorageKeys.verifier, 'verifier-1')
-        ..write(AuthStorageKeys.state, 'state-1');
-    });
-
-    test('should exchange the code, clean the address and persist the session', () async {
-      location.current = Uri.parse('http://localhost:8090/?state=state-1&code=code-1');
-      respondTokens(tokenResponse(idToken: idToken));
-      final result = await repository.restoreSession();
-      expect(result, const Ok<AuthUser?>(analyst));
-      expect(location.current, appUri);
-      expect(store.read(AuthStorageKeys.verifier), isNull);
-      expect(store.read(AuthStorageKeys.tokens), isNotNull);
+  group('callback', () {
+    test('should exchange the code and keep tokens only in memory', () async {
+      await signIn();
+      expect(location.current, redirect);
+      expect(store.values, isEmpty);
       expect(await repository.validAccessToken(), 'access-1');
+      final form =
+          verify(
+                () => httpClient.post(any(), body: captureAny(named: 'body')),
+              ).captured.single
+              as Map<String, String>;
+      expect(form['redirect_uri'], '$redirect');
     });
 
-    test('should reject a callback whose state does not match', () async {
-      location.current = Uri.parse('http://localhost:8090/?state=forged&code=code-1');
-      final result = await repository.restoreSession();
+    test('should report the signed in user when restoring again', () async {
+      await signIn();
+      expect(await repository.restoreSession(), signedIn);
+      expect(location.assigned, isEmpty);
+    });
+
+    test('should reject a callback with a forged state', () async {
+      prepareCallback(state: 'forged');
       expect(
-        result,
-        const Err<AuthUser?>(AuthenticationFailure(AuthenticationFailureReason.stateMismatch)),
+        await repository.restoreSession(),
+        const Err<SessionRestoration>(
+          AuthenticationFailure(AuthenticationFailureReason.stateMismatch),
+        ),
       );
       verifyNever(() => httpClient.post(any(), body: any(named: 'body')));
     });
 
-    test('should reject a callback without a stored verifier', () async {
-      store.remove(AuthStorageKeys.verifier);
-      location.current = Uri.parse('http://localhost:8090/?state=state-1&code=code-1');
-      expect(await repository.restoreSession(), isA<Err<AuthUser?>>());
+    test('should reject a callback without a stored nonce', () async {
+      prepareCallback();
+      store.remove(AuthStorageKeys.nonce);
+      expect(await repository.restoreSession(), isA<Err<SessionRestoration>>());
     });
 
-    test('should surface token exchange failures', () async {
-      location.current = Uri.parse('http://localhost:8090/?state=state-1&code=code-1');
-      respondTokens({'error': 'invalid_grant'}, status: 400);
+    test('should reject an id token issued for another nonce', () async {
+      prepareCallback();
+      respondTokens(tokenResponse(idToken: idToken(nonce: 'replayed')));
       expect(
         await repository.restoreSession(),
-        const Err<AuthUser?>(AuthenticationFailure(AuthenticationFailureReason.tokenExchange)),
+        const Err<SessionRestoration>(
+          AuthenticationFailure(AuthenticationFailureReason.invalidIdToken),
+        ),
       );
-      expect(store.read(AuthStorageKeys.tokens), isNull);
-    });
-
-    test('should report callbacks rejected by keycloak', () async {
-      location.current = Uri.parse('http://localhost:8090/?error=access_denied');
-      expect(
-        await repository.restoreSession(),
-        const Err<AuthUser?>(AuthenticationFailure(AuthenticationFailureReason.callbackRejected)),
-      );
-      expect(location.current, appUri);
-      expect(store.read(AuthStorageKeys.state), isNull);
-    });
-  });
-
-  group('restoreSession from storage', () {
-    test('should return no user when there is no stored session', () async {
-      expect(await repository.restoreSession(), const Ok<AuthUser?>(null));
       expect(await repository.validAccessToken(), isNull);
     });
 
-    test('should restore a valid stored session without refreshing', () async {
-      storeSession(session());
-      expect(await repository.restoreSession(), const Ok<AuthUser?>(analyst));
-      verifyNever(() => httpClient.post(any(), body: any(named: 'body')));
+    test('should reject a code exchange without id token', () async {
+      prepareCallback();
+      respondTokens(tokenResponse());
+      expect(await repository.restoreSession(), isA<Err<SessionRestoration>>());
     });
 
-    test('should refresh a stored session that is about to expire', () async {
-      storeSession(session(expiresIn: const Duration(seconds: 10)));
-      respondTokens(tokenResponse(accessToken: 'access-2'));
-      expect(await repository.restoreSession(), const Ok<AuthUser?>(analyst));
-      expect(await repository.validAccessToken(), 'access-2');
-    });
-
-    test('should drop a stored session that cannot be refreshed', () async {
-      storeSession(session(expiresIn: Duration.zero, refreshToken: null));
-      expect(await repository.restoreSession(), const Ok<AuthUser?>(null));
-      expect(store.read(AuthStorageKeys.tokens), isNull);
-    });
-
-    test('should drop a stored session when the refresh is rejected', () async {
-      storeSession(session(expiresIn: Duration.zero));
+    test('should surface token exchange failures', () async {
+      prepareCallback();
       respondTokens({'error': 'invalid_grant'}, status: 400);
-      expect(await repository.restoreSession(), const Ok<AuthUser?>(null));
-      expect(store.read(AuthStorageKeys.tokens), isNull);
+      expect(
+        await repository.restoreSession(),
+        const Err<SessionRestoration>(
+          AuthenticationFailure(AuthenticationFailureReason.tokenExchange),
+        ),
+      );
     });
 
-    test('should discard a corrupted stored session', () async {
-      store.write(AuthStorageKeys.tokens, '{"accessToken": 1}');
-      expect(await repository.restoreSession(), const Ok<AuthUser?>(null));
-      expect(store.read(AuthStorageKeys.tokens), isNull);
+    test('should treat a failed silent sign in as signed out', () async {
+      store.write(AuthStorageKeys.mode, AuthRedirectModes.silent);
+      location.current = redirect.replace(queryParameters: {'error': 'login_required'});
+      expect(await repository.restoreSession(), const Ok<SessionRestoration>(SignedOut()));
+      expect(location.current, redirect);
+      expect(store.values, isEmpty);
+    });
+
+    test('should report an interactive login rejected by keycloak', () async {
+      store.write(AuthStorageKeys.mode, AuthRedirectModes.interactive);
+      location.current = redirect.replace(queryParameters: {'error': 'access_denied'});
+      expect(
+        await repository.restoreSession(),
+        const Err<SessionRestoration>(
+          AuthenticationFailure(AuthenticationFailureReason.callbackRejected),
+        ),
+      );
     });
   });
 
   group('validAccessToken', () {
-    setUp(() async {
-      storeSession(session());
-      await repository.restoreSession();
+    test('should return nothing without a session', () async {
+      expect(await repository.validAccessToken(), isNull);
     });
 
-    test('should refresh once for concurrent requests before the token expires', () async {
-      final response = Completer<http.Response>();
-      when(
-        () => httpClient.post(any(), body: any(named: 'body')),
-      ).thenAnswer((_) => response.future);
-      now = now.add(const Duration(minutes: 4, seconds: 45));
+    test('should refresh once for concurrent requests close to expiry', () async {
+      await signIn();
+      final response = holdTokenResponse();
+      closeToExpiry();
       final first = repository.validAccessToken();
       final second = repository.validAccessToken();
       response.complete(http.Response(jsonEncode(tokenResponse(accessToken: 'access-2')), 200));
       expect(await Future.wait([first, second]), ['access-2', 'access-2']);
-      verify(() => httpClient.post(any(), body: any(named: 'body'))).called(1);
+      expect(await repository.validAccessToken(), 'access-2');
     });
 
-    test('should announce an expired session when the refresh fails', () async {
+    test('should end the session when keycloak rejects the refresh token', () async {
+      await signIn();
       respondTokens({'error': 'invalid_grant'}, status: 400);
       now = now.add(const Duration(minutes: 10));
       final expirations = expectLater(repository.sessionExpired, emits(null));
       expect(await repository.validAccessToken(), isNull);
       await expirations;
     });
+
+    test('should end the session when the refreshed id token is invalid', () async {
+      await signIn();
+      final foreign = idTokenFor(now: now, audience: 'someone-else');
+      respondTokens(tokenResponse(accessToken: 'access-2', idToken: foreign));
+      closeToExpiry();
+      expect(await repository.validAccessToken(), isNull);
+    });
+
+    test('should end the session when there is no refresh token', () async {
+      prepareCallback();
+      respondTokens(tokenResponse(idToken: idToken(), refreshToken: null));
+      await repository.restoreSession();
+      now = now.add(const Duration(minutes: 10));
+      expect(await repository.validAccessToken(), isNull);
+    });
+
+    test('should keep the session and the current token on a network failure', () async {
+      await signIn();
+      failTokensWithNetworkError();
+      closeToExpiry();
+      var expired = false;
+      final subscription = repository.sessionExpired.listen((_) => expired = true);
+      expect(await repository.validAccessToken(), 'access-1');
+      await pumpEventQueue();
+      expect(expired, isFalse);
+      await subscription.cancel();
+    });
+
+    test('should report the token as unavailable when it already expired offline', () async {
+      await signIn();
+      failTokensWithNetworkError();
+      now = now.add(const Duration(minutes: 6));
+      await expectLater(
+        repository.validAccessToken(),
+        throwsA(isA<AccessTokenUnavailableException>()),
+      );
+      respondTokens(tokenResponse(accessToken: 'access-2'));
+      expect(await repository.validAccessToken(), 'access-2');
+    });
+
+    test('should keep the session when keycloak answers with a server error', () async {
+      await signIn();
+      respondTokens({'error': 'unavailable'}, status: 503);
+      closeToExpiry();
+      expect(await repository.validAccessToken(), 'access-1');
+    });
+
+    test('should ignore a refresh that completes after logout', () async {
+      await signIn();
+      final response = holdTokenResponse();
+      closeToExpiry();
+      final pending = repository.validAccessToken();
+      await repository.logout();
+      response.complete(http.Response(jsonEncode(tokenResponse(accessToken: 'late')), 200));
+      expect(await pending, isNull);
+      expect(await repository.validAccessToken(), isNull);
+    });
+
+    test('should ignore a refresh that completes after the session was rejected', () async {
+      await signIn();
+      final response = holdTokenResponse();
+      closeToExpiry();
+      final pending = repository.validAccessToken();
+      repository.onUnauthorized('access-1');
+      response.complete(http.Response(jsonEncode(tokenResponse(accessToken: 'late')), 200));
+      expect(await pending, isNull);
+      expect(await repository.validAccessToken(), isNull);
+    });
   });
 
   group('onUnauthorized', () {
-    test('should clear the session and announce the expiration', () async {
-      storeSession(session());
-      await repository.restoreSession();
+    test('should end the session when the current token is rejected', () async {
+      await signIn();
       final expirations = expectLater(repository.sessionExpired, emits(null));
-      repository.onUnauthorized();
+      repository.onUnauthorized('access-1');
       await expirations;
       expect(await repository.validAccessToken(), isNull);
     });
 
-    test('should ignore unauthorized responses without a session', () async {
-      var announced = false;
-      final subscription = repository.sessionExpired.listen((_) => announced = true);
-      repository.onUnauthorized();
-      await pumpEventQueue();
-      expect(announced, isFalse);
-      await subscription.cancel();
+    test('should ignore rejections of tokens that were already replaced', () async {
+      await signIn();
+      repository
+        ..onUnauthorized('previous-token')
+        ..onUnauthorized(null);
+      expect(await repository.validAccessToken(), 'access-1');
     });
   });
 
-  group('logout', () {
-    test('should clear the session and redirect to the end session endpoint', () async {
-      storeSession(session());
-      await repository.restoreSession();
-      await repository.logout();
-      final redirect = location.assigned.single;
-      expect(redirect.path, '/realms/mariposa/protocol/openid-connect/logout');
-      expect(redirect.queryParameters['id_token_hint'], idToken);
-      expect(store.read(AuthStorageKeys.tokens), isNull);
-    });
+  test('should clear the session and redirect to the end session endpoint', () async {
+    await signIn();
+    await repository.logout();
+    final uri = location.assigned.single;
+    expect(uri.path, '/realms/mariposa/protocol/openid-connect/logout');
+    expect(uri.queryParameters['id_token_hint'], isNotNull);
+    expect(uri.queryParameters['post_logout_redirect_uri'], '$redirect');
+    expect(await repository.validAccessToken(), isNull);
   });
 }

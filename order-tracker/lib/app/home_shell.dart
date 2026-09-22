@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:order_tracker/app/shell_keys.dart';
 import 'package:order_tracker/core/l10n/app_strings.dart';
 import 'package:order_tracker/core/theme/app_tokens.dart';
 import 'package:order_tracker/features/auth/domain/auth_user.dart';
 import 'package:order_tracker/features/auth/presentation/user_menu.dart';
 import 'package:order_tracker/features/orders/presentation/pages/order_search_page.dart';
 import 'package:order_tracker/features/orders/presentation/pages/orders_list_page.dart';
-
-abstract final class ShellKeys {
-  static const navigationRail = Key('shellNavigationRail');
-  static const navigationBar = Key('shellNavigationBar');
-}
 
 final class _Destination {
   const _Destination({required this.icon, required this.selectedIcon, required this.label});
@@ -29,11 +25,13 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
+  static const _searchIndex = 0;
+  static const _ordersIndex = 1;
   static const _destinations = [
     _Destination(
       icon: Icons.search_outlined,
       selectedIcon: Icons.search,
-      label: AppStrings.navSearch,
+      label: AppStrings.search,
     ),
     _Destination(
       icon: Icons.list_alt_outlined,
@@ -42,9 +40,17 @@ class _HomeShellState extends State<HomeShell> {
     ),
   ];
 
-  var _selectedIndex = 0;
+  int _selectedIndex = _searchIndex;
+  final _visited = <int>{_searchIndex};
 
-  void _select(int index) => setState(() => _selectedIndex = index);
+  void _select(int index) {
+    setState(() {
+      _selectedIndex = index;
+      _visited.add(index);
+    });
+  }
+
+  Widget _page(int index, Widget page) => _visited.contains(index) ? page : const SizedBox.shrink();
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +59,10 @@ class _HomeShellState extends State<HomeShell> {
         final wide = constraints.maxWidth >= AppBreakpoints.medium;
         final body = IndexedStack(
           index: _selectedIndex,
-          children: const [OrderSearchPage(), OrdersListPage()],
+          children: [
+            _page(_searchIndex, const OrderSearchPage()),
+            _page(_ordersIndex, const OrdersListPage()),
+          ],
         );
         return Scaffold(
           appBar: AppBar(

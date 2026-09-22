@@ -25,14 +25,14 @@ class _OrderSearchBarState extends State<OrderSearchBar> {
   }
 
   void _submit() {
-    if (_formKey.currentState!.validate()) {
+    if (_formKey.currentState case final form? when form.validate()) {
       context.read<OrderSearchBloc>().add(OrderSearchSubmitted(_controller.text));
     }
   }
 
   void _clear() {
     _controller.clear();
-    _formKey.currentState!.reset();
+    _formKey.currentState?.reset();
     context.read<OrderSearchBloc>().add(const OrderSearchCleared());
   }
 
@@ -79,7 +79,7 @@ class _OrderSearchBarState extends State<OrderSearchBar> {
             child: FilledButton(
               key: OrdersKeys.searchButton,
               onPressed: _submit,
-              child: const Text(AppStrings.searchButton),
+              child: const Text(AppStrings.search),
             ),
           ),
         ],

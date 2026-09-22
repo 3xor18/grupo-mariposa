@@ -76,12 +76,11 @@ class OrderDetailView extends StatelessWidget {
     return OrderTotalsCard(
       key: OrdersKeys.totalsCard,
       totals: order.totals,
-      currency: order.currency,
     );
   }
 
   Widget _lines() {
-    return OrderLinesCard(key: OrdersKeys.linesCard, lines: order.lines, currency: order.currency);
+    return OrderLinesCard(key: OrdersKeys.linesCard, lines: order.lines);
   }
 }
 

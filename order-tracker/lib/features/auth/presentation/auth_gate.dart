@@ -19,7 +19,7 @@ class AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<AuthCubit, AuthState>(
       builder: (context, state) => switch (state) {
-        AuthChecking() => const Scaffold(
+        AuthChecking() || AuthSigningInSilently() => const Scaffold(
           key: AuthKeys.checkingView,
           body: LoadingView(label: AppStrings.checkingSession),
         ),

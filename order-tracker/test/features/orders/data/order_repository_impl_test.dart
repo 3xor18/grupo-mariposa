@@ -10,8 +10,8 @@ import 'package:order_tracker/features/orders/data/datasources/orders_api.dart';
 import 'package:order_tracker/features/orders/data/repositories/order_repository_impl.dart';
 import 'package:order_tracker/features/orders/domain/entities/market.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
+import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
-import 'package:order_tracker/features/orders/domain/entities/order_summary.dart';
 import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart';
 
 import '../../../fixtures/order_fixtures.dart';
@@ -77,6 +77,16 @@ void main() {
 
     test('should surface contract violations as unexpected responses', () async {
       respond(approvedOrderJson()..remove('orderId'), 200);
+      expect(
+        await repository.findById(approvedOrderId),
+        const Err<Order>(UnexpectedResponseFailure()),
+      );
+    });
+
+    test('should surface invalid amounts as unexpected responses', () async {
+      final json = approvedOrderJson();
+      (json['totals']! as Map<String, Object?>)['tax'] = 1.005;
+      respond(json, 200);
       expect(
         await repository.findById(approvedOrderId),
         const Err<Order>(UnexpectedResponseFailure()),
