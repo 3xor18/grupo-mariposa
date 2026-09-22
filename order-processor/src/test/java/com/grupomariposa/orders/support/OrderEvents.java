@@ -1,7 +1,5 @@
 package com.grupomariposa.orders.support;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.charset.StandardCharsets;
@@ -9,7 +7,6 @@ import java.util.UUID;
 
 public final class OrderEvents {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final String EXAMPLE = "examples/orders.created.v1.approved.json";
 
     private final ObjectNode event;
@@ -79,10 +76,6 @@ public final class OrderEvents {
 
     public String eventId() {
         return event.get("eventId").asText();
-    }
-
-    public JsonNode json() {
-        return event;
     }
 
     public byte[] bytes() {

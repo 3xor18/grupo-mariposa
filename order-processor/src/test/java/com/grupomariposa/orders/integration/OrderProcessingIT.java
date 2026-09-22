@@ -1,5 +1,6 @@
 package com.grupomariposa.orders.integration;
 
+import static com.grupomariposa.orders.domain.DomainFixtures.GOLDEN_CLIENT;
 import static com.grupomariposa.orders.support.TopicProbe.header;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -12,11 +13,13 @@ import com.grupomariposa.orders.support.KafkaTestClient;
 import com.grupomariposa.orders.support.OrderEvents;
 import com.grupomariposa.orders.support.TopicProbe;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.bson.Document;
 import org.bson.types.Decimal128;
 import org.junit.jupiter.api.Test;
@@ -29,6 +32,7 @@ class OrderProcessingIT extends IntegrationTest {
 
     private static final String PROCESSED_SCHEMA = "events/orders.processed.v1.schema.json";
     private static final Duration SHORT = Duration.ofSeconds(3);
+    private static final String TRACEPARENT = "^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$";
 
     @Autowired
     private MongoTemplate mongo;
@@ -65,7 +69,7 @@ class OrderProcessingIT extends IntegrationTest {
                     .contains("\"grossSubtotal\":1836.00").contains("\"discount\":25.56")
                     .doesNotContain("Distribuidora");
             assertThat(header(consumerRecord, "eventType")).isEqualTo("OrderProcessed");
-            assertThat(header(consumerRecord, "traceparent")).isNotBlank();
+            assertThat(header(consumerRecord, "traceparent")).matches(TRACEPARENT);
         }
         await().atMost(Duration.ofSeconds(10)).until(() ->
                 "PUBLISHED".equals(outbox(event.orderId()).getFirst().getString("status")));
@@ -109,8 +113,9 @@ class OrderProcessingIT extends IntegrationTest {
     @Test
     void should_send_contract_violations_to_dlt_with_original_bytes_and_persist_nothing() {
         final OrderEvents event = OrderEvents.goldenWithFreshIds("INVALID").currency("PEN");
+        final Instant before = Instant.now();
 
-        publish(event);
+        final RecordMetadata sent = publish(event);
 
         try (TopicProbe dlt = probe(DLT)) {
             final ConsumerRecord<String, byte[]> consumerRecord = dlt.awaitKey(event.orderId(), 1)
@@ -123,10 +128,12 @@ class OrderProcessingIT extends IntegrationTest {
             assertThat(header(consumerRecord, "x-component")).isEqualTo("order-processor");
             assertThat(header(consumerRecord, "x-order-id")).isEqualTo(event.orderId());
             assertThat(header(consumerRecord, "x-event-id")).isEqualTo(event.eventId());
-            assertThat(Instant.parse(header(consumerRecord, "x-failed-at"))).isNotNull();
+            assertThat(Instant.parse(header(consumerRecord, "x-failed-at")))
+                    .isBetween(before, Instant.now());
             assertThat(header(consumerRecord, "kafka_dlt-original-topic"))
                     .isEqualTo(ORDERS_CREATED);
-            assertThat(header(consumerRecord, "kafka_dlt-original-offset")).isNotNull();
+            assertThat(longHeader(consumerRecord, "kafka_dlt-original-offset"))
+                    .isEqualTo(sent.offset());
             assertThat(header(consumerRecord, "kafka_deliveryAttempt")).isNull();
         }
         assertThat(order(event.orderId())).isNull();
@@ -229,7 +236,7 @@ class OrderProcessingIT extends IntegrationTest {
 
     @Test
     void should_approve_after_transient_failures_are_retried() {
-        stubs.goldenClient("CLI-99821");
+        stubs.goldenClient(GOLDEN_CLIENT);
         stubs.productFailsThenRecovers("PRD-FLAKY1", "MX", 2, 503);
         final OrderEvents event = OrderEvents.goldenWithFreshIds("TRANSIENT")
                 .singleItem("PRD-FLAKY1", 10, 10.0);
@@ -241,7 +248,7 @@ class OrderProcessingIT extends IntegrationTest {
 
     @Test
     void should_approve_after_a_timeout_is_retried() {
-        stubs.goldenClient("CLI-99821");
+        stubs.goldenClient(GOLDEN_CLIENT);
         stubs.productTimesOutOnce("PRD-SLOW1", "MX", 1500);
         final OrderEvents event = OrderEvents.goldenWithFreshIds("TIMEOUT")
                 .singleItem("PRD-SLOW1", 1, 5.0);
@@ -253,7 +260,7 @@ class OrderProcessingIT extends IntegrationTest {
 
     @Test
     void should_record_technical_failure_and_recover_on_replay() {
-        stubs.goldenClient("CLI-99821");
+        stubs.goldenClient(GOLDEN_CLIENT);
         stubs.productStatus("PRD-DOWN1", 503);
         final OrderEvents event = OrderEvents.goldenWithFreshIds("PERMANENT503")
                 .singleItem("PRD-DOWN1", 2, 3.0);
@@ -276,7 +283,7 @@ class OrderProcessingIT extends IntegrationTest {
 
         WIREMOCK.resetAll();
         stubs.token();
-        stubs.goldenClient("CLI-99821");
+        stubs.goldenClient(GOLDEN_CLIENT);
         stubs.product("PRD-DOWN1", "MX", "ACTIVE", "STANDARD");
         publish(event);
 
@@ -286,7 +293,7 @@ class OrderProcessingIT extends IntegrationTest {
 
     @Test
     void should_dead_letter_permanent_dependency_errors_without_retrying() {
-        stubs.goldenClient("CLI-99821");
+        stubs.goldenClient(GOLDEN_CLIENT);
         stubs.productStatus("PRD-BAD1", 400);
         final OrderEvents event = OrderEvents.goldenWithFreshIds("PERMANENT400")
                 .singleItem("PRD-BAD1", 1, 1.0);
@@ -304,10 +311,15 @@ class OrderProcessingIT extends IntegrationTest {
         }
     }
 
-    private void publish(final OrderEvents event) {
+    private RecordMetadata publish(final OrderEvents event) {
         try (KafkaTestClient kafka = kafka()) {
-            kafka.send(ORDERS_CREATED, event.orderId(), event.bytes());
+            return kafka.send(ORDERS_CREATED, event.orderId(), event.bytes());
         }
+    }
+
+    private static long longHeader(final ConsumerRecord<?, ?> consumerRecord,
+                                   final String name) {
+        return ByteBuffer.wrap(consumerRecord.headers().lastHeader(name).value()).getLong();
     }
 
     private TopicProbe probe(final String topic) {

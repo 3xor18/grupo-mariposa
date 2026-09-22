@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -26,6 +27,11 @@ import org.springframework.dao.DataAccessResourceFailureException;
 class ObservabilityTest {
 
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
+
+    @AfterEach
+    void clearMdc() {
+        MDC.clear();
+    }
     private final ProcessingObserver observer = new CompositeProcessingObserver(List.of(
             new MetricsProcessingObserver(registry),
             new LoggingProcessingObserver(new CauseSanitizer())));
@@ -80,7 +86,6 @@ class ObservabilityTest {
             assertThat(MDC.get(LogContext.EVENT_ID)).isNull();
         }
         assertThat(MDC.get(LogContext.ORDER_ID)).isEqualTo("outer");
-        MDC.clear();
     }
 
     @Test

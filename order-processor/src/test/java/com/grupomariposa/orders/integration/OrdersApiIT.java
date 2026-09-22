@@ -102,7 +102,7 @@ class OrdersApiIT extends IntegrationTest {
     }
 
     @Test
-    void should_expose_public_health_and_metrics() throws Exception {
+    void should_expose_probes_and_metrics_for_internal_scraping() throws Exception {
         seedApprovedOrder();
 
         assertThat(read(mockMvc.perform(get("/health/live")).andReturn(), 200)
