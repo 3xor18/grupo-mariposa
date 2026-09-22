@@ -70,6 +70,34 @@ Error codes: `VALIDATION_ERROR` (400, with `errors[]`), `UNAUTHORIZED` (401), `F
 Configuration is parsed once into a typed struct and validated as a whole; the process refuses
 to start listing every invalid variable.
 
+### Centralized configuration (Spring Cloud Config Server)
+
+When `CONFIG_SERVER_URL` is set, startup fetches
+`${CONFIG_SERVER_URL}/${CONFIG_APP_NAME}-${CONFIG_PROFILE}.properties` and maps each property to
+its env-style name (uppercase, `.` and `-` become `_`): `rate-limit.rps` → `RATE_LIMIT_RPS`,
+`auth.jwks-url` → `AUTH_JWKS_URL`. Parsing follows `java.util.Properties`: the first unescaped
+`=`, `:` or whitespace separates key and value (so `auth.jwks-url: http://host:8080/...` keeps
+the URL intact), `#`/`!` comments, `\:` `\=` `\\` `\uXXXX` escapes and line continuations.
+Keys the service does not use (for example `management.*`) are ignored.
+
+Precedence: **environment variable > config server > built-in default**. Remote values are
+layered behind the environment through the lookup function passed to `config.Load`; the process
+environment is never mutated. Values of keys containing `SECRET`, `PASSWORD`, `KEY` or `TOKEN`
+are redacted in logs and the server password is never logged. `-healthcheck` reads only the
+environment (the image sets `PORT`), so container probes never call the config server.
+
+| Variable | Default | Description |
+|---|---|---|
+| `CONFIG_SERVER_URL` | empty (disabled) | base URL of the config server |
+| `CONFIG_APP_NAME` | `products-api` | application name in the properties path |
+| `CONFIG_PROFILE` | `default` | profile in the properties path (Compose uses `docker`) |
+| `CONFIG_SERVER_USERNAME` | empty | HTTP basic auth user |
+| `CONFIG_SERVER_PASSWORD` | empty | HTTP basic auth password |
+| `CONFIG_SERVER_TIMEOUT_MS` | `3000` | timeout per attempt |
+| `CONFIG_SERVER_RETRIES` | `3` | extra attempts on network errors, `429` and `5xx` |
+| `CONFIG_SERVER_BACKOFF_MS` | `200` | first retry delay, doubled on each retry |
+| `CONFIG_SERVER_FAIL_FAST` | `false` | `true` aborts startup if the server stays unreachable; otherwise a JSON warning is logged and env/defaults are used |
+
 ## Design
 
 ```
@@ -82,6 +110,7 @@ internal/auth           JWT verification (RS256, issuer, expiry, realm role) aga
 internal/fault          FAULT_RULES parsing and thread-safe per-id counters
 internal/telemetry      JSON slog logger with traceId, Prometheus registry
 internal/config         env parsing and validation
+internal/config/remote  Spring Cloud Config Server client, properties parser, layered lookup
 internal/app            composition root, server lifecycle, graceful shutdown, healthcheck mode
 ```
 
