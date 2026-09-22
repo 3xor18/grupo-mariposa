@@ -4,12 +4,16 @@ import {
   ApiProperty,
   ApiPropertyOptional,
   ApiResponse,
+  ApiSchema,
   getSchemaPath,
 } from '@nestjs/swagger';
 import { PROBLEM_CONTENT_TYPE } from './problem-details';
 
+export const PROBLEM_SCHEMA_NAME = 'Problem';
+export const FIELD_ERROR_SCHEMA_NAME = 'FieldError';
 export const PROBLEM_RESPONSE_DESCRIPTION = 'Error following RFC 9457';
 
+@ApiSchema({ name: FIELD_ERROR_SCHEMA_NAME })
 export class FieldErrorDto {
   @ApiProperty()
   readonly field!: string;
@@ -18,6 +22,7 @@ export class FieldErrorDto {
   readonly message!: string;
 }
 
+@ApiSchema({ name: PROBLEM_SCHEMA_NAME })
 export class ProblemDto {
   @ApiProperty({ format: 'uri-reference' })
   readonly type!: string;
