@@ -17,11 +17,11 @@ describe('resolveTraceContext', () => {
     expect(resolveTraceContext({ traceparent: TRACEPARENT.toUpperCase() }).traceId).toBe(TRACE_ID);
   });
 
-  it('should_fallback_to_request_id_when_traceparent_is_absent', () => {
-    expect(resolveTraceContext({ 'x-request-id': 'abc-1' })).toEqual({
-      traceId: 'abc-1',
-      requestId: 'abc-1',
-    });
+  it('should_generate_w3c_trace_id_and_keep_request_id_when_traceparent_is_absent', () => {
+    const context = resolveTraceContext({ 'x-request-id': 'abc-1' });
+
+    expect(context.traceId).toMatch(/^[\da-f]{32}$/);
+    expect(context.requestId).toBe('abc-1');
   });
 
   it.each([

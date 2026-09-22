@@ -1,7 +1,11 @@
 import { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { HttpMetrics, UNMATCHED_ROUTE } from './http-metrics';
-import { createHttpMetricsMiddleware, routeLabelOf } from './http-metrics.middleware';
+import {
+  CLIENT_CLOSED_REQUEST_STATUS,
+  createHttpMetricsMiddleware,
+  routeLabelOf,
+} from './http-metrics.middleware';
 
 describe('HttpMetrics', () => {
   it('should_count_and_time_requests_by_method_route_and_status', async () => {
@@ -33,9 +37,9 @@ describe('routeLabelOf', () => {
 });
 
 describe('createHttpMetricsMiddleware', () => {
-  it('should_observe_request_when_response_finishes', () => {
+  const observeWith = (writableFinished: boolean, events: readonly string[]): jest.Mock => {
     const metrics = { observe: jest.fn() };
-    const response = Object.assign(new EventEmitter(), { statusCode: 404 });
+    const response = Object.assign(new EventEmitter(), { statusCode: 404, writableFinished });
     const request = { method: 'GET', baseUrl: '', route: { path: '/a' } };
     const next = jest.fn();
 
@@ -44,14 +48,32 @@ describe('createHttpMetricsMiddleware', () => {
       response as unknown as Response,
       next,
     );
-    response.emit('finish');
+    for (const event of events) {
+      response.emit(event);
+    }
 
-    expect(next).toHaveBeenCalled();
-    expect(metrics.observe).toHaveBeenCalledWith({
+    expect(next).toHaveBeenCalledTimes(1);
+    return metrics.observe;
+  };
+
+  it('should_observe_once_when_response_finishes_and_then_closes', () => {
+    const observe = observeWith(true, ['finish', 'close']);
+
+    expect(observe).toHaveBeenCalledTimes(1);
+    expect(observe).toHaveBeenCalledWith({
       method: 'GET',
       route: '/a',
       statusCode: 404,
       durationSeconds: expect.any(Number) as number,
     });
+  });
+
+  it('should_observe_aborted_requests_as_client_closed_when_connection_closes_early', () => {
+    const observe = observeWith(false, ['close']);
+
+    expect(observe).toHaveBeenCalledTimes(1);
+    expect(observe).toHaveBeenCalledWith(
+      expect.objectContaining({ statusCode: CLIENT_CLOSED_REQUEST_STATUS }),
+    );
   });
 });

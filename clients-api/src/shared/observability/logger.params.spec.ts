@@ -5,9 +5,10 @@ import {
   isoTimestamp,
   isQuietPath,
   levelLabel,
+  QUIET_PATHS,
   REDACTED_PATHS,
-  SERVICE_NAME,
 } from './logger.params';
+import { SERVICE_NAME } from '../constants/logging.constants';
 import { TraceContextStore } from './trace-context';
 
 describe('logger params', () => {
@@ -25,7 +26,15 @@ describe('logger params', () => {
       base: { service: SERVICE_NAME },
       redact: { paths: REDACTED_PATHS },
     });
-    expect(REDACTED_PATHS).toContain('req.headers.authorization');
+    expect(REDACTED_PATHS).toEqual([
+      'req.headers.authorization',
+      'req.headers["proxy-authorization"]',
+      'req.headers["x-api-key"]',
+      'req.headers.cookie',
+      'res.headers["set-cookie"]',
+    ]);
+    expect(Object.isFrozen(REDACTED_PATHS)).toBe(true);
+    expect([...QUIET_PATHS]).toEqual(['/health/live', '/health/ready', '/metrics']);
   });
 
   it('should_bind_trace_context_to_request_logs', () => {
@@ -46,7 +55,11 @@ describe('logger params', () => {
 
   it.each([
     ['/health/live', true],
+    ['/health/ready?probe=k8s', true],
     ['/metrics', true],
+    ['/healthcheck', false],
+    ['/health/live/extra', false],
+    ['/metrics-export', false],
     ['/clients/CLI-1', false],
     [undefined, false],
   ])('should_silence_probe_logs_for_%s', (url, expected) => {
