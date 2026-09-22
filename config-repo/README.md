@@ -1,20 +1,30 @@
 # config-repo
 
-Repositorio de configuración centralizado servido por `config-server` (Spring Cloud Config).
+Repositorio de configuración centralizado servido por `config-server` (Spring Cloud Config) a los cuatro
+componentes: `order-processor` (cliente Spring nativo) y `products-api`, `clients-api` y `order-tracker`
+(leen `/{app}-{perfil}.properties` al arrancar).
 
 | Archivo | Se aplica a |
 |---|---|
-| `application.yml` | todos los servicios Spring |
+| `application-docker.yml` | todos los clientes Spring con perfil `docker` |
 | `<servicio>.yml` | valores por defecto del servicio |
-| `<servicio>-<perfil>.yml` | ambiente: `docker` (local), `staging`, `production` |
+| `<servicio>-docker.yml` | Compose local (inyección de fallos activa, tópicos de réplica 1, trazas al 100 %) |
+| `<servicio>-staging.yml` | EKS staging (`CONFIG_PROFILE` / `SPRING_PROFILES_ACTIVE=staging`) |
+| `<servicio>-production.yml` | EKS producción (`CONFIG_PROFILE` / `SPRING_PROFILES_ACTIVE=production`) |
 
 Reglas:
 
 - **Nunca** contiene secretos. Los secretos llegan por variables de entorno desde `.env` (local),
   GitHub Secrets (CI) o AWS Secrets Manager vía External Secrets (EKS).
-- Cambiar un parámetro de negocio (tasas de impuesto, descuento) o técnico (timeouts, reintentos,
-  TTL de caché) es un PR sobre este directorio, revisado y auditable, sin recompilar el servicio.
-- En AWS el mismo servidor puede usar el backend `git` (este repo) o `awsparamstore`
-  (`CONFIG_BACKEND=awsparamstore`, prefijo `/grupo-mariposa`).
-- `products-api` y `clients-api` siguen 12-factor puro: se configuran por variables de entorno
-  (Compose en local, `deploy/helm/values/*.yaml` por ambiente en Kubernetes).
+- **Nunca** contiene hosts de un ambiente. Los endpoints de EKS (Keycloak, MSK, ElastiCache, dominios públicos)
+  viven en `deploy/helm/values/<ambiente>/<servicio>.yaml`; aquí sólo hay parámetros de negocio y técnicos.
+- Precedencia en todos los servicios: **variable de entorno > config server > valor por defecto**. Una variable
+  definida en los values de Helm oculta el valor de este directorio.
+- Cambiar un parámetro de negocio (tasas de impuesto, descuento) o técnico (timeouts, reintentos, TTL de caché) es
+  un PR sobre este directorio, revisado y auditable, sin recompilar el servicio. Se aplica con un reinicio
+  progresivo (`kubectl rollout restart`) porque la configuración es inmutable en tiempo de ejecución.
+- En EKS el servidor usa el backend `git` sobre este mismo repositorio (`CONFIG_GIT_URI`, rama `main`,
+  `search-paths: config-repo`) con credenciales `CONFIG_GIT_USERNAME` / `CONFIG_GIT_PASSWORD` desde
+  External Secrets. Alternativa: `CONFIG_BACKEND=awsparamstore` con prefijo `/grupo-mariposa`.
+- La inyección de fallos (`fault.injection-enabled`) sólo está activa en el perfil `docker`; staging y producción
+  la desactivan aquí y además con `FAULT_INJECTION_ENABLED=false` en Helm.

@@ -1,0 +1,6 @@
+fault:
+  injection-enabled: false
+  rules: ""
+rate-limit:
+  rps: 500
+  burst: 1000
