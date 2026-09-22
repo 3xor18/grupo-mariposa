@@ -1,5 +1,8 @@
 package com.grupomariposa.orders.infrastructure.persistence.mapping;
 
+import static com.grupomariposa.orders.infrastructure.support.Enums.nameOf;
+import static com.grupomariposa.orders.infrastructure.support.Enums.parseNullable;
+
 import com.grupomariposa.orders.application.query.OrderSummary;
 import com.grupomariposa.orders.domain.model.ClientSegment;
 import com.grupomariposa.orders.domain.model.ClientSnapshot;
@@ -22,7 +25,6 @@ import com.grupomariposa.orders.infrastructure.persistence.document.OrderDocumen
 import com.grupomariposa.orders.infrastructure.persistence.document.TotalsDocument;
 import com.grupomariposa.orders.infrastructure.persistence.document.ViolationDocument;
 import java.util.Objects;
-import java.util.function.Function;
 
 public final class OrderDocumentMapper {
 
@@ -67,7 +69,7 @@ public final class OrderDocumentMapper {
                 Market.valueOf(document.market()), Currency.valueOf(document.currency()),
                 document.client().clientId(), document.eventVersion(),
                 Decimals.toMoney(document.totals().grandTotal()),
-                nullable(document.reason(), RejectionCode::valueOf), document.processedAt());
+                parseNullable(document.reason(), RejectionCode::valueOf), document.processedAt());
     }
 
     private ClientDocument clientDocument(final ClientSnapshot client) {
@@ -78,10 +80,10 @@ public final class OrderDocumentMapper {
 
     private ClientSnapshot clientSnapshot(final ClientDocument client) {
         return new ClientSnapshot(client.clientId(), cipher.decrypt(client.encryptedName()),
-                nullable(client.status(), ClientStatus::valueOf),
-                nullable(client.segment(), ClientSegment::valueOf),
-                nullable(client.taxRegime(), TaxRegime::valueOf),
-                nullable(client.market(), Market::valueOf));
+                parseNullable(client.status(), ClientStatus::valueOf),
+                parseNullable(client.segment(), ClientSegment::valueOf),
+                parseNullable(client.taxRegime(), TaxRegime::valueOf),
+                parseNullable(client.market(), Market::valueOf));
     }
 
     private static TotalsDocument totalsDocument(final Totals totals) {
@@ -113,13 +115,5 @@ public final class OrderDocumentMapper {
     private static FailureDetails failure(final FailureDocument document) {
         return document == null ? null
                 : new FailureDetails(document.category(), document.cause(), document.attempts());
-    }
-
-    static String nameOf(final Enum<?> value) {
-        return value == null ? null : value.name();
-    }
-
-    static <T> T nullable(final String value, final Function<String, T> parser) {
-        return value == null ? null : parser.apply(value);
     }
 }
