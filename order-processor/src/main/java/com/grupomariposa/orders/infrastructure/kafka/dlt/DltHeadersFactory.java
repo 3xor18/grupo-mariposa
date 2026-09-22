@@ -1,5 +1,6 @@
 package com.grupomariposa.orders.infrastructure.kafka.dlt;
 
+import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.Objects;

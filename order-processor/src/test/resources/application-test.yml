@@ -10,6 +10,9 @@ spring:
           issuer-uri: http://issuer.test/realms/mariposa
 
 management:
+  tracing:
+    sampling:
+      probability: 1.0
   otlp:
     tracing:
       export:
@@ -29,7 +32,8 @@ app:
     instance-id: integration-tests
   kafka:
     concurrency: 2
-    dead-letter-retry-delay: 200ms
+    create-topics: true
+    replication-factor: 1
     record-retry:
       initial-interval: 100ms
   http:

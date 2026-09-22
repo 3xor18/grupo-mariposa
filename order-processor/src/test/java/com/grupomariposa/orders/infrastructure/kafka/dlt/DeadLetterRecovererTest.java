@@ -1,5 +1,6 @@
 package com.grupomariposa.orders.infrastructure.kafka.dlt;
 
+import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import static com.grupomariposa.orders.application.ApplicationFixtures.EVENT_ID;
 import static com.grupomariposa.orders.application.ApplicationFixtures.ORDER_ID;
 import static com.grupomariposa.orders.application.ApplicationFixtures.goldenCommand;
@@ -22,7 +23,6 @@ import com.grupomariposa.orders.infrastructure.kafka.inbound.MessageIds;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.RecordProcessingFailure;
 import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import java.time.Duration;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -36,8 +36,7 @@ class DeadLetterRecovererTest {
     private final ProcessingObserver observer = mock(ProcessingObserver.class);
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private final DeadLetterRecoverer recoverer = new DeadLetterRecoverer(deadLetters,
-            technicalFailures, observer, new ProcessingMetrics(registry), new CauseSanitizer(),
-            Duration.ofMillis(10));
+            technicalFailures, observer, new ProcessingMetrics(registry), new CauseSanitizer());
     private final ConsumerRecord<String, byte[]> record =
             new ConsumerRecord<>("orders.created.v1", 0, 1L, ORDER_ID, new byte[] {1});
 
@@ -82,26 +81,15 @@ class DeadLetterRecovererTest {
     }
 
     @Test
-    void should_pause_and_rethrow_when_dead_letter_topic_is_unavailable() {
-        final RecordProcessingFailure failure = failure(ErrorCategory.VALIDATION, false);
+    void should_rethrow_without_recording_when_dead_letter_topic_is_unavailable() {
+        final RecordProcessingFailure failure = failure(ErrorCategory.EXTERNAL_TRANSIENT, true);
         doThrow(new IllegalStateException("broker down")).when(deadLetters)
                 .accept(record, failure);
 
         assertThatThrownBy(() -> recoverer.accept(record, failure))
                 .isInstanceOf(IllegalStateException.class);
         verify(observer, never()).stage(ProcessingStage.SENT_TO_DLT, ORDER_ID, EVENT_ID);
-    }
-
-    @Test
-    void should_keep_interrupt_flag_while_pausing() {
-        final RecordProcessingFailure failure = failure(ErrorCategory.VALIDATION, false);
-        doThrow(new IllegalStateException("broker down")).when(deadLetters)
-                .accept(record, failure);
-        Thread.currentThread().interrupt();
-
-        assertThatThrownBy(() -> recoverer.accept(record, failure))
-                .isInstanceOf(IllegalStateException.class);
-        assertThat(Thread.interrupted()).isTrue();
+        verify(technicalFailures, never()).record(any(), any());
     }
 
     private static RecordProcessingFailure failure(final ErrorCategory category,

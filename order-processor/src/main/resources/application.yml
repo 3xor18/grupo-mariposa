@@ -57,8 +57,8 @@ spring:
       properties:
         enable.idempotence: true
         max.in.flight.requests.per.connection: ${KAFKA_MAX_IN_FLIGHT:5}
-        delivery.timeout.ms: ${KAFKA_DELIVERY_TIMEOUT_MS:120000}
-        request.timeout.ms: ${KAFKA_REQUEST_TIMEOUT_MS:30000}
+        delivery.timeout.ms: ${KAFKA_DELIVERY_TIMEOUT_MS:10000}
+        request.timeout.ms: ${KAFKA_REQUEST_TIMEOUT_MS:5000}
         linger.ms: ${KAFKA_LINGER_MS:5}
     listener:
       ack-mode: record
@@ -99,7 +99,7 @@ management:
         http.server.requests: true
   tracing:
     sampling:
-      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
   otlp:
     tracing:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
@@ -149,7 +149,7 @@ pricing:
 
 app:
   processing:
-    max-concurrent-lookups: ${PROCESSING_MAX_CONCURRENT_LOOKUPS:64}
+    max-concurrent-lookups: ${PROCESSING_MAX_CONCURRENT_LOOKUPS:32}
     instance-id: ${HOSTNAME:}
   kafka:
     topics:
@@ -161,10 +161,9 @@ app:
       dead-letter-partitions: ${KAFKA_TOPIC_DLT_PARTITIONS:3}
     consumer-group: ${KAFKA_CONSUMER_GROUP:order-processor}
     concurrency: ${KAFKA_LISTENER_CONCURRENCY:3}
-    create-topics: ${KAFKA_CREATE_TOPICS:true}
-    replication-factor: ${KAFKA_REPLICATION_FACTOR:1}
+    create-topics: ${KAFKA_CREATE_TOPICS:false}
+    replication-factor: ${KAFKA_REPLICATION_FACTOR:3}
     health-timeout: ${KAFKA_HEALTH_TIMEOUT:2s}
-    dead-letter-retry-delay: ${KAFKA_DLT_RETRY_DELAY:1s}
     record-retry:
       initial-interval: ${RECORD_RETRY_INITIAL_INTERVAL:1s}
       multiplier: ${RECORD_RETRY_MULTIPLIER:2.0}
@@ -217,7 +216,7 @@ app:
     fixed-delay: ${OUTBOX_RELAY_INTERVAL:250ms}
     batch-size: ${OUTBOX_BATCH_SIZE:100}
     lease: ${OUTBOX_LEASE:30s}
-    send-timeout: ${OUTBOX_SEND_TIMEOUT:10s}
+    send-timeout: ${OUTBOX_SEND_TIMEOUT:15s}
     initial-backoff: ${OUTBOX_RETRY_INITIAL_BACKOFF:1s}
     max-backoff: ${OUTBOX_RETRY_MAX_BACKOFF:60s}
   validation:
