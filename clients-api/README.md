@@ -59,6 +59,30 @@ The configuration is validated at startup; the process exits with a `fatal` log 
 | `RATE_LIMIT_RPS`     | `200`                    | token bucket refill rate per process                                       |
 | `RATE_LIMIT_BURST`   | `400`                    | token bucket capacity; excess gets `429 RATE_LIMITED` + `Retry-After`      |
 
+### Centralized configuration (Spring Cloud Config Server)
+
+Before the Nest app is created, `loadRemoteConfig` fetches
+`${CONFIG_SERVER_URL}/${CONFIG_APP_NAME}-${CONFIG_PROFILE}.properties`. Keys are parsed with
+`java.util.Properties` rules (`key: value`, `key=value`, escapes such as `\:` `\=` `\\`, `#`/`!`
+comments) and mapped to environment style (`rate-limit.rps` → `RATE_LIMIT_RPS`, `auth.jwks-url` →
+`AUTH_JWKS_URL`). Unknown keys (for example `management.*`) are ignored.
+
+Precedence: **non-empty environment variable > config server value > built-in default**. The merged
+source is handed to the same validated loader; `process.env` is never mutated. Logs list the loaded
+keys with values of keys containing `SECRET`, `PASSWORD`, `KEY` or `TOKEN` redacted; credentials are
+never logged.
+
+| Variable                   | Default       | Description                                                                |
+| -------------------------- | ------------- | -------------------------------------------------------------------------- |
+| `CONFIG_SERVER_URL`        | empty (skip)  | config server base URL                                                     |
+| `CONFIG_APP_NAME`          | `clients-api` | application name segment                                                   |
+| `CONFIG_PROFILE`           | `default`     | profile segment (`docker` in Compose)                                      |
+| `CONFIG_SERVER_USERNAME`   | none          | HTTP basic auth user                                                       |
+| `CONFIG_SERVER_PASSWORD`   | none          | HTTP basic auth password                                                   |
+| `CONFIG_SERVER_TIMEOUT_MS` | `3000`        | timeout per attempt                                                        |
+| `CONFIG_SERVER_RETRIES`    | `3`           | extra attempts on network errors, timeouts and `5xx` (backoff 200 ms × 2ⁿ) |
+| `CONFIG_SERVER_FAIL_FAST`  | `false`       | `true`: fatal log and exit 1 when unreachable; `false`: warn and continue  |
+
 ## Module design
 
 ```
@@ -70,6 +94,7 @@ src/
 │   └── http/                      thin controller, GetClientParams (validation), ClientResponse, mapper
 ├── health/                        liveness/readiness, readiness flips to DOWN on shutdown
 ├── config/                        typed AppConfig loaded from env with zod (fail fast)
+│   └── remote/                    Spring Cloud Config Server client, properties parser, merge
 └── shared/
     ├── errors/                    ErrorCode catalog, ProblemException, DomainError, global filter
     ├── auth/                      global JwtAuthGuard, jose verifier (JWKS, issuer, exp, RS256, role), @Public
