@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.grupomariposa.dev/common/problem.schema.json",
+  "title": "Problem",
+  "description": "Shared error body (RFC 9457) returned by every HTTP service of the platform.",
+  "type": "object",
+  "required": ["type", "title", "status", "code", "detail", "instance", "traceId", "timestamp"],
+  "properties": {
+    "type": { "type": "string", "format": "uri-reference" },
+    "title": { "type": "string" },
+    "status": { "type": "integer", "minimum": 400, "maximum": 599 },
+    "code": {
+      "type": "string",
+      "description": "Stable machine readable code. Consumers must branch on status and code, never on detail.",
+      "examples": [
+        "VALIDATION_ERROR",
+        "PRODUCT_NOT_FOUND",
+        "CLIENT_NOT_FOUND",
+        "ORDER_NOT_FOUND",
+        "UNAUTHORIZED",
+        "FORBIDDEN",
+        "RATE_LIMITED",
+        "INTERNAL_ERROR",
+        "SERVICE_UNAVAILABLE",
+        "BAD_GATEWAY"
+      ]
+    },
+    "detail": { "type": "string" },
+    "instance": { "type": "string" },
+    "traceId": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["field", "message"],
+        "properties": {
+          "field": { "type": "string" },
+          "message": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}
