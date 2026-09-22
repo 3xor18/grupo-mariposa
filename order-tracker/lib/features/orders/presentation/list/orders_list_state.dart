@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:order_tracker/core/error/app_failure.dart';
+import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_summary.dart';
 import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart';
 

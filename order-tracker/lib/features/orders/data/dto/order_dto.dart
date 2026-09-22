@@ -2,7 +2,6 @@ import 'package:order_tracker/core/json/json_map.dart';
 
 abstract final class _OrderFields {
   static const orderId = 'orderId';
-  static const sourceEventId = 'sourceEventId';
   static const eventVersion = 'eventVersion';
   static const status = 'status';
   static const market = 'market';
@@ -23,7 +22,6 @@ abstract final class _OrderFields {
 final class OrderDto {
   const OrderDto({
     required this.orderId,
-    required this.sourceEventId,
     required this.eventVersion,
     required this.status,
     required this.market,
@@ -44,7 +42,6 @@ final class OrderDto {
   factory OrderDto.fromJson(JsonMap json) {
     return OrderDto(
       orderId: json.requireString(_OrderFields.orderId),
-      sourceEventId: json.requireString(_OrderFields.sourceEventId),
       eventVersion: json.requireInt(_OrderFields.eventVersion),
       status: json.requireString(_OrderFields.status),
       market: json.requireString(_OrderFields.market),
@@ -64,7 +61,6 @@ final class OrderDto {
   }
 
   final String orderId;
-  final String sourceEventId;
   final int eventVersion;
   final String status;
   final String market;
@@ -162,14 +158,14 @@ final class OrderLineDto {
       sku: json.optionalString(_LineFields.sku),
       taxCategory: json.optionalString(_LineFields.taxCategory),
       quantity: json.requireInt(_LineFields.quantity),
-      unitPrice: json.requireDouble(_LineFields.unitPrice),
-      grossSubtotal: json.optionalDouble(_LineFields.grossSubtotal),
+      unitPrice: json.requireDecimal(_LineFields.unitPrice),
+      grossSubtotal: json.optionalDecimal(_LineFields.grossSubtotal),
       discountRate: json.optionalDouble(_LineFields.discountRate),
-      discount: json.optionalDouble(_LineFields.discount),
-      netSubtotal: json.optionalDouble(_LineFields.netSubtotal),
+      discount: json.optionalDecimal(_LineFields.discount),
+      netSubtotal: json.optionalDecimal(_LineFields.netSubtotal),
       taxRate: json.optionalDouble(_LineFields.taxRate),
-      taxAmount: json.optionalDouble(_LineFields.taxAmount),
-      lineTotal: json.optionalDouble(_LineFields.lineTotal),
+      taxAmount: json.optionalDecimal(_LineFields.taxAmount),
+      lineTotal: json.optionalDecimal(_LineFields.lineTotal),
     );
   }
 
@@ -178,14 +174,14 @@ final class OrderLineDto {
   final String? sku;
   final String? taxCategory;
   final int quantity;
-  final double unitPrice;
-  final double? grossSubtotal;
+  final String unitPrice;
+  final String? grossSubtotal;
   final double? discountRate;
-  final double? discount;
-  final double? netSubtotal;
+  final String? discount;
+  final String? netSubtotal;
   final double? taxRate;
-  final double? taxAmount;
-  final double? lineTotal;
+  final String? taxAmount;
+  final String? lineTotal;
 }
 
 abstract final class _TotalsFields {
@@ -207,19 +203,19 @@ final class TotalsDto {
 
   factory TotalsDto.fromJson(JsonMap json) {
     return TotalsDto(
-      grossSubtotal: json.requireDouble(_TotalsFields.grossSubtotal),
-      discount: json.requireDouble(_TotalsFields.discount),
-      netSubtotal: json.requireDouble(_TotalsFields.netSubtotal),
-      tax: json.requireDouble(_TotalsFields.tax),
-      grandTotal: json.requireDouble(_TotalsFields.grandTotal),
+      grossSubtotal: json.requireDecimal(_TotalsFields.grossSubtotal),
+      discount: json.requireDecimal(_TotalsFields.discount),
+      netSubtotal: json.requireDecimal(_TotalsFields.netSubtotal),
+      tax: json.requireDecimal(_TotalsFields.tax),
+      grandTotal: json.requireDecimal(_TotalsFields.grandTotal),
     );
   }
 
-  final double grossSubtotal;
-  final double discount;
-  final double netSubtotal;
-  final double tax;
-  final double grandTotal;
+  final String grossSubtotal;
+  final String discount;
+  final String netSubtotal;
+  final String tax;
+  final String grandTotal;
 }
 
 abstract final class _ViolationFields {

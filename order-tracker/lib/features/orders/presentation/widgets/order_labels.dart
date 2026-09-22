@@ -34,9 +34,12 @@ extension OrderStatusPresentation on OrderStatus {
 }
 
 extension MarketPresentation on Market {
+  static const List<Market> filterable = [Market.mx, Market.co, Market.pe];
+
   String get label => switch (this) {
     Market.mx => AppStrings.marketMx,
     Market.co => AppStrings.marketCo,
     Market.pe => AppStrings.marketPe,
+    Market.unknown => AppStrings.marketUnknown,
   };
 }

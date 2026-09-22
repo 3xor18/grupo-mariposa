@@ -33,7 +33,7 @@ final class OrderSummaryDto {
       currency: json.requireString(_SummaryFields.currency),
       clientId: json.requireString(_SummaryFields.clientId),
       eventVersion: json.optionalInt(_SummaryFields.eventVersion),
-      grandTotal: json.requireDouble(_SummaryFields.grandTotal),
+      grandTotal: json.requireDecimal(_SummaryFields.grandTotal),
       reason: json.optionalString(_SummaryFields.reason),
       processedAt: json.requireDateTime(_SummaryFields.processedAt),
     );
@@ -45,7 +45,7 @@ final class OrderSummaryDto {
   final String currency;
   final String clientId;
   final int? eventVersion;
-  final double grandTotal;
+  final String grandTotal;
   final String? reason;
   final DateTime processedAt;
 }

@@ -23,7 +23,7 @@ class OrderSummaryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final formatters = context.read<AppFormatters>();
-    final total = formatters.currency(summary.grandTotal, summary.currency);
+    final total = formatters.money(summary.grandTotal);
     return Semantics(
       container: true,
       label: AppStrings.orderSemantics(summary.orderId, summary.status.label, total),
@@ -39,7 +39,7 @@ class OrderSummaryTile extends StatelessWidget {
         subtitle: Text(
           AppStrings.joinDetails([
             summary.clientId,
-            summary.market,
+            summary.market.label,
             formatters.dateTime(summary.processedAt),
           ]),
         ),

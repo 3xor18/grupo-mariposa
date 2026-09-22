@@ -6,6 +6,7 @@ import 'package:order_tracker/core/theme/app_tokens.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/presentation/orders_keys.dart';
 import 'package:order_tracker/features/orders/presentation/widgets/labeled_value.dart';
+import 'package:order_tracker/features/orders/presentation/widgets/order_labels.dart';
 import 'package:order_tracker/features/orders/presentation/widgets/order_status_chip.dart';
 
 class OrderHeaderCard extends StatelessWidget {
@@ -60,7 +61,8 @@ class OrderHeaderCard extends StatelessWidget {
             : AppStrings.clientWithId(clientName, client.clientId),
       ),
       if (segment != null) LabeledValue(label: AppStrings.segment, value: segment),
-      LabeledValue(label: AppStrings.market, value: order.market),
+      LabeledValue(label: AppStrings.market, value: order.market.label),
+      LabeledValue(label: AppStrings.eventVersion, value: '${order.eventVersion}'),
       if (channel != null) LabeledValue(label: AppStrings.channel, value: channel),
       if (occurredAt != null)
         LabeledValue(label: AppStrings.occurredAt, value: formatters.dateTime(occurredAt)),

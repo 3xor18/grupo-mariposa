@@ -8,15 +8,13 @@ import 'package:order_tracker/features/orders/presentation/orders_keys.dart';
 import 'package:order_tracker/features/orders/presentation/widgets/labeled_value.dart';
 
 class OrderTotalsCard extends StatelessWidget {
-  const OrderTotalsCard({required this.totals, required this.currency, super.key});
+  const OrderTotalsCard({required this.totals, super.key});
 
   final OrderTotals totals;
-  final String currency;
 
   @override
   Widget build(BuildContext context) {
-    final formatters = context.read<AppFormatters>();
-    String money(double amount) => formatters.currency(amount, currency);
+    final money = context.read<AppFormatters>().money;
     final grandTotal = money(totals.grandTotal);
     return SectionCard(
       title: AppStrings.totals,

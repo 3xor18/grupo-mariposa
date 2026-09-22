@@ -1,1 +1,1 @@
-enum Market { mx, co, pe }
+enum Market { mx, co, pe, unknown }

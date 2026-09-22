@@ -4,6 +4,7 @@ import 'package:order_tracker/core/l10n/app_strings.dart';
 import 'package:order_tracker/core/theme/app_theme.dart';
 import 'package:order_tracker/core/theme/status_palette.dart';
 import 'package:order_tracker/features/auth/data/authorization_callback.dart';
+import 'package:order_tracker/features/auth/domain/session_restoration.dart';
 import 'package:order_tracker/features/orders/domain/entities/market.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
@@ -33,6 +34,7 @@ void main() {
         AppStrings.marketMx,
         AppStrings.marketCo,
         AppStrings.marketPe,
+        AppStrings.marketUnknown,
       ]);
     });
 
@@ -63,6 +65,8 @@ void main() {
       const failure = ProcessingFailure(category: 'C', cause: 'x', attempts: 1);
       expect(failure.props, ['C', 'x', 1]);
       expect(const NoAuthorizationCallback().props, isEmpty);
+      expect(const SignedOut().props, isEmpty);
+      expect(const SigningInSilently(), const SigningInSilently());
     });
   });
 }

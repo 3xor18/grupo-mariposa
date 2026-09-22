@@ -1,5 +1,8 @@
+import 'package:order_tracker/core/money/money.dart';
+import 'package:order_tracker/features/orders/domain/entities/market.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_line.dart';
+import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_summary.dart';
 
@@ -106,36 +109,51 @@ Map<String, Object?> orderPageJson({int page = 0, int totalPages = 2}) => {
 
 final processedAt = DateTime.utc(2026, 9, 18, 15, 42, 12);
 
-const approvedTotals = OrderTotals(
-  grossSubtotal: 1836,
-  discount: 55.08,
-  netSubtotal: 1780.92,
-  tax: 319.19,
-  grandTotal: 2100.11,
+Money mxn(String amount) => Money.parse(amount, currency: 'MXN');
+
+Money cop(String amount) => Money.parse(amount, currency: 'COP');
+
+Money pen(String amount) => Money.parse(amount, currency: 'PEN');
+
+final approvedTotals = OrderTotals(
+  grossSubtotal: mxn('1836'),
+  discount: mxn('55.08'),
+  netSubtotal: mxn('1780.92'),
+  tax: mxn('319.19'),
+  grandTotal: mxn('2100.11'),
 );
 
-const detailedLine = OrderLine(
+final detailedLine = OrderLine(
   productId: 'PRD-001',
   name: 'Bebida 600 ml',
   sku: 'BEB-600-PET',
   taxCategory: 'STANDARD',
   quantity: 24,
-  unitPrice: 35.5,
-  grossSubtotal: 852,
+  unitPrice: mxn('35.5'),
+  grossSubtotal: mxn('852'),
   discountRate: 0.03,
-  discount: 25.56,
-  netSubtotal: 826.44,
+  discount: mxn('25.56'),
+  netSubtotal: mxn('826.44'),
   taxRate: 0.16,
-  taxAmount: 132.23,
-  lineTotal: 958.67,
+  taxAmount: mxn('132.23'),
+  lineTotal: mxn('958.67'),
 );
 
-const bareLine = OrderLine(productId: 'PRD-008', quantity: 12, unitPrice: 82);
+final bareLine = OrderLine(productId: 'PRD-008', quantity: 12, unitPrice: mxn('82'));
+
+OrderTotals zeroTotals(Money Function(String amount) money) => OrderTotals(
+  grossSubtotal: money('0'),
+  discount: money('0'),
+  netSubtotal: money('0'),
+  tax: money('0'),
+  grandTotal: money('0'),
+);
 
 Order approvedOrder() => Order(
   orderId: approvedOrderId,
+  eventVersion: 1,
   status: OrderStatus.approved,
-  market: 'MX',
+  market: Market.mx,
   currency: 'MXN',
   channel: 'C1',
   client: const OrderClient(
@@ -146,7 +164,7 @@ Order approvedOrder() => Order(
     taxRegime: 'GENERAL',
     market: 'MX',
   ),
-  lines: const [detailedLine, bareLine],
+  lines: [detailedLine, bareLine],
   totals: approvedTotals,
   occurredAt: DateTime.utc(2026, 9, 18, 15, 42, 10),
   receivedAt: DateTime.utc(2026, 9, 18, 15, 42, 11),
@@ -156,17 +174,18 @@ Order approvedOrder() => Order(
 
 Order rejectedOrder() => Order(
   orderId: rejectedOrderId,
+  eventVersion: 1,
   status: OrderStatus.rejected,
-  market: 'CO',
+  market: Market.co,
   currency: 'COP',
   client: const OrderClient(clientId: 'CLI-20002'),
-  lines: const [OrderLine(productId: 'PRD-007', quantity: 3, unitPrice: 4500)],
-  totals: const OrderTotals(
-    grossSubtotal: 13500,
-    discount: 0,
-    netSubtotal: 13500,
-    tax: 0,
-    grandTotal: 0,
+  lines: [OrderLine(productId: 'PRD-007', quantity: 3, unitPrice: cop('4500'))],
+  totals: OrderTotals(
+    grossSubtotal: cop('13500'),
+    discount: cop('0'),
+    netSubtotal: cop('13500'),
+    tax: cop('0'),
+    grandTotal: cop('0'),
   ),
   reason: 'CLIENT_BLOCKED',
   violations: const [
@@ -183,12 +202,13 @@ Order rejectedOrder() => Order(
 
 Order failedOrder() => Order(
   orderId: failedOrderId,
+  eventVersion: 2,
   status: OrderStatus.technicalFailure,
-  market: 'PE',
+  market: Market.pe,
   currency: 'PEN',
   client: const OrderClient(clientId: 'CLI-40002'),
   lines: const [],
-  totals: const OrderTotals(grossSubtotal: 0, discount: 0, netSubtotal: 0, tax: 0, grandTotal: 0),
+  totals: zeroTotals(pen),
   failure: const ProcessingFailure(
     category: 'DEPENDENCY_UNAVAILABLE',
     cause: 'clients-api 503',
@@ -201,10 +221,10 @@ Order failedOrder() => Order(
 OrderSummary summary(String orderId, {OrderStatus status = OrderStatus.approved}) => OrderSummary(
   orderId: orderId,
   status: status,
-  market: 'MX',
-  currency: 'MXN',
+  market: Market.mx,
   clientId: 'CLI-99821',
-  grandTotal: 2100.11,
+  eventVersion: 1,
+  grandTotal: mxn('2100.11'),
   processedAt: processedAt,
 );
 

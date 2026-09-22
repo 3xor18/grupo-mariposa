@@ -1,7 +1,7 @@
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:order_tracker/core/result/result.dart';
-import 'package:order_tracker/features/orders/domain/entities/order_summary.dart';
+import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
 import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart';
 import 'package:order_tracker/features/orders/domain/usecases/list_orders.dart';
 import 'package:order_tracker/features/orders/presentation/list/orders_list_event.dart';

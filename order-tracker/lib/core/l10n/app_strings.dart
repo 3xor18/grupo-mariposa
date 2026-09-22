@@ -33,6 +33,7 @@ abstract final class AppStrings {
   static const client = 'Cliente';
   static const market = 'Mercado';
   static const channel = 'Canal';
+  static const eventVersion = 'Versión del evento';
   static const segment = 'Segmento';
   static const occurredAt = 'Emitido';
   static const receivedAt = 'Recibido';
@@ -67,6 +68,7 @@ abstract final class AppStrings {
   static const marketMx = 'México';
   static const marketCo = 'Colombia';
   static const marketPe = 'Perú';
+  static const marketUnknown = 'Otro mercado';
 
   static const errorTitle = 'Algo salió mal';
   static const networkError = 'No hay conexión con el servidor. Revisa tu red e intenta de nuevo.';

@@ -10,22 +10,26 @@ abstract final class OrderStatusCodes {
 
   static OrderStatus toDomain(String code) => _byCode[code] ?? OrderStatus.unknown;
 
-  static String? toCode(OrderStatus status) {
-    for (final entry in _byCode.entries) {
-      if (entry.value == status) {
-        return entry.key;
-      }
-    }
-    return null;
-  }
+  static String? toCode(OrderStatus status) => _codeOf(_byCode, status);
 }
 
 abstract final class MarketCodes {
-  static const Map<Market, String> _codeByMarket = {
-    Market.mx: 'MX',
-    Market.co: 'CO',
-    Market.pe: 'PE',
+  static const Map<String, Market> _byCode = {
+    'MX': Market.mx,
+    'CO': Market.co,
+    'PE': Market.pe,
   };
 
-  static String toCode(Market market) => _codeByMarket[market]!;
+  static Market toDomain(String code) => _byCode[code] ?? Market.unknown;
+
+  static String? toCode(Market market) => _codeOf(_byCode, market);
+}
+
+String? _codeOf<T>(Map<String, T> codes, T value) {
+  for (final MapEntry(:key, value: candidate) in codes.entries) {
+    if (candidate == value) {
+      return key;
+    }
+  }
+  return null;
 }

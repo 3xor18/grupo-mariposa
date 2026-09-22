@@ -1,6 +1,6 @@
 import 'package:order_tracker/core/result/result.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
-import 'package:order_tracker/features/orders/domain/entities/order_summary.dart';
+import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
 import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart';
 
 abstract interface class OrderRepository {

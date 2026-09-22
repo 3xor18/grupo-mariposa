@@ -23,6 +23,10 @@ extension type const JsonMap(Map<String, Object?> raw) {
 
   bool? optionalBool(String key) => _optional<bool>(key);
 
+  String requireDecimal(String key) => _require(key, optionalDecimal(key));
+
+  String? optionalDecimal(String key) => _optional<num>(key)?.toString();
+
   DateTime requireDateTime(String key) => _require(key, optionalDateTime(key));
 
   DateTime? optionalDateTime(String key) {

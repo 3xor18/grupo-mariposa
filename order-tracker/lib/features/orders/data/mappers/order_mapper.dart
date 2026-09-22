@@ -1,21 +1,24 @@
+import 'package:order_tracker/core/money/money.dart';
 import 'package:order_tracker/features/orders/data/dto/order_dto.dart';
 import 'package:order_tracker/features/orders/data/dto/order_page_dto.dart';
 import 'package:order_tracker/features/orders/data/mappers/order_codes.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_line.dart';
+import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_summary.dart';
 
 extension OrderDtoMapper on OrderDto {
   Order toDomain() {
     return Order(
       orderId: orderId,
+      eventVersion: eventVersion,
       status: OrderStatusCodes.toDomain(status),
-      market: market,
+      market: MarketCodes.toDomain(market),
       currency: currency,
       channel: channel,
       client: client.toDomain(),
-      lines: lines.map((line) => line.toDomain()).toList(growable: false),
-      totals: totals.toDomain(),
+      lines: lines.map((line) => line.toDomain(currency)).toList(growable: false),
+      totals: totals.toDomain(currency),
       reason: reason,
       violations: violations.map((violation) => violation.toDomain()).toList(growable: false),
       failure: failure?.toDomain(),
@@ -41,33 +44,35 @@ extension ClientSnapshotDtoMapper on ClientSnapshotDto {
 }
 
 extension OrderLineDtoMapper on OrderLineDto {
-  OrderLine toDomain() {
+  OrderLine toDomain(String currency) {
+    Money? money(String? amount) => amount == null ? null : Money.parse(amount, currency: currency);
     return OrderLine(
       productId: productId,
       name: name,
       sku: sku,
       taxCategory: taxCategory,
       quantity: quantity,
-      unitPrice: unitPrice,
-      grossSubtotal: grossSubtotal,
+      unitPrice: Money.parse(unitPrice, currency: currency),
+      grossSubtotal: money(grossSubtotal),
       discountRate: discountRate,
-      discount: discount,
-      netSubtotal: netSubtotal,
+      discount: money(discount),
+      netSubtotal: money(netSubtotal),
       taxRate: taxRate,
-      taxAmount: taxAmount,
-      lineTotal: lineTotal,
+      taxAmount: money(taxAmount),
+      lineTotal: money(lineTotal),
     );
   }
 }
 
 extension TotalsDtoMapper on TotalsDto {
-  OrderTotals toDomain() {
+  OrderTotals toDomain(String currency) {
+    Money money(String amount) => Money.parse(amount, currency: currency);
     return OrderTotals(
-      grossSubtotal: grossSubtotal,
-      discount: discount,
-      netSubtotal: netSubtotal,
-      tax: tax,
-      grandTotal: grandTotal,
+      grossSubtotal: money(grossSubtotal),
+      discount: money(discount),
+      netSubtotal: money(netSubtotal),
+      tax: money(tax),
+      grandTotal: money(grandTotal),
     );
   }
 }
@@ -87,10 +92,10 @@ extension OrderSummaryDtoMapper on OrderSummaryDto {
     return OrderSummary(
       orderId: orderId,
       status: OrderStatusCodes.toDomain(status),
-      market: market,
-      currency: currency,
+      market: MarketCodes.toDomain(market),
       clientId: clientId,
-      grandTotal: grandTotal,
+      eventVersion: eventVersion,
+      grandTotal: Money.parse(grandTotal, currency: currency),
       reason: reason,
       processedAt: processedAt,
     );
