@@ -47,6 +47,10 @@ final class ErrorCollector {
         return true;
     }
 
+    void addAll(final ErrorCollector other) {
+        errors.addAll(other.errors);
+    }
+
     boolean isEmpty() {
         return errors.isEmpty();
     }
