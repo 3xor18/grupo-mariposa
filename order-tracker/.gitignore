@@ -1,0 +1,13 @@
+.DS_Store
+.idea/
+*.iml
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/

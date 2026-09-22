@@ -1,0 +1,6 @@
+{
+  "apiBaseUrl": "/api",
+  "keycloakUrl": "http://localhost:8180",
+  "realm": "mariposa",
+  "clientId": "order-tracker"
+}
