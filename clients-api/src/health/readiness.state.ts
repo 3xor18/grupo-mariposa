@@ -1,7 +1,7 @@
-import { BeforeApplicationShutdown, Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
 
 @Injectable()
-export class ReadinessState implements OnApplicationBootstrap, BeforeApplicationShutdown {
+export class ReadinessState implements OnApplicationBootstrap {
   private ready = false;
 
   isReady(): boolean {
@@ -12,7 +12,7 @@ export class ReadinessState implements OnApplicationBootstrap, BeforeApplication
     this.ready = true;
   }
 
-  beforeApplicationShutdown(): void {
+  markDraining(): void {
     this.ready = false;
   }
 }
