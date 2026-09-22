@@ -17,6 +17,7 @@ export interface EnabledAuthConfig {
   readonly issuer: string;
   readonly jwksUrl: string;
   readonly requiredRole: string;
+  readonly audience?: string;
 }
 
 export interface DisabledAuthConfig {
@@ -26,6 +27,7 @@ export interface DisabledAuthConfig {
 export type AuthConfig = EnabledAuthConfig | DisabledAuthConfig;
 
 export interface FaultInjectionConfig {
+  readonly enabled: boolean;
   readonly rules: readonly FaultRule[];
   readonly timeoutMs: number;
 }
@@ -33,6 +35,12 @@ export interface FaultInjectionConfig {
 export interface RateLimitConfig {
   readonly requestsPerSecond: number;
   readonly burst: number;
+  readonly maxTrackedCallers: number;
+}
+
+export interface ShutdownConfig {
+  readonly drainMs: number;
+  readonly timeoutMs: number;
 }
 
 export interface AppConfig {
@@ -41,4 +49,5 @@ export interface AppConfig {
   readonly auth: AuthConfig;
   readonly faultInjection: FaultInjectionConfig;
   readonly rateLimit: RateLimitConfig;
+  readonly shutdown: ShutdownConfig;
 }

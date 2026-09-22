@@ -1,22 +1,36 @@
 import { Response } from 'express';
+import { RESPONSE_EVENTS } from '../constants/http.constants';
 
 export enum HoldOutcome {
   ELAPSED = 'ELAPSED',
   ABORTED = 'ABORTED',
+  CANCELLED = 'CANCELLED',
 }
 
-const CLOSE_EVENT = 'close';
+const ABORT_EVENT = 'abort';
 
-export function holdResponse(response: Response, durationMs: number): Promise<HoldOutcome> {
+export function holdResponse(
+  response: Response,
+  durationMs: number,
+  cancellation: AbortSignal,
+): Promise<HoldOutcome> {
   return new Promise((resolve) => {
-    const onClose = (): void => {
+    const finish = (outcome: HoldOutcome): void => {
       clearTimeout(timer);
-      resolve(HoldOutcome.ABORTED);
+      response.off(RESPONSE_EVENTS.CLOSE, onClose);
+      cancellation.removeEventListener(ABORT_EVENT, onCancel);
+      resolve(outcome);
+    };
+    const onClose = (): void => {
+      finish(HoldOutcome.ABORTED);
+    };
+    const onCancel = (): void => {
+      finish(HoldOutcome.CANCELLED);
     };
     const timer = setTimeout(() => {
-      response.off(CLOSE_EVENT, onClose);
-      resolve(HoldOutcome.ELAPSED);
+      finish(HoldOutcome.ELAPSED);
     }, durationMs);
-    response.once(CLOSE_EVENT, onClose);
+    response.once(RESPONSE_EVENTS.CLOSE, onClose);
+    cancellation.addEventListener(ABORT_EVENT, onCancel, { once: true });
   });
 }

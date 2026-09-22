@@ -5,8 +5,9 @@ import {
   BEARER_AUTH_SCHEME,
   BEARER_FORMAT,
 } from './shared/auth/bearer-auth.scheme';
+import { OPENAPI_TYPES } from './shared/constants/openapi.constants';
+import { ROUTES } from './shared/constants/routes.constants';
 
-export const DOCS_PATH = 'docs';
 export const OPENAPI_VERSION = '3.1.0';
 export const API_TITLE = 'Clients API';
 export const API_VERSION = '1.0.0';
@@ -20,8 +21,8 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
     .setDescription(API_DESCRIPTION)
     .addBearerAuth(
       {
-        type: 'http',
-        scheme: 'bearer',
+        type: OPENAPI_TYPES.HTTP_SECURITY,
+        scheme: OPENAPI_TYPES.BEARER_SCHEME,
         bearerFormat: BEARER_FORMAT,
         description: BEARER_AUTH_DESCRIPTION,
       },
@@ -32,5 +33,5 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
 }
 
 export function setupSwagger(app: INestApplication): void {
-  SwaggerModule.setup(DOCS_PATH, app, () => createOpenApiDocument(app));
+  SwaggerModule.setup(ROUTES.DOCS, app, () => createOpenApiDocument(app));
 }

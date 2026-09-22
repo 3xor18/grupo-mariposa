@@ -1,17 +1,28 @@
 import { z } from 'zod';
+import {
+  BOOLEAN_VALUES,
+  FALSE_VALUE,
+  TRUE_VALUE,
+} from '../../shared/constants/environment.constants';
+import { SERVICE_NAME } from '../../shared/constants/logging.constants';
 import { LogLevel } from '../app-config';
 import { ConfigSource, InvalidConfigurationError, issuesOf } from '../load-config';
 
-export const CONFIG_SERVER_DEFAULTS = {
-  appName: 'clients-api',
+export const CONFIG_SERVER_DEFAULTS = Object.freeze({
+  appName: SERVICE_NAME,
   profile: 'default',
   timeoutMs: 3000,
   retries: 3,
-  failFast: 'false',
-} as const;
+  failFast: FALSE_VALUE,
+});
 
-const TRUE_VALUE = 'true';
-const BOOLEAN_VALUES = [TRUE_VALUE, 'false'] as const;
+export const CONFIG_SERVER_LIMITS = Object.freeze({
+  maxTimeoutMs: 60_000,
+  maxRetries: 10,
+});
+
+const PROPERTIES_EXTENSION = '.properties';
+const SEGMENT_SEPARATOR = '-';
 const PATH_SEPARATOR = '/';
 
 export interface ConfigServerSettings {
@@ -41,8 +52,14 @@ const settingsSchema = z.object({
     .number()
     .int()
     .positive()
+    .max(CONFIG_SERVER_LIMITS.maxTimeoutMs)
     .default(CONFIG_SERVER_DEFAULTS.timeoutMs),
-  CONFIG_SERVER_RETRIES: z.coerce.number().int().min(0).default(CONFIG_SERVER_DEFAULTS.retries),
+  CONFIG_SERVER_RETRIES: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(CONFIG_SERVER_LIMITS.maxRetries)
+    .default(CONFIG_SERVER_DEFAULTS.retries),
   CONFIG_SERVER_FAIL_FAST: z.enum(BOOLEAN_VALUES).default(CONFIG_SERVER_DEFAULTS.failFast),
   LOG_LEVEL: z.enum(LogLevel).catch(LogLevel.INFO),
 });
@@ -86,7 +103,10 @@ export function loadConfigServerSettings(source: ConfigSource): ConfigServerSett
 }
 
 export function propertiesUrlOf(settings: ConfigServerSettings): string {
-  const url = new URL(`${settings.url}/${settings.appName}-${settings.profile}.properties`);
+  const document = [settings.appName, settings.profile].map(encodeURIComponent);
+  const url = new URL(
+    `${settings.url}${PATH_SEPARATOR}${document.join(SEGMENT_SEPARATOR)}${PROPERTIES_EXTENSION}`,
+  );
   url.username = '';
   url.password = '';
   return url.toString();

@@ -2,11 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes } from 'node:crypto';
 import { IncomingHttpHeaders } from 'node:http';
-
-export const TRACEPARENT_HEADER = 'traceparent';
-export const REQUEST_ID_HEADER = 'x-request-id';
+import { HTTP_HEADERS } from '../constants/http.constants';
 
 const TRACE_ID_BYTES = 16;
+const HEX_ENCODING = 'hex';
 const TRACEPARENT_PATTERN = /^[\da-f]{2}-([\da-f]{32})-[\da-f]{16}-[\da-f]{2}$/;
 const INVALID_TRACE_ID = /^0+$/;
 const REQUEST_ID_PATTERN = /^[\w.-]{1,128}$/;
@@ -17,7 +16,7 @@ export interface TraceContext {
 }
 
 export function newTraceId(): string {
-  return randomBytes(TRACE_ID_BYTES).toString('hex');
+  return randomBytes(TRACE_ID_BYTES).toString(HEX_ENCODING);
 }
 
 function singleHeader(headers: IncomingHttpHeaders, name: string): string | undefined {
@@ -35,10 +34,10 @@ function validRequestId(requestId: string | undefined): string | undefined {
 }
 
 export function resolveTraceContext(headers: IncomingHttpHeaders): TraceContext {
-  const requestId = validRequestId(singleHeader(headers, REQUEST_ID_HEADER));
-  const traceId =
-    traceIdFromTraceparent(singleHeader(headers, TRACEPARENT_HEADER)) ?? requestId ?? newTraceId();
-  return { traceId, requestId: requestId ?? traceId };
+  const traceparent = singleHeader(headers, HTTP_HEADERS.TRACEPARENT);
+  const traceId = traceIdFromTraceparent(traceparent) ?? newTraceId();
+  const requestId = validRequestId(singleHeader(headers, HTTP_HEADERS.REQUEST_ID)) ?? traceId;
+  return { traceId, requestId };
 }
 
 @Injectable()

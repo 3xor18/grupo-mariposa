@@ -23,7 +23,7 @@ describe('loadRemoteConfig', () => {
   const fetchSpy = jest.fn((input: string | URL | Request, init?: RequestInit) =>
     fetch(input, init),
   );
-  const dependencies = { fetch: fetchSpy, sleep, logger };
+  const dependencies = { fetch: fetchSpy, sleep, random: () => 0, logger };
 
   const environment = (overrides: Record<string, string> = {}): Record<string, string> => ({
     CONFIG_SERVER_URL: stub.url,
@@ -62,8 +62,13 @@ describe('loadRemoteConfig', () => {
     );
     const config = loadConfig(source);
 
-    expect(config.rateLimit).toEqual({ requestsPerSecond: 50, burst: 99 });
-    expect(config.faultInjection.rules).toEqual([{ id: 'CLI-40001', type: '503', times: 2 }]);
+    expect(config.rateLimit).toEqual({
+      requestsPerSecond: 50,
+      burst: 99,
+      maxTrackedCallers: 10_000,
+    });
+    expect(config.faultInjection.rules).toEqual([]);
+    expect(source.FAULT_RULES).toBe('');
     expect(config.faultInjection.timeoutMs).toBe(5000);
     expect(config.auth).toMatchObject({
       enabled: true,
@@ -72,18 +77,40 @@ describe('loadRemoteConfig', () => {
     expect(source.MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE).toBe('health');
   });
 
-  it('should_log_loaded_properties_without_secrets_or_credentials', async () => {
+  it('should_fall_through_to_remote_only_when_environment_variable_is_undefined', async () => {
+    stub.respond({ status: 200, body: REMOTE_PROPERTIES });
+
+    const source = await loadRemoteConfig(
+      { ...environment(), RATE_LIMIT_RPS: undefined },
+      dependencies,
+    );
+
+    expect(source.RATE_LIMIT_RPS).toBe('50');
+  });
+
+  it('should_log_only_loaded_keys_never_values_or_credentials', async () => {
     stub.respond({ status: 200, body: REMOTE_PROPERTIES });
 
     await loadRemoteConfig(environment(), dependencies);
 
-    const logged = JSON.stringify(logger.info.mock.calls);
     expect(logger.info).toHaveBeenCalledWith(
-      expect.objectContaining({ url: `${stub.url}/clients-api-docker.properties` }),
+      {
+        url: `${stub.url}/clients-api-docker.properties`,
+        keys: [
+          'AUTH_ISSUER',
+          'AUTH_JWKS_URL',
+          'RATE_LIMIT_RPS',
+          'RATE_LIMIT_BURST',
+          'FAULT_RULES',
+          'CLIENT_SECRET',
+          'MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE',
+        ],
+      },
       REMOTE_CONFIG_MESSAGES.loaded,
     );
-    expect(logged).toContain('CLIENT_SECRET');
+    const logged = JSON.stringify(logger.info.mock.calls);
     expect(logged).not.toContain('do-not-log');
+    expect(logged).not.toContain('CLI-40001');
     expect(logged).not.toContain('super-secret-password');
   });
 

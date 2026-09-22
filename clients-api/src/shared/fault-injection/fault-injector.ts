@@ -1,7 +1,5 @@
 import { FaultRule, FaultType } from './fault-rule';
 
-export const FAULT_INJECTOR = Symbol('FAULT_INJECTOR');
-
 export class FaultInjector {
   private readonly rules: ReadonlyMap<string, FaultRule>;
   private readonly injected = new Map<string, number>();

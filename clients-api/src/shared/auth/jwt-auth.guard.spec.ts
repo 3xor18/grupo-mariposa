@@ -1,21 +1,24 @@
 import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { LogLevel } from '../../config/app-config';
+import { NO_AUTH, testConfig } from '../../../test/support/test-app';
 import { DisabledAccessTokenVerifier } from './access-token-verifier';
 import { createAccessTokenVerifier } from './auth.module';
 import { JoseAccessTokenVerifier } from './jose-access-token-verifier';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { AuthenticatedRequest, Principal } from './principal';
 
-function contextWith(authorization?: string): ExecutionContext {
+function contextFor(request: Partial<AuthenticatedRequest>): ExecutionContext {
   return {
     getHandler: () => undefined,
     getClass: () => undefined,
-    switchToHttp: () => ({ getRequest: () => ({ headers: { authorization } }) }),
+    switchToHttp: () => ({ getRequest: () => request }),
   } as unknown as ExecutionContext;
 }
 
 describe('JwtAuthGuard', () => {
-  const verifier = { authenticate: jest.fn().mockResolvedValue(undefined) };
+  const verifier = {
+    authenticate: jest.fn<Promise<Principal | undefined>, [string | undefined]>(),
+  };
 
   function guard(isPublic: boolean | undefined): JwtAuthGuard {
     const reflector = { getAllAndOverride: jest.fn().mockReturnValue(isPublic) };
@@ -23,47 +26,52 @@ describe('JwtAuthGuard', () => {
   }
 
   beforeEach(() => {
-    verifier.authenticate.mockClear();
+    verifier.authenticate.mockReset();
   });
 
   it('should_skip_verification_when_route_is_public', async () => {
-    await expect(guard(true).canActivate(contextWith())).resolves.toBe(true);
+    const request: Partial<AuthenticatedRequest> = { headers: {} };
+
+    await expect(guard(true).canActivate(contextFor(request))).resolves.toBe(true);
     expect(verifier.authenticate).not.toHaveBeenCalled();
+    expect(request.principal).toBeUndefined();
   });
 
-  it('should_verify_authorization_header_when_route_is_protected', async () => {
-    await expect(guard(undefined).canActivate(contextWith('Bearer x.y.z'))).resolves.toBe(true);
+  it('should_attach_principal_when_route_is_protected', async () => {
+    verifier.authenticate.mockResolvedValueOnce({ id: 'order-processor' });
+    const request: Partial<AuthenticatedRequest> = { headers: { authorization: 'Bearer x.y.z' } };
+
+    await expect(guard(undefined).canActivate(contextFor(request))).resolves.toBe(true);
     expect(verifier.authenticate).toHaveBeenCalledWith('Bearer x.y.z');
+    expect(request.principal).toEqual({ id: 'order-processor' });
+  });
+
+  it('should_leave_principal_empty_when_authentication_is_disabled', async () => {
+    verifier.authenticate.mockResolvedValueOnce(undefined);
+    const request: Partial<AuthenticatedRequest> = { headers: {} };
+
+    await expect(guard(false).canActivate(contextFor(request))).resolves.toBe(true);
+    expect(request.principal).toBeUndefined();
   });
 
   it('should_propagate_rejection_when_verifier_fails', async () => {
     verifier.authenticate.mockRejectedValueOnce(new Error('denied'));
 
-    await expect(guard(false).canActivate(contextWith())).rejects.toThrow('denied');
+    await expect(guard(false).canActivate(contextFor({ headers: {} }))).rejects.toThrow('denied');
   });
 });
 
 describe('createAccessTokenVerifier', () => {
-  const base = {
-    port: 0,
-    logLevel: LogLevel.SILENT,
-    faultInjection: { rules: [], timeoutMs: 1 },
-    rateLimit: { requestsPerSecond: 1, burst: 1 },
-  };
-
   it('should_create_noop_verifier_when_auth_is_disabled', async () => {
-    const verifier = createAccessTokenVerifier({ ...base, auth: { enabled: false } });
+    const verifier = createAccessTokenVerifier({ ...testConfig('http://j/certs'), auth: NO_AUTH });
 
     expect(verifier).toBeInstanceOf(DisabledAccessTokenVerifier);
     await expect(verifier.authenticate(undefined)).resolves.toBeUndefined();
   });
 
   it('should_create_jose_verifier_when_auth_is_enabled', () => {
-    const verifier = createAccessTokenVerifier({
-      ...base,
-      auth: { enabled: true, issuer: 'http://i', jwksUrl: 'http://j/certs', requiredRole: 'r' },
-    });
-
-    expect(verifier).toBeInstanceOf(JoseAccessTokenVerifier);
+    expect(createAccessTokenVerifier(testConfig('http://j/certs'))).toBeInstanceOf(
+      JoseAccessTokenVerifier,
+    );
   });
 });

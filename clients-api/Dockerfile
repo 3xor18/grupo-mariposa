@@ -7,8 +7,7 @@ COPY src ./src
 RUN npm run build
 
 FROM node:24-alpine AS runtime
-ENV NODE_ENV=production \
-    PORT=3000
+ENV PORT=3000
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force

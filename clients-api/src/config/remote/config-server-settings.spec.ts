@@ -56,6 +56,8 @@ describe('loadConfigServerSettings', () => {
     { CONFIG_SERVER_URL: 'http://c', CONFIG_SERVER_TIMEOUT_MS: '0' },
     { CONFIG_SERVER_URL: 'http://c', CONFIG_SERVER_RETRIES: '-1' },
     { CONFIG_SERVER_URL: 'http://c', CONFIG_SERVER_FAIL_FAST: 'maybe' },
+    { CONFIG_SERVER_URL: 'http://c', CONFIG_SERVER_RETRIES: '11' },
+    { CONFIG_SERVER_URL: 'http://c', CONFIG_SERVER_TIMEOUT_MS: '60001' },
   ])('should_fail_fast_on_invalid_settings_%#', (source) => {
     expect(() => loadConfigServerSettings(source)).toThrow(InvalidConfigurationError);
   });

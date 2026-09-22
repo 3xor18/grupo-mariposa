@@ -1,21 +1,26 @@
+import { HTTP_HEADERS, PLAIN_TEXT_MEDIA_TYPE } from '../../shared/constants/http.constants';
+import { SERVER_ERROR_STATUS_THRESHOLD } from '../../shared/errors/error-catalog';
 import { ConfigServerSettings, propertiesUrlOf } from './config-server-settings';
 import { parseProperties, Properties } from './properties';
 
-export const RETRY_BACKOFF_BASE_MS = 200;
-const BACKOFF_FACTOR = 2;
-const AUTHORIZATION_HEADER = 'Authorization';
-const ACCEPT_HEADER = 'Accept';
-const PROPERTIES_MEDIA_TYPE = 'text/plain';
+export const RETRY_BACKOFF = Object.freeze({
+  baseMs: 200,
+  factor: 2,
+  capMs: 5000,
+  jitterRatio: 0.5,
+});
+
 const BASIC_SCHEME = 'Basic';
+const BASE64_ENCODING = 'base64';
 const CREDENTIALS_SEPARATOR = ':';
-const LOWEST_CLIENT_ERROR = 400;
-const LOWEST_SERVER_ERROR = 500;
+const CLIENT_ERROR_STATUS_THRESHOLD = 400;
 
 export type Sleep = (milliseconds: number) => Promise<void>;
 
 export interface ConfigServerTransport {
   readonly fetch: typeof fetch;
   readonly sleep: Sleep;
+  readonly random: () => number;
 }
 
 export class ConfigServerUnavailableError extends Error {
@@ -32,17 +37,24 @@ export class ConfigServerUnavailableError extends Error {
 class NonRetryableResponseError extends Error {}
 
 function headersFor(settings: ConfigServerSettings): Record<string, string> {
-  const headers: Record<string, string> = { [ACCEPT_HEADER]: PROPERTIES_MEDIA_TYPE };
+  const headers: Record<string, string> = { [HTTP_HEADERS.ACCEPT]: PLAIN_TEXT_MEDIA_TYPE };
   if (settings.username !== undefined) {
     const credentials = `${settings.username}${CREDENTIALS_SEPARATOR}${settings.password ?? ''}`;
-    headers[AUTHORIZATION_HEADER] =
-      `${BASIC_SCHEME} ${Buffer.from(credentials).toString('base64')}`;
+    headers[HTTP_HEADERS.AUTHORIZATION] =
+      `${BASIC_SCHEME} ${Buffer.from(credentials).toString(BASE64_ENCODING)}`;
   }
   return headers;
 }
 
-function backoffFor(attempt: number): number {
-  return RETRY_BACKOFF_BASE_MS * BACKOFF_FACTOR ** attempt;
+export function backoffFor(retry: number, random: () => number): number {
+  const exponential = RETRY_BACKOFF.baseMs * RETRY_BACKOFF.factor ** retry;
+  const capped = Math.min(RETRY_BACKOFF.capMs, exponential);
+  const jitter = capped * RETRY_BACKOFF.jitterRatio * random();
+  return Math.round(capped * (1 - RETRY_BACKOFF.jitterRatio) + jitter);
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status < CLIENT_ERROR_STATUS_THRESHOLD || status >= SERVER_ERROR_STATUS_THRESHOLD;
 }
 
 async function fetchOnce(
@@ -57,23 +69,33 @@ async function fetchOnce(
     return parseProperties(await response.text());
   }
   const reason = `unexpected status ${String(response.status)}`;
-  const retryable = response.status < LOWEST_CLIENT_ERROR || response.status >= LOWEST_SERVER_ERROR;
-  throw retryable ? new Error(reason) : new NonRetryableResponseError(reason);
+  throw isRetryableStatus(response.status)
+    ? new Error(reason)
+    : new NonRetryableResponseError(reason);
 }
 
 export async function fetchRemoteProperties(
   settings: ConfigServerSettings,
   transport: ConfigServerTransport,
 ): Promise<Properties> {
-  const maxAttempts = settings.retries + 1;
-  for (let attempt = 1; ; attempt += 1) {
+  const maxAttempts = Math.max(1, settings.retries + 1);
+  let lastFailure: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       return await fetchOnce(settings, transport);
     } catch (error: unknown) {
-      if (error instanceof NonRetryableResponseError || attempt >= maxAttempts) {
+      lastFailure = error;
+      if (error instanceof NonRetryableResponseError) {
         throw new ConfigServerUnavailableError(propertiesUrlOf(settings), attempt, String(error));
       }
-      await transport.sleep(backoffFor(attempt - 1));
+      if (attempt < maxAttempts) {
+        await transport.sleep(backoffFor(attempt - 1, transport.random));
+      }
     }
   }
+  throw new ConfigServerUnavailableError(
+    propertiesUrlOf(settings),
+    maxAttempts,
+    String(lastFailure),
+  );
 }

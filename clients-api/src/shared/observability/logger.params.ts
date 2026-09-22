@@ -1,22 +1,33 @@
 import { IncomingMessage } from 'node:http';
 import { Params } from 'nestjs-pino';
 import { AppConfig } from '../../config/app-config';
+import { LOG_MESSAGE_KEY, REDACTION_CENSOR, SERVICE_NAME } from '../constants/logging.constants';
+import { absolutePath, ROUTES } from '../constants/routes.constants';
 import { TraceContextStore } from './trace-context';
 
-export const SERVICE_NAME = 'clients-api';
-export const REDACTED_PATHS = [
+export const REDACTED_PATHS: readonly string[] = Object.freeze([
   'req.headers.authorization',
+  'req.headers["proxy-authorization"]',
+  'req.headers["x-api-key"]',
   'req.headers.cookie',
   'res.headers["set-cookie"]',
-];
-export const QUIET_PATH_PREFIXES = ['/health', '/metrics'];
+]);
 
-const REDACTION_CENSOR = '[REDACTED]';
-const MESSAGE_KEY = 'message';
+export const QUIET_PATHS: ReadonlySet<string> = new Set([
+  absolutePath(ROUTES.HEALTH, ROUTES.LIVENESS),
+  absolutePath(ROUTES.HEALTH, ROUTES.READINESS),
+  absolutePath(ROUTES.METRICS),
+]);
+
+const QUERY_SEPARATOR = '?';
+
+function pathOf(url: string): string {
+  const queryStart = url.indexOf(QUERY_SEPARATOR);
+  return queryStart === -1 ? url : url.slice(0, queryStart);
+}
 
 export function isQuietPath(request: IncomingMessage): boolean {
-  const url = request.url ?? '';
-  return QUIET_PATH_PREFIXES.some((prefix) => url.startsWith(prefix));
+  return QUIET_PATHS.has(pathOf(request.url ?? ''));
 }
 
 export function isoTimestamp(): string {
@@ -31,11 +42,11 @@ export function buildLoggerParams(config: AppConfig, traceContext: TraceContextS
   return {
     pinoHttp: {
       level: config.logLevel,
-      messageKey: MESSAGE_KEY,
+      messageKey: LOG_MESSAGE_KEY,
       base: { service: SERVICE_NAME },
       timestamp: isoTimestamp,
       formatters: { level: levelLabel },
-      redact: { paths: REDACTED_PATHS, censor: REDACTION_CENSOR },
+      redact: { paths: [...REDACTED_PATHS], censor: REDACTION_CENSOR },
       genReqId: () => traceContext.currentTraceId(),
       customProps: () => ({ ...traceContext.current() }),
       autoLogging: { ignore: isQuietPath },

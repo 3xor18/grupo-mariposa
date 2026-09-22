@@ -1,8 +1,9 @@
 import { ValidationError, ValidationPipe } from '@nestjs/common';
+import { ERROR_CATALOG } from './error-catalog';
 import { ErrorCode } from './error-code.enum';
 import { FieldError, ProblemException } from './problem.exception';
 
-export const VALIDATION_DETAIL = 'The request contains invalid parameters';
+export const VALIDATION_DETAIL = ERROR_CATALOG[ErrorCode.VALIDATION_ERROR].detail;
 
 const PATH_SEPARATOR = '.';
 

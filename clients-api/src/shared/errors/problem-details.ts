@@ -11,6 +11,7 @@ export interface ProblemDescriptor {
   readonly detail: string;
   readonly errors?: readonly FieldError[];
   readonly headers?: Readonly<Record<string, string>>;
+  readonly cause?: unknown;
   readonly unexpected: boolean;
 }
 

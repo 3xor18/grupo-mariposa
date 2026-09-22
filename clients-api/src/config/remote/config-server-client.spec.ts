@@ -4,14 +4,19 @@ import {
   ConfigServerTransport,
   ConfigServerUnavailableError,
   fetchRemoteProperties,
-  RETRY_BACKOFF_BASE_MS,
+  backoffFor,
+  RETRY_BACKOFF,
 } from './config-server-client';
 import { ConfigServerSettings } from './config-server-settings';
 
 describe('fetchRemoteProperties', () => {
   let stub: ConfigServerStub;
   const sleep = jest.fn<Promise<void>, [number]>(() => Promise.resolve());
-  const transport: ConfigServerTransport = { fetch: (input, init) => fetch(input, init), sleep };
+  const transport: ConfigServerTransport = {
+    fetch: (input, init) => fetch(input, init),
+    sleep,
+    random: () => 0.5,
+  };
 
   const settings = (overrides: Partial<ConfigServerSettings> = {}): ConfigServerSettings => ({
     url: stub.url,
@@ -42,6 +47,14 @@ describe('fetchRemoteProperties', () => {
 
   beforeEach(() => {
     sleep.mockClear();
+  });
+
+  it('should_url_encode_application_and_profile_segments', async () => {
+    stub.respond({ status: 200, body: '' });
+
+    await fetchRemoteProperties(settings({ appName: 'clients api', profile: 'a/b' }), transport);
+
+    expect(stub.requests[0]?.url).toBe('/clients%20api-a%2Fb.properties');
   });
 
   it('should_fetch_and_parse_profile_properties_with_basic_auth', async () => {
@@ -81,7 +94,7 @@ describe('fetchRemoteProperties', () => {
     stub.respond({ status: 503 }, { status: 500 }, { status: 200, body: 'a=1' });
 
     await expect(fetchRemoteProperties(settings(), transport)).resolves.toEqual({ a: '1' });
-    expect(sleep.mock.calls).toEqual([[RETRY_BACKOFF_BASE_MS], [RETRY_BACKOFF_BASE_MS * 2]]);
+    expect(sleep.mock.calls).toEqual([[150], [300]]);
   });
 
   it('should_give_up_after_configured_retries', async () => {
@@ -90,7 +103,11 @@ describe('fetchRemoteProperties', () => {
     const error = await failureOf(fetchRemoteProperties(settings(), transport));
 
     expect(error.attempts).toBe(3);
-    expect(error.message).toContain('unexpected status 503');
+    expect(error.message).toBe(
+      `Config server ${stub.url}/clients-api-docker.properties unavailable after 3 attempt(s): ` +
+        'Error: unexpected status 503',
+    );
+    expect(sleep).toHaveBeenCalledTimes(2);
     expect(stub.requests).toHaveLength(3);
   });
 
@@ -111,17 +128,37 @@ describe('fetchRemoteProperties', () => {
       fetchRemoteProperties(settings({ timeoutMs: 50, retries: 0 }), transport),
     );
 
-    expect(error.message).toMatch(/timeout|aborted/i);
+    expect(error.message).toBe(
+      `Config server ${stub.url}/clients-api-docker.properties unavailable after 1 attempt(s): ` +
+        'TimeoutError: The operation was aborted due to timeout',
+    );
   });
 
   it('should_report_network_failures', async () => {
     const rejecting: ConfigServerTransport = {
       fetch: () => Promise.reject(new Error('connection refused')),
       sleep,
+      random: () => 0,
     };
 
     await expect(fetchRemoteProperties(settings({ retries: 0 }), rejecting)).rejects.toThrow(
       'connection refused',
     );
   });
+});
+
+describe('backoffFor', () => {
+  it.each([
+    [0, 0, 100],
+    [0, 1, 200],
+    [1, 0.5, 300],
+    [3, 1, 1600],
+    [10, 1, RETRY_BACKOFF.capMs],
+    [10, 0, RETRY_BACKOFF.capMs / 2],
+  ])(
+    'should_use_capped_exponential_backoff_with_jitter_retry_%i_random_%d',
+    (retry, random, ms) => {
+      expect(backoffFor(retry, () => random)).toBe(ms);
+    },
+  );
 });

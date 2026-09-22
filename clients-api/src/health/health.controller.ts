@@ -2,29 +2,30 @@ import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { Public } from '../shared/auth/public.decorator';
+import { OPERATIONS, RESPONSE_DESCRIPTIONS } from '../shared/constants/openapi.constants';
+import { ROUTES } from '../shared/constants/routes.constants';
 import { SkipRateLimit } from '../shared/rate-limit/skip-rate-limit.decorator';
 import { HealthDto, HealthStatus } from './health.dto';
 import { ReadinessState } from './readiness.state';
 
-export const HEALTH_ROUTE = 'health';
-const HEALTH_DESCRIPTION = 'Health status';
+const HEALTH_DESCRIPTION = RESPONSE_DESCRIPTIONS.health;
 
 @Public()
 @SkipRateLimit()
-@ApiTags(HEALTH_ROUTE)
-@Controller(HEALTH_ROUTE)
+@ApiTags(ROUTES.HEALTH)
+@Controller(ROUTES.HEALTH)
 export class HealthController {
   constructor(private readonly readiness: ReadinessState) {}
 
-  @Get('live')
-  @ApiOperation({ operationId: 'liveness', summary: 'Liveness probe' })
+  @Get(ROUTES.LIVENESS)
+  @ApiOperation(OPERATIONS.liveness)
   @ApiResponse({ status: HttpStatus.OK, description: HEALTH_DESCRIPTION, type: HealthDto })
   live(): HealthDto {
     return new HealthDto(HealthStatus.UP);
   }
 
-  @Get('ready')
-  @ApiOperation({ operationId: 'readiness', summary: 'Readiness probe' })
+  @Get(ROUTES.READINESS)
+  @ApiOperation(OPERATIONS.readiness)
   @ApiResponse({ status: HttpStatus.OK, description: HEALTH_DESCRIPTION, type: HealthDto })
   @ApiResponse({
     status: HttpStatus.SERVICE_UNAVAILABLE,
