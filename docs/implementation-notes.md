@@ -77,8 +77,10 @@ consciente y los riesgos que quedan.
   `sleep` nativo de Kubernetes para que el Service deje de enviar tráfico antes del SIGTERM; el período de gracia
   cubre `preStop` + drenaje + apagado de cada servicio.
 - **config-server**: 2 réplicas (3 en producción), backend git sobre este repositorio. `/actuator/prometheus` exige
-  las mismas credenciales básicas que la configuración; el scrape se configura con esas credenciales desde el
-  namespace de monitoreo.
+  las mismas credenciales básicas que la configuración. En local, Prometheus las recibe por entorno y su
+  entrypoint las escribe en archivos privados de `/tmp` (`basic_auth.username_file` / `password_file`), así que
+  no quedan en el repositorio ni en `prometheus.yml`; en EKS el scrape usa un Secret con esas credenciales desde
+  el namespace de monitoreo.
 - **NetworkPolicy**: cada servicio acepta tráfico sólo de sus consumidores y del namespace de monitoreo, en el puerto
   `http`. El ALB (target type `ip`) llega desde la VPC, por eso `order-tracker` activa su política sólo en los
   overlays de ambiente, junto con el CIDR de la VPC (placeholder `10.0.0.0/16`); el chart falla si un servicio

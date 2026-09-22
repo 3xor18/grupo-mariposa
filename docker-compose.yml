@@ -260,12 +260,17 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.5.0
+    entrypoint: ["sh", "/opt/mariposa/prometheus-entrypoint.sh"]
+    environment:
+      CONFIG_SERVER_USERNAME: ${CONFIG_SERVER_USERNAME:?run ./mariposa.sh init}
+      CONFIG_SERVER_PASSWORD: ${CONFIG_SERVER_PASSWORD:?run ./mariposa.sh init}
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=2d
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./infra/prometheus/prometheus-entrypoint.sh:/opt/mariposa/prometheus-entrypoint.sh:ro
     ports:
       - "127.0.0.1:9090:9090"
     healthcheck:
