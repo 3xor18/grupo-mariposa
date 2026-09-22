@@ -33,6 +33,10 @@ pipeline {
     IMAGE_TAG = "${env.GIT_COMMIT}"
     HELM_IMAGE = 'alpine/helm:3.16.2'
     KUBECONFORM_IMAGE = 'ghcr.io/yannh/kubeconform:v0.7.0'
+    OASDIFF_IMAGE = 'tufin/oasdiff:v1.32.1'
+    CONTRACTS_BASE_BRANCH = "${env.CHANGE_TARGET ?: 'main'}"
+    CONTRACTS_BASE_DIR = 'contracts-base'
+    CONTRACTS_NODE_IMAGE = 'node:24-alpine'
     GO_COVERAGE_MIN = '95'
     TRACKER_COVERAGE_MIN = '100'
     TRACKER_COVERAGE_EXCLUDE = '(^|/)lib/main\\.dart$|/core/platform/web_browser\\.dart$'
@@ -106,6 +110,26 @@ pipeline {
               sh 'flutter test --coverage'
               sh '''../scripts/ci/check-lcov-coverage.sh coverage/lcov.info \
                 "${TRACKER_COVERAGE_MIN}" "${TRACKER_COVERAGE_EXCLUDE}"'''
+            }
+          }
+        }
+        stage('contracts schemas') {
+          steps {
+            sh '''docker run --rm -v "${WORKSPACE}:/w" -w /w -e CONTRACT_CHECKS=schemas \
+              "${CONTRACTS_NODE_IMAGE}" sh -c "apk add --no-cache -q bash \
+              && ./scripts/ci/check-contracts.sh"'''
+          }
+        }
+        stage('contracts breaking changes') {
+          steps {
+            sh 'git fetch --no-tags origin "${CONTRACTS_BASE_BRANCH}"'
+            sh 'git worktree add --force --detach "${CONTRACTS_BASE_DIR}" FETCH_HEAD'
+            sh '''CONTRACT_CHECKS=breaking \
+              ./scripts/ci/check-contracts.sh "${WORKSPACE}/${CONTRACTS_BASE_DIR}"'''
+          }
+          post {
+            always {
+              sh 'git worktree remove --force "${CONTRACTS_BASE_DIR}" || true'
             }
           }
         }
