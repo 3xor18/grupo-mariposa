@@ -26,7 +26,8 @@ message can still be inspected and replayed as-is.
 `order-processor` validates every `orders.created.v1` message against
 `events/orders.created.v1.schema.json` plus its business rules before any lookup. `clientId` must match
 `^CLI-[A-Z0-9]{1,20}$` and every `productId` must match `^PRD-[A-Z0-9]{1,20}$`, the same formats that
-`clients-api` and `products-api` accept. A violation is never retried: the message goes to this topic with
+`clients-api` and `products-api` accept. Rules that JSON Schema cannot express are also enforced: `productId`
+is unique within `items`, and `currency` matches `market` (MX-MXN, CO-COP, PE-PEN). A violation is never retried: the message goes to this topic with
 `x-error-category=VALIDATION`.
 
 ## Replay

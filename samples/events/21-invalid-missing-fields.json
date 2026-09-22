@@ -1,1 +1,8 @@
-{ "eventId": "01J8ZP6M5E4RH0K7Y2N9A3TQ21", "orderId": "ORD-MX-000157", "market": "MX", "items": [ { "productId": "PRD-001", "quantity": 24.5, "unitPrice": -1 } ] }
+{
+  "eventId": "01J8ZP6M5E4RH0K7Y2N9A3TQ21",
+  "orderId": "ORD-MX-000157",
+  "market": "MX",
+  "items": [
+    { "productId": "PRD-001", "quantity": 24.5, "unitPrice": -1 }
+  ]
+}

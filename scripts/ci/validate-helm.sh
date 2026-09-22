@@ -16,7 +16,8 @@ read -ra KUBECONFORM <<< "${KUBECONFORM_CMD:-kubeconform}"
 
 validate() {
   local service="$1" environment="$2"
-  local values=(-f "${VALUES_DIR}/${service}.yaml" -f "${VALUES_DIR}/${environment}/${service}.yaml")
+  local values=(-f "${VALUES_DIR}/${service}.yaml"
+    -f "${VALUES_DIR}/${environment}/${service}.yaml")
   echo "==> ${service} (${environment})"
   "${HELM[@]}" lint "${CHART}" --strict "${values[@]}" --set image.tag="${VALIDATION_TAG}"
   "${HELM[@]}" template "${service}" "${CHART}" --namespace "${RELEASE_NAMESPACE}" \

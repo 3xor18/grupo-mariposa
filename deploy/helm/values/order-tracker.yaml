@@ -58,5 +58,4 @@ ingress:
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/healthcheck-path: /healthz
 networkPolicy:
-  enabled: true
-  allowedFrom: []
+  enabled: false

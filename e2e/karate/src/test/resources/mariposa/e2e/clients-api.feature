@@ -2,14 +2,24 @@ Feature: clients-api contract, validation, errors and security
 
   Background:
     * url clientsUrl
-    * def problem = { type: '#string', title: '#string', status: '#number', code: '#string', detail: '#string', instance: '#string', traceId: '#string', timestamp: '#string', errors: '##array' }
+    * def problem = read('common/problem.json')
 
   Scenario: returns a client
     Given path 'clients', 'CLI-99821'
     And header Authorization = 'Bearer ' + tokens.admin
     When method get
     Then status 200
-    And match response == { clientId: 'CLI-99821', name: 'Distribuidora Central', status: 'ACTIVE', segment: 'WHOLESALE', taxRegime: 'GENERAL', market: 'MX' }
+    And match response ==
+      """
+      {
+        clientId: 'CLI-99821',
+        name: 'Distribuidora Central',
+        status: 'ACTIVE',
+        segment: 'WHOLESALE',
+        taxRegime: 'GENERAL',
+        market: 'MX'
+      }
+      """
 
   Scenario: returns 404 with the shared problem contract
     Given path 'clients', 'CLI-00000'

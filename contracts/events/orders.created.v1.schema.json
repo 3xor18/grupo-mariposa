@@ -2,7 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.grupomariposa.dev/events/orders.created.v1.schema.json",
   "title": "OrderCreated v1",
-  "description": "Topic orders.created.v1, key = orderId. Owner: orders intake team. Unknown fields are ignored by consumers (tolerant reader).",
+  "description": "Topic orders.created.v1, key = orderId. Owner: orders intake team.",
+  "$comment": "Tolerant reader. Rules beyond JSON Schema: orders.processing.dlt.md#validation",
   "type": "object",
   "required": ["eventId", "orderId", "market", "currency", "clientId", "items"],
   "properties": {
@@ -41,6 +42,5 @@
         }
       }
     }
-  },
-  "$comment": "Business rules outside JSON Schema: productId must be unique within items; currency must match market (MX-MXN, CO-COP, PE-PEN). order-processor enforces this schema, including the productId and clientId patterns, and routes violations to orders.processing.dlt with x-error-category=VALIDATION."
+  }
 }

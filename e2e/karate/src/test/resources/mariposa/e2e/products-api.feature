@@ -2,7 +2,7 @@ Feature: products-api contract, validation, errors and security
 
   Background:
     * url productsUrl
-    * def problem = { type: '#string', title: '#string', status: '#number', code: '#string', detail: '#string', instance: '#string', traceId: '#string', timestamp: '#string', errors: '##array' }
+    * def problem = read('common/problem.json')
 
   Scenario: returns a product available in the requested market
     Given path 'products', 'PRD-001'
@@ -10,7 +10,16 @@ Feature: products-api contract, validation, errors and security
     And header Authorization = 'Bearer ' + tokens.admin
     When method get
     Then status 200
-    And match response == { productId: 'PRD-001', name: 'Bebida 600 ml', sku: 'BEB-600-PET', status: 'ACTIVE', taxCategory: 'STANDARD' }
+    And match response ==
+      """
+      {
+        productId: 'PRD-001',
+        name: 'Bebida 600 ml',
+        sku: 'BEB-600-PET',
+        status: 'ACTIVE',
+        taxCategory: 'STANDARD'
+      }
+      """
 
   Scenario: returns 404 when the product exists but not in that market
     Given path 'products', 'PRD-008'

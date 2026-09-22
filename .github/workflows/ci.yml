@@ -46,7 +46,7 @@ jobs:
         uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
         with:
           filters: |
-            contracts: ['contracts/**', 'samples/events/**']
+            contracts: ['contracts/**', 'samples/events/**', 'scripts/ci/check-contracts.sh']
             products: ['products-api/**', 'contracts/**', 'scripts/ci/check-go-coverage.sh']
             clients: ['clients-api/**', 'contracts/**']
             processor: ['order-processor/**', 'contracts/**']
@@ -60,7 +60,7 @@ jobs:
 
   contracts:
     needs: changes
-    if: needs.changes.outputs.contracts == 'true' && github.event_name == 'pull_request'
+    if: needs.changes.outputs.contracts == 'true'
     runs-on: ubuntu-latest
     env:
       BASE_REF: ${{ github.base_ref }}
@@ -72,31 +72,14 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Check out the base branch into a worktree
+        if: github.event_name == 'pull_request'
         env:
           BASE_DIR: ${{ runner.temp }}/contracts-base
         run: git worktree add --detach "${BASE_DIR}" "origin/${BASE_REF}"
-      - name: Detect breaking OpenAPI changes
+      - name: Breaking OpenAPI changes (oasdiff), schema compile and sample validation (ajv)
         env:
           BASE_DIR: ${{ runner.temp }}/contracts-base
-        run: |
-          for spec in contracts/http/*.openapi.yaml; do
-            if [[ -f "${BASE_DIR}/${spec}" ]]; then
-              docker run --rm -v "${BASE_DIR}:/base:ro" -v "${PWD}:/head:ro" "${OASDIFF_IMAGE}" \
-                breaking "/base/${spec}" "/head/${spec}" --fail-on ERR
-            fi
-          done
-      - name: Compile JSON Schemas in strict mode
-        run: >-
-          npx --yes -p "${AJV_CLI}" -p "${AJV_FORMATS}" ajv compile --spec=draft2020 -c ajv-formats
-          -s "contracts/events/*.json" -s contracts/common/problem.schema.json
-      - name: Validate examples and valid sample events against the event schema
-        run: >-
-          npx --yes -p "${AJV_CLI}" -p "${AJV_FORMATS}" ajv validate --spec=draft2020 -c ajv-formats
-          -s contracts/events/orders.created.v1.schema.json
-          -d contracts/examples/orders.created.v1.approved.json
-          -d "samples/events/0[1-9]-*.json"
-          -d "samples/events/1[2-9]-*.json"
-          -d "samples/events/20-*.json"
+        run: ./scripts/ci/check-contracts.sh "${BASE_DIR}"
 
   products-api:
     needs: changes
@@ -247,7 +230,15 @@ jobs:
         run: ./mvnw -B -q test-compile
 
   images:
-    needs: [products-api, clients-api, order-processor, order-tracker, config-server]
+    needs:
+      - products-api
+      - clients-api
+      - order-processor
+      - order-tracker
+      - config-server
+      - contracts
+      - helm
+      - karate
     if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     strategy:
@@ -273,8 +264,11 @@ jobs:
           exit-code: "1"
 
   e2e:
-    needs: images
-    if: github.event_name == 'push' || github.base_ref == 'main'
+    needs: [images, contracts, helm, karate]
+    if: >-
+      always() && needs.images.result == 'success'
+      && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+      && (github.event_name == 'push' || github.base_ref == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

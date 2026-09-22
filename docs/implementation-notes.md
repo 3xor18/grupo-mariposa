@@ -71,17 +71,20 @@ consciente y los riesgos que quedan.
 - **Redis (ElastiCache)**: TLS en tránsito con `SPRING_DATA_REDIS_SSL_ENABLED=true` y la contraseña (AUTH token) en
   `SPRING_DATA_REDIS_PASSWORD` desde Secrets Manager.
 - **Réplicas del worker**: `orders.created.v1` tiene 6 particiones y cada pod abre 3 consumidores
-  (`KAFKA_LISTENER_CONCURRENCY=3`), así que el HPA está acotado a 2 réplicas: un tercer pod sólo tendría
-  consumidores ociosos. Para escalar más hay que subir particiones y `maxReplicas` juntos, idealmente con KEDA por lag.
+  (`KAFKA_LISTENER_CONCURRENCY=3`), así que el HPA escala entre 1 y 2 réplicas: un tercer pod sólo tendría
+  consumidores ociosos. El PDB usa `maxUnavailable: 1` para no bloquear el drenado de nodos con una réplica. Para escalar más hay que subir particiones y `maxReplicas` juntos, idealmente con KEDA por lag.
 - **Arranque y apagado**: `startupProbe` por servicio (el worker tolera hasta 150 s de arranque) y `preStop` con
   `sleep` nativo de Kubernetes para que el Service deje de enviar tráfico antes del SIGTERM; el período de gracia
   cubre `preStop` + drenaje + apagado de cada servicio.
 - **config-server**: 2 réplicas (3 en producción), backend git sobre este repositorio. `/actuator/prometheus` exige
-  las mismas credenciales básicas que la configuración; el scrape se configura con esas credenciales desde el
-  namespace de monitoreo.
+  las mismas credenciales básicas que la configuración. En local, Prometheus las recibe por entorno y su
+  entrypoint las escribe en archivos privados de `/tmp` (`basic_auth.username_file` / `password_file`), así que
+  no quedan en el repositorio ni en `prometheus.yml`; en EKS el scrape usa un Secret con esas credenciales desde
+  el namespace de monitoreo.
 - **NetworkPolicy**: cada servicio acepta tráfico sólo de sus consumidores y del namespace de monitoreo, en el puerto
-  `http`. El ALB (target type `ip`) llega desde la VPC, por eso `order-tracker` permite el CIDR de la VPC
-  (placeholder `10.0.0.0/16`).
+  `http`. El ALB (target type `ip`) llega desde la VPC, por eso `order-tracker` activa su política sólo en los
+  overlays de ambiente, junto con el CIDR de la VPC (placeholder `10.0.0.0/16`); el chart falla si un servicio
+  con Ingress activa la política sin `allowedCidrs`.
 - **Keycloak**: el realm de `infra/keycloak` es sólo para local. Los usuarios demo y el cliente `orders-cli` no se
   despliegan; la rotación de refresh tokens (`revokeRefreshToken`) y las URIs exactas del `order-tracker` sí son
   las mismas que se esperan en el realm de cada ambiente.

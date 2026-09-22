@@ -4,3 +4,5 @@ fault:
 rate-limit:
   rps: 500
   burst: 1000
+app:
+  env: production
