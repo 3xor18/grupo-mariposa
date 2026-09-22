@@ -67,16 +67,13 @@ func NewVerifier(settings Settings, logger *slog.Logger) *Verifier {
 }
 
 func parserOptions(settings Settings) []jwt.ParserOption {
-	options := []jwt.ParserOption{
+	return []jwt.ParserOption{
 		jwt.WithValidMethods([]string{signingAlgorithm}),
 		jwt.WithIssuer(settings.Issuer),
+		jwt.WithAudience(settings.Audience),
 		jwt.WithExpirationRequired(),
 		jwt.WithLeeway(settings.ClockLeeway),
 	}
-	if settings.Audience != "" {
-		options = append(options, jwt.WithAudience(settings.Audience))
-	}
-	return options
 }
 
 func (v *Verifier) Run(ctx context.Context) {
