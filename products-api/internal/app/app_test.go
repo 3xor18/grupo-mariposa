@@ -15,6 +15,7 @@ import (
 	"github.com/grupomariposa/platform/products-api/internal/app"
 	"github.com/grupomariposa/platform/products-api/internal/auth/authtest"
 	"github.com/grupomariposa/platform/products-api/internal/config"
+	"github.com/grupomariposa/platform/products-api/internal/config/remote"
 	"github.com/grupomariposa/platform/products-api/internal/fault"
 )
 
@@ -238,6 +239,31 @@ func baseEnv(port int) map[string]string {
 	}
 }
 
+func withEnv(env map[string]string, pairs ...string) map[string]string {
+	for i := 0; i+1 < len(pairs); i += 2 {
+		env[pairs[i]] = pairs[i+1]
+	}
+	return env
+}
+
+func TestMainLoadsConfigServer(t *testing.T) {
+	port := freePort(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "port: "+strconv.Itoa(port)+"\nauth.enabled: false\n")
+	}))
+	defer server.Close()
+	remoteEnv := env(map[string]string{remote.EnvURL: server.URL})
+	ctx, cancel := context.WithCancel(context.Background())
+	exit := make(chan int, 1)
+	go func() { exit <- app.Main(ctx, nil, remoteEnv, io.Discard) }()
+	liveURL := "http://127.0.0.1:" + strconv.Itoa(port) + "/health/live"
+	waitUntil(t, func() bool { return app.CheckHealth(context.Background(), liveURL) == nil })
+	cancel()
+	if code := <-exit; code != app.ExitOK {
+		t.Fatalf("want exit 0, got %d", code)
+	}
+}
+
 func TestMainRunsAndHealthchecks(t *testing.T) {
 	port := freePort(t)
 	lookup := env(baseEnv(port))
@@ -264,6 +290,9 @@ func TestMainFailures(t *testing.T) {
 		"invalid_config":     {env: map[string]string{config.EnvPort: "x"}},
 		"healthcheck_down":   {args: []string{"-healthcheck"}, env: baseEnv(freePort(t))},
 		"port_already_taken": {env: baseEnv(busy.Addr().(*net.TCPAddr).Port)},
+		"config_server_down": {env: withEnv(baseEnv(freePort(t)),
+			remote.EnvURL, "http://127.0.0.1:1", remote.EnvRetries, "0",
+			remote.EnvFailFast, "true")},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

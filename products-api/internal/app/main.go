@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/grupomariposa/platform/products-api/internal/config"
+	"github.com/grupomariposa/platform/products-api/internal/config/remote"
 	"github.com/grupomariposa/platform/products-api/internal/telemetry"
 )
 
@@ -29,12 +30,17 @@ const (
 
 var errUnhealthy = errors.New("unhealthy status")
 
-func Main(ctx context.Context, args []string, lookup config.LookupFunc, out io.Writer) int {
+func Main(ctx context.Context, args []string, env config.LookupFunc, out io.Writer) int {
 	flags := flag.NewFlagSet(telemetry.ServiceName, flag.ContinueOnError)
 	flags.SetOutput(out)
 	healthcheck := flags.Bool(flagHealthcheck, false, usageHealthcheck)
 	if err := flags.Parse(args); err != nil {
 		return ExitFailure
+	}
+	bootstrap := telemetry.NewLogger(out, slog.LevelInfo)
+	lookup, err := resolveLookup(ctx, env, bootstrap, *healthcheck)
+	if err != nil {
+		return report(ctx, bootstrap, err, logInvalidConfig)
 	}
 	cfg, err := config.Load(lookup)
 	logger := telemetry.NewLogger(out, cfg.LogLevel)
@@ -47,6 +53,19 @@ func Main(ctx context.Context, args []string, lookup config.LookupFunc, out io.W
 		return report(ctx, logger, err, logHealthFailed)
 	}
 	return report(ctx, logger, Run(ctx, cfg, logger), logRunFailed)
+}
+
+func resolveLookup(ctx context.Context, env config.LookupFunc, logger *slog.Logger,
+	healthcheck bool,
+) (config.LookupFunc, error) {
+	if healthcheck {
+		return env, nil
+	}
+	lookup, err := remote.Resolve(ctx, env, logger)
+	if err != nil {
+		return nil, fmt.Errorf("resolve configuration sources: %w", err)
+	}
+	return lookup, nil
 }
 
 func report(ctx context.Context, logger *slog.Logger, err error, message string) int {
