@@ -1,11 +1,4 @@
-import {
-  isSensitiveKey,
-  parseProperties,
-  REDACTED_VALUE,
-  redactSensitive,
-  toEnvironmentKey,
-  toEnvironmentStyle,
-} from './properties';
+import { logicalLines, parseProperties, toEnvironmentKey, toEnvironmentStyle } from './properties';
 
 describe('parseProperties', () => {
   it('should_parse_spring_config_server_colon_space_output', () => {
@@ -34,19 +27,43 @@ describe('parseProperties', () => {
     expect(parseProperties(text)).toEqual({ key: 'value' });
   });
 
-  it('should_unescape_separators_backslashes_and_control_characters', () => {
+  it('should_unescape_separators_backslashes_control_and_unicode_characters', () => {
     const text = [
       String.raw`path\:with\=chars=a\:b\=c`,
       String.raw`windows=C\:\\temp\\logs`,
-      String.raw`multi=line\nbreak\ttab`,
+      String.raw`multi=line\nbreak\ttab\rreturn\fpage`,
       String.raw`space\ key=value`,
+      String.raw`accent=Bodega San Mart\u00edn`,
+      String.raw`plain=\q\u12`,
     ].join('\n');
 
     expect(parseProperties(text)).toEqual({
       'path:with=chars': 'a:b=c',
       windows: String.raw`C:\temp\logs`,
-      multi: 'line\nbreak\ttab',
+      multi: 'line\nbreak\ttab\rreturn\fpage',
       'space key': 'value',
+      accent: 'Bodega San Martín',
+      plain: 'qu12',
+    });
+  });
+
+  it('should_join_continuation_lines_and_strip_their_leading_whitespace', () => {
+    const text = [
+      String.raw`fault.rules: CLI-40001:503:2,\ `.trimEnd(),
+      String.raw`    CLI-40002:503`,
+      String.raw`path=C:\\`,
+      'next=1',
+      String.raw`# comment ending with backslash \ `.trimEnd(),
+      'after=2',
+      String.raw`dangling=tail\ `.trimEnd(),
+    ].join('\n');
+
+    expect(parseProperties(text)).toEqual({
+      'fault.rules': 'CLI-40001:503:2,CLI-40002:503',
+      path: 'C:\\',
+      next: '1',
+      after: '2',
+      dangling: 'tail',
     });
   });
 
@@ -55,11 +72,18 @@ describe('parseProperties', () => {
   });
 });
 
+describe('logicalLines', () => {
+  it('should_keep_blank_continuation_lines_inside_a_logical_line', () => {
+    expect(logicalLines(['a=1\\', '', 'b=2'].join('\n'))).toEqual(['a=1', 'b=2']);
+  });
+});
+
 describe('property key helpers', () => {
   it.each([
     ['rate-limit.rps', 'RATE_LIMIT_RPS'],
     ['fault.rules', 'FAULT_RULES'],
     ['auth.jwks-url', 'AUTH_JWKS_URL'],
+    ['auth.audience', 'AUTH_AUDIENCE'],
     ['PORT', 'PORT'],
   ])('should_map_%s_to_%s', (key, expected) => {
     expect(toEnvironmentKey(key)).toBe(expected);
@@ -67,22 +91,5 @@ describe('property key helpers', () => {
 
   it('should_convert_every_key_to_environment_style', () => {
     expect(toEnvironmentStyle({ 'log.level': 'debug' })).toEqual({ LOG_LEVEL: 'debug' });
-  });
-
-  it.each([
-    ['CLIENT_SECRET', true],
-    ['db.password', true],
-    ['API_KEY', true],
-    ['access-token', true],
-    ['RATE_LIMIT_RPS', false],
-  ])('should_flag_%s_sensitive_as_%s', (key, expected) => {
-    expect(isSensitiveKey(key)).toBe(expected);
-  });
-
-  it('should_redact_only_sensitive_values', () => {
-    expect(redactSensitive({ DB_PASSWORD: 'p4ss', PORT: '3000' })).toEqual({
-      DB_PASSWORD: REDACTED_VALUE,
-      PORT: '3000',
-    });
   });
 });

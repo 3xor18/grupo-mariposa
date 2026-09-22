@@ -7,7 +7,7 @@ import {
   loadConfigServerSettings,
   propertiesUrlOf,
 } from './config-server-settings';
-import { Properties, redactSensitive, toEnvironmentStyle } from './properties';
+import { Properties, toEnvironmentStyle } from './properties';
 
 export const REMOTE_CONFIG_MESSAGES = {
   loaded: 'Configuration loaded from config server',
@@ -23,12 +23,13 @@ export const defaultTransport: ConfigServerTransport = {
   sleep: async (milliseconds) => {
     await delay(milliseconds);
   },
+  random: Math.random,
 };
 
 function definedEntriesOf(environment: ConfigSource): Properties {
   return Object.fromEntries(
     Object.entries(environment).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined && entry[1] !== '',
+      (entry): entry is [string, string] => entry[1] !== undefined,
     ),
   );
 }
@@ -45,7 +46,7 @@ async function fetchOrFallback(
   try {
     const remote = toEnvironmentStyle(await fetchRemoteProperties(settings, transport));
     logger.info(
-      { url: propertiesUrlOf(settings), properties: redactSensitive(remote) },
+      { url: propertiesUrlOf(settings), keys: Object.keys(remote) },
       REMOTE_CONFIG_MESSAGES.loaded,
     );
     return remote;
