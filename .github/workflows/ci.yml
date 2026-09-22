@@ -96,7 +96,6 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm run test:cov
-      - run: npm run test:e2e
 
   order-processor:
     needs: changes

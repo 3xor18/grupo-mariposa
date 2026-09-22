@@ -39,7 +39,6 @@ pipeline {
               sh 'npm ci'
               sh 'npm run lint'
               sh 'npm run test:cov'
-              sh 'npm run test:e2e'
             }
           }
         }

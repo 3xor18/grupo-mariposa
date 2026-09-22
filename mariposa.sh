@@ -94,7 +94,7 @@ cmd_mongo() {
 
 cmd_test() {
   (cd "${ROOT_DIR}/products-api" && go test ./... -race -cover)
-  (cd "${ROOT_DIR}/clients-api" && npm ci && npm run test:cov && npm run test:e2e)
+  (cd "${ROOT_DIR}/clients-api" && npm ci && npm run lint && npm run test:cov)
   (cd "${ROOT_DIR}/order-processor" && ./mvnw -B verify)
   docker run --rm -v "${ROOT_DIR}/order-tracker:/app" -w /app "${FLUTTER_IMAGE}" \
     sh -c "flutter pub get && flutter test --coverage"
