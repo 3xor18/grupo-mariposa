@@ -1,6 +1,7 @@
 package com.grupomariposa.orders.infrastructure.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -16,12 +17,14 @@ import com.grupomariposa.orders.infrastructure.persistence.PersistenceFixtures;
 import com.grupomariposa.orders.infrastructure.web.dto.OrderPageResponse;
 import com.grupomariposa.orders.infrastructure.web.dto.OrderResponse;
 import com.grupomariposa.orders.infrastructure.web.security.RealmRoleConverter;
+import com.grupomariposa.orders.infrastructure.web.security.SecurityModeGuard;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.core.GrantedAuthority;
@@ -71,6 +74,18 @@ class WebSupportTest {
 
         assertThat(new RealmRoleConverter().convert(jwt).getAuthorities()).isEmpty();
         assertThat(new RealmRoleConverter().convert(jwt).getName()).isEqualTo("svc");
+    }
+
+    @Test
+    void should_only_allow_disabled_security_in_local_profile() {
+        final MockEnvironment production = new MockEnvironment();
+        final MockEnvironment local = new MockEnvironment();
+        local.setActiveProfiles(SecurityModeGuard.LOCAL_PROFILE);
+
+        assertThatIllegalStateException().isThrownBy(() ->
+                SecurityModeGuard.requireLocalWhenDisabled(false, production));
+        SecurityModeGuard.requireLocalWhenDisabled(false, local);
+        SecurityModeGuard.requireLocalWhenDisabled(true, production);
     }
 
     @Test

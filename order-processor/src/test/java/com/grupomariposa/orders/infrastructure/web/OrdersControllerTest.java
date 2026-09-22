@@ -18,6 +18,7 @@ import com.grupomariposa.orders.application.query.PageResult;
 import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.OrderStatus;
 import com.grupomariposa.orders.infrastructure.config.WebConfiguration;
+import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import com.grupomariposa.orders.infrastructure.observability.TraceContext;
 import com.grupomariposa.orders.infrastructure.persistence.PersistenceFixtures;
 import com.grupomariposa.orders.infrastructure.web.security.WebSecurityProperties;
@@ -47,6 +48,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
     "app.security.allowed-origins=http://localhost:8090",
     "app.security.reader-role=orders-reader",
     "app.security.admin-role=orders-admin",
+    "app.security.api-docs-enabled=false",
     "app.api.orders.default-page-size=20",
     "app.api.orders.max-page-size=100",
     "app.api.orders.max-offset=10000"
@@ -156,6 +158,13 @@ class OrdersControllerTest {
     }
 
     @Test
+    void should_hide_api_docs_when_disabled() throws Exception {
+        mockMvc.perform(get("/v3/api-docs").with(jwt().authorities(
+                        new SimpleGrantedAuthority(READER))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void should_cap_deep_pagination() throws Exception {
         mockMvc.perform(reader(get("/orders").param("page", "101").param("size", "100")))
                 .andExpect(status().isBadRequest())
@@ -205,6 +214,11 @@ class OrdersControllerTest {
         @Bean
         Clock clock() {
             return Clock.systemUTC();
+        }
+
+        @Bean
+        CauseSanitizer causeSanitizer() {
+            return new CauseSanitizer();
         }
     }
 }

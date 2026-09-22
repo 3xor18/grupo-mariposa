@@ -63,11 +63,6 @@ public class KafkaConfiguration {
         return factory;
     }
 
-    @Bean
-    public CauseSanitizer causeSanitizer() {
-        return new CauseSanitizer();
-    }
-
     @Bean(destroyMethod = "close")
     public DeadLetterProducer deadLetterProducer(
             final ProducerFactory<Object, Object> kafkaProducerFactory) {

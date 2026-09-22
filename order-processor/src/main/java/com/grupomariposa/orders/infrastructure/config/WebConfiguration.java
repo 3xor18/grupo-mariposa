@@ -6,6 +6,7 @@ import com.grupomariposa.orders.infrastructure.web.OrdersController;
 import com.grupomariposa.orders.infrastructure.web.ProblemFactory;
 import com.grupomariposa.orders.infrastructure.web.security.ProblemSecurityHandler;
 import com.grupomariposa.orders.infrastructure.web.security.RealmRoleConverter;
+import com.grupomariposa.orders.infrastructure.web.security.SecurityModeGuard;
 import com.grupomariposa.orders.infrastructure.web.security.WebSecurityProperties;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -15,7 +16,9 @@ import java.time.Clock;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -29,9 +32,13 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class WebConfiguration {
 
     private static final String[] PUBLIC_PATHS = {
-        "/actuator/health/**", "/actuator/health", "/actuator/prometheus", "/actuator/info",
-        "/health/**", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/error"
+        "/actuator/health/**", "/actuator/health", "/actuator/prometheus", "/health/**",
+        "/livez", "/readyz", "/error"
     };
+    private static final String[] API_DOC_PATHS = {
+        "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**"
+    };
+    private static final String ACTUATOR_PATHS = "/actuator/**";
     private static final String ORDERS_PATHS = OrdersController.BASE_PATH + "/**";
     private static final String ALL_PATHS = "/**";
     private static final String BEARER = "bearer";
@@ -57,8 +64,10 @@ public class WebConfiguration {
     @Bean
     public SecurityFilterChain securityFilterChain(final HttpSecurity http,
                                                    final WebSecurityProperties properties,
-                                                   final ProblemSecurityHandler problems)
+                                                   final ProblemSecurityHandler problems,
+                                                   final Environment environment)
             throws Exception {
+        SecurityModeGuard.requireLocalWhenDisabled(properties.enabled(), environment);
         http.csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session ->
@@ -70,7 +79,10 @@ public class WebConfiguration {
         }
         return http.authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_PATHS).permitAll()
+                        .requestMatchers(API_DOC_PATHS).access((authentication, context) ->
+                                new AuthorizationDecision(properties.apiDocsEnabled()))
                         .requestMatchers(HttpMethod.OPTIONS, ALL_PATHS).permitAll()
+                        .requestMatchers(ACTUATOR_PATHS).hasRole(properties.adminRole())
                         .requestMatchers(HttpMethod.GET, OrdersController.BASE_PATH, ORDERS_PATHS)
                         .hasAnyRole(properties.readerRole(), properties.adminRole())
                         .anyRequest().authenticated())

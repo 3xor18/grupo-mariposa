@@ -18,17 +18,20 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(OrdersController.class)
+@ActiveProfiles("local")
 @Import({WebConfiguration.class, OrdersControllerTest.Support.class})
 @TestPropertySource(properties = {
     "app.security.enabled=false",
     "app.security.allowed-origins=*",
     "app.security.reader-role=orders-reader",
     "app.security.admin-role=orders-admin",
+    "app.security.api-docs-enabled=false",
     "app.api.orders.default-page-size=20",
     "app.api.orders.max-page-size=100",
     "app.api.orders.max-offset=10000"

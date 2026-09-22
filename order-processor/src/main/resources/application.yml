@@ -72,6 +72,7 @@ spring:
         jwt:
           issuer-uri: ${AUTH_ISSUER:http://localhost:8180/realms/mariposa}
           jwk-set-uri: ${AUTH_JWKS_URL:http://localhost:8180/realms/mariposa/protocol/openid-connect/certs}
+          audiences: ${AUTH_AUDIENCE:}
 
 management:
   endpoints:
@@ -121,8 +122,10 @@ logging:
 
 springdoc:
   swagger-ui:
+    enabled: ${API_DOCS_ENABLED:false}
     path: /swagger-ui.html
   api-docs:
+    enabled: ${API_DOCS_ENABLED:false}
     path: /v3/api-docs
 
 pricing:
@@ -235,3 +238,4 @@ app:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:8090}
     reader-role: ${AUTH_READER_ROLE:orders-reader}
     admin-role: ${AUTH_ADMIN_ROLE:orders-admin}
+    api-docs-enabled: ${API_DOCS_ENABLED:false}

@@ -12,5 +12,6 @@ public record WebSecurityProperties(
         boolean enabled,
         @NotNull List<String> allowedOrigins,
         @NotBlank String readerRole,
-        @NotBlank String adminRole) {
+        @NotBlank String adminRole,
+        boolean apiDocsEnabled) {
 }

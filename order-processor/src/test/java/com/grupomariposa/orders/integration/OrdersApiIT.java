@@ -15,6 +15,7 @@ import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.RequestedItem;
 import com.grupomariposa.orders.support.Contracts;
 import com.grupomariposa.orders.support.IntegrationTest;
+import com.grupomariposa.orders.support.JwtTokens;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -87,6 +88,25 @@ class OrdersApiIT extends IntegrationTest {
     }
 
     @Test
+    void should_authorize_real_keycloak_style_tokens_by_realm_role_and_audience()
+            throws Exception {
+        JwtTokens.publishKeys(WIREMOCK);
+        final String orderId = seedApprovedOrder();
+        final String reader = JwtTokens.token(JwtTokens.AUDIENCE, List.of("orders-reader"));
+        final String admin = JwtTokens.token(JwtTokens.AUDIENCE, List.of("orders-admin"));
+        final String noRole = JwtTokens.token(JwtTokens.AUDIENCE, List.of("offline_access"));
+        final String foreign = JwtTokens.token("another-api", List.of("orders-reader"));
+
+        assertThat(status(get("/orders/" + orderId), reader)).isEqualTo(200);
+        assertThat(status(get("/orders/" + orderId), noRole)).isEqualTo(403);
+        assertThat(status(get("/orders/" + orderId), foreign)).isEqualTo(401);
+        assertThat(status(get("/actuator/metrics"), reader)).isEqualTo(403);
+        assertThat(status(get("/actuator/metrics"), admin)).isEqualTo(200);
+        assertThat(mockMvc.perform(get("/v3/api-docs")).andReturn().getResponse().getStatus())
+                .isEqualTo(401);
+    }
+
+    @Test
     void should_expose_public_health_and_metrics() throws Exception {
         seedApprovedOrder();
 
@@ -119,6 +139,12 @@ class OrdersApiIT extends IntegrationTest {
                 .jwt(token -> token.claim("realm_access", Map.of("roles",
                         List.of("orders-reader"))))
                 .authorities(new SimpleGrantedAuthority("ROLE_orders-reader")));
+    }
+
+    private int status(final MockHttpServletRequestBuilder request, final String token)
+            throws Exception {
+        return mockMvc.perform(request.header("Authorization", "Bearer " + token)).andReturn()
+                .getResponse().getStatus();
     }
 
     private JsonNode read(final MvcResult result, final int status) throws Exception {
