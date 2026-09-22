@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.grupomariposa.orders.application.ApplicationFixtures;
 import com.grupomariposa.orders.application.command.OrderCommand;
 import com.grupomariposa.orders.application.error.ErrorCategory;
 import com.grupomariposa.orders.application.error.ExternalPermanentException;
@@ -18,8 +19,6 @@ import com.grupomariposa.orders.application.outcome.ProcessingOutcome;
 import com.grupomariposa.orders.application.port.in.ProcessOrderUseCase;
 import com.grupomariposa.orders.application.port.out.ProcessingObserver;
 import com.grupomariposa.orders.application.port.out.ProcessingStage;
-import com.grupomariposa.orders.application.validation.OrderCommandValidator;
-import com.grupomariposa.orders.domain.DomainFixtures;
 import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
 import com.grupomariposa.orders.infrastructure.observability.TraceContext;
 import com.grupomariposa.orders.support.Contracts;
@@ -47,7 +46,7 @@ class OrderCreatedListenerTest {
     void setUp() {
         when(traceContext.currentTraceId()).thenReturn(Optional.of("trace-9"));
         listener = new OrderCreatedListener(new OrderMessageReader(),
-                new OrderCommandValidator(DomainFixtures.MARKETS), useCase, observer,
+                ApplicationFixtures.validator(), useCase, observer,
                 () -> Instant.EPOCH,
                 traceContext, new ProcessingMetrics(registry));
     }
@@ -76,6 +75,19 @@ class OrderCreatedListenerTest {
                 .isExactlyInstanceOf(RecordProcessingFailure.class)
                 .satisfies(failure -> assertThat(((RecordProcessingFailure) failure).category())
                         .isEqualTo(ErrorCategory.VALIDATION));
+        verify(useCase, never()).process(any());
+    }
+
+    @Test
+    void should_reject_astronomic_prices_as_validation_errors() {
+        final byte[] huge = new String(GOLDEN, StandardCharsets.UTF_8)
+                .replace("35.5", "1e999999999").getBytes(StandardCharsets.UTF_8);
+
+        assertThatThrownBy(() -> listener.onMessage(record(huge)))
+                .isInstanceOfSatisfying(RecordProcessingFailure.class, failure -> {
+                    assertThat(failure.category()).isEqualTo(ErrorCategory.VALIDATION);
+                    assertThat(failure.getMessage()).contains("items[0].unitPrice");
+                });
         verify(useCase, never()).process(any());
     }
 

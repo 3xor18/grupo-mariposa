@@ -82,8 +82,9 @@ public class ApplicationConfiguration {
     }
 
     @Bean
-    public OrderCommandValidator orderCommandValidator(final MarketCurrencies markets) {
-        return new OrderCommandValidator(markets);
+    public OrderCommandValidator orderCommandValidator(final MarketCurrencies markets,
+                                                       final ValidationProperties validation) {
+        return new OrderCommandValidator(markets, validation.rules());
     }
 
     @Bean

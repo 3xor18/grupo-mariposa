@@ -2,11 +2,13 @@ package com.grupomariposa.orders.application.validation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 final class ErrorCollector {
 
     private static final String REQUIRED = "is required";
     private static final String TOO_LONG = "must have at most %d characters";
+    private static final String NO_MATCH = "must match %s";
 
     private final List<ValidationError> errors = new ArrayList<>();
 
@@ -22,18 +24,27 @@ final class ErrorCollector {
         return true;
     }
 
-    void requireText(final String field, final String value, final int maxLength) {
+    boolean requireText(final String field, final String value, final int maxLength) {
         if (value == null || value.isBlank()) {
             add(field, REQUIRED);
-        } else {
-            limitLength(field, value, maxLength);
+            return false;
+        }
+        return limitLength(field, value, maxLength);
+    }
+
+    void requireIdentifier(final String field, final String value, final int maxLength,
+                           final Pattern pattern) {
+        if (requireText(field, value, maxLength) && !pattern.matcher(value).matches()) {
+            add(field, NO_MATCH.formatted(pattern.pattern()));
         }
     }
 
-    void limitLength(final String field, final String value, final int maxLength) {
+    boolean limitLength(final String field, final String value, final int maxLength) {
         if (value != null && value.length() > maxLength) {
             add(field, TOO_LONG.formatted(maxLength));
+            return false;
         }
+        return true;
     }
 
     boolean isEmpty() {

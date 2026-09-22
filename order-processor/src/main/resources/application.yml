@@ -220,6 +220,12 @@ app:
     send-timeout: ${OUTBOX_SEND_TIMEOUT:10s}
     initial-backoff: ${OUTBOX_RETRY_INITIAL_BACKOFF:1s}
     max-backoff: ${OUTBOX_RETRY_MAX_BACKOFF:60s}
+  validation:
+    product-id-pattern: ${VALIDATION_PRODUCT_ID_PATTERN:^PRD-[A-Z0-9]{1,20}$}
+    client-id-pattern: ${VALIDATION_CLIENT_ID_PATTERN:^CLI-[A-Z0-9]{1,20}$}
+    price-max-precision: ${VALIDATION_PRICE_MAX_PRECISION:18}
+    price-max-scale: ${VALIDATION_PRICE_MAX_SCALE:4}
+    price-max-value: ${VALIDATION_PRICE_MAX_VALUE:1000000000000}
   api:
     orders:
       default-page-size: ${API_DEFAULT_PAGE_SIZE:20}
