@@ -62,7 +62,8 @@ func TestMetricsExposeRequests(t *testing.T) {
 	metrics := telemetry.NewMetrics()
 	metrics.ObserveRequest(http.MethodGet, "/products/{productId}", http.StatusOK, time.Millisecond)
 	rec := httptest.NewRecorder()
-	metrics.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil)
+	metrics.Handler().ServeHTTP(rec, req)
 	body, _ := io.ReadAll(rec.Body)
 	for _, want := range []string{
 		`http_server_requests_total{method="GET",route="/products/{productId}",status="200"} 1`,

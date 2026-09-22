@@ -55,15 +55,14 @@ func start(t *testing.T, cfg config.Config) running {
 	if err != nil {
 		t.Fatalf("new app: %v", err)
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
+	listener := listen(t, "127.0.0.1:0")
 	done := make(chan error, 1)
 	go func() { done <- application.Serve(ctx, listener) }()
 	r := running{app: application, url: "http://" + listener.Addr().String(), cancel: cancel,
 		done: done}
-	waitUntil(t, func() bool { return app.CheckHealth(context.Background(), r.url+"/health/live") == nil })
+	waitUntil(t, func() bool {
+		return app.CheckHealth(context.Background(), r.url+"/health/live") == nil
+	})
 	return r
 }
 
@@ -84,9 +83,8 @@ func TestServeReportsReadinessAndServesProducts(t *testing.T) {
 	if !r.app.Ready() {
 		t.Fatal("app must be ready while serving")
 	}
-	resp := get(t, r.url+"/products/PRD-001?market=CO")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("want 200, got %d", resp.StatusCode)
+	if code := status(t, r.url+"/products/PRD-001?market=CO"); code != http.StatusOK {
+		t.Fatalf("want 200, got %d", code)
 	}
 	if err := app.CheckHealth(context.Background(), r.url+"/health/ready"); err != nil {
 		t.Fatalf("want ready, got %v", err)
@@ -97,7 +95,7 @@ func TestGracefulShutdownDrainsInFlightRequests(t *testing.T) {
 	r := start(t, testConfig())
 	inFlight := make(chan int, 1)
 	go func() {
-		inFlight <- get(t, r.url+"/products/"+slowProduct+"?market=MX").StatusCode
+		inFlight <- status(t, r.url+"/products/"+slowProduct+"?market=MX")
 	}()
 	time.Sleep(slowHold / 3)
 	r.cancel()
@@ -117,12 +115,7 @@ func TestShutdownTimeoutForcesClose(t *testing.T) {
 	cfg.ShutdownTimeout = time.Millisecond
 	cfg.Faults.Timeout = waitDeadline
 	r := start(t, cfg)
-	go func() {
-		resp, err := http.Get(r.url + "/products/" + slowProduct + "?market=MX")
-		if err == nil {
-			_ = resp.Body.Close()
-		}
-	}()
+	go fireAndForget(r.url + "/products/" + slowProduct + "?market=MX")
 	time.Sleep(slowHold / 3)
 	r.cancel()
 	if err := <-r.done; !errors.Is(err, context.DeadlineExceeded) {
@@ -135,10 +128,7 @@ func TestServeFailsWhenListenerClosed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new app: %v", err)
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
+	listener := listen(t, "127.0.0.1:0")
 	_ = listener.Close()
 	if err := application.Serve(context.Background(), listener); err == nil {
 		t.Fatal("want serve error")
@@ -155,8 +145,8 @@ func TestNewWithAuthentication(t *testing.T) {
 		RequiredRole: authtest.RequiredRole}
 	r := start(t, cfg)
 	defer r.cancel()
-	if resp := get(t, r.url+"/products/PRD-001?market=MX"); resp.StatusCode != 401 {
-		t.Fatalf("want 401 without token, got %d", resp.StatusCode)
+	if code := status(t, r.url+"/products/PRD-001?market=MX"); code != http.StatusUnauthorized {
+		t.Fatalf("want 401 without token, got %d", code)
 	}
 	cfg.Auth.JWKSURL = "://bad"
 	if _, err := app.New(context.Background(), cfg, discardLogger()); err == nil {
@@ -165,10 +155,7 @@ func TestNewWithAuthentication(t *testing.T) {
 }
 
 func TestRunFailsWhenPortBusy(t *testing.T) {
-	listener, err := net.Listen("tcp", ":0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
+	listener := listen(t, ":0")
 	defer func() { _ = listener.Close() }()
 	cfg := testConfig()
 	cfg.Port = listener.Addr().(*net.TCPAddr).Port
@@ -193,28 +180,45 @@ func TestCheckHealth(t *testing.T) {
 	}
 }
 
-func get(t *testing.T, url string) *http.Response {
+func status(t *testing.T, url string) int {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	if err != nil {
 		t.Errorf("request: %v", err)
-		return &http.Response{}
+		return 0
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Errorf("get %s: %v", url, err)
-		return &http.Response{}
+		return 0
 	}
-	_ = resp.Body.Close()
-	return resp
+	defer func() { _ = resp.Body.Close() }()
+	return resp.StatusCode
+}
+
+func fireAndForget(url string) {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return
+	}
+	if resp, err := http.DefaultClient.Do(req); err == nil {
+		_ = resp.Body.Close()
+	}
+}
+
+func listen(t *testing.T, address string) net.Listener {
+	t.Helper()
+	var lc net.ListenConfig
+	listener, err := lc.Listen(context.Background(), "tcp", address)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	return listener
 }
 
 func freePort(t *testing.T) int {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
+	listener := listen(t, "127.0.0.1:0")
 	port := listener.Addr().(*net.TCPAddr).Port
 	_ = listener.Close()
 	return port
@@ -250,10 +254,7 @@ func TestMainRunsAndHealthchecks(t *testing.T) {
 }
 
 func TestMainFailures(t *testing.T) {
-	busy, err := net.Listen("tcp", ":0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
+	busy := listen(t, ":0")
 	defer func() { _ = busy.Close() }()
 	cases := map[string]struct {
 		args []string

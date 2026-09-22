@@ -27,6 +27,11 @@ func (c *countingRecorder) ObserveRequest(_, route string, _ int, _ time.Duratio
 	c.route = route
 }
 
+func probe(t *testing.T, target string) *http.Request {
+	t.Helper()
+	return httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
+}
+
 func testResponder(logs *bytes.Buffer) responder {
 	return responder{clock: time.Now, logger: slog.New(slog.NewJSONHandler(logs, nil))}
 }
@@ -34,7 +39,7 @@ func testResponder(logs *bytes.Buffer) responder {
 func TestWriteFailureIsLogged(t *testing.T) {
 	var logs bytes.Buffer
 	rs := testResponder(&logs)
-	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	req := probe(t, "/health/live")
 	rs.live(&failingWriter{ResponseRecorder: httptest.NewRecorder()}, req)
 	if !strings.Contains(logs.String(), logWriteFailed) {
 		t.Fatal("write failure must be logged")
@@ -55,7 +60,7 @@ func TestObserveLabelsUnmatchedRequests(t *testing.T) {
 	var logs bytes.Buffer
 	counter := &countingRecorder{}
 	handler := testResponder(&logs).observe(counter)(http.NotFoundHandler())
-	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/x", nil))
+	handler.ServeHTTP(httptest.NewRecorder(), probe(t, "/x"))
 	if counter.route != unmatchedRoute {
 		t.Fatalf("want %q, got %q", unmatchedRoute, counter.route)
 	}
@@ -66,9 +71,9 @@ func TestRecoverPanicRethrowsAbort(t *testing.T) {
 	handler := testResponder(&logs).recoverPanic(http.HandlerFunc(
 		func(http.ResponseWriter, *http.Request) { panic(http.ErrAbortHandler) }))
 	defer func() {
-		if recover() != http.ErrAbortHandler {
+		if err, _ := recover().(error); !errors.Is(err, http.ErrAbortHandler) {
 			t.Fatal("abort handler panic must propagate")
 		}
 	}()
-	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	handler.ServeHTTP(httptest.NewRecorder(), probe(t, "/"))
 }

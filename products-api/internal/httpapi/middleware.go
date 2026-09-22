@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"runtime/debug"
@@ -94,7 +95,7 @@ func (rs responder) recoverPanic(next http.Handler) http.Handler {
 			if recovered == nil {
 				return
 			}
-			if recovered == http.ErrAbortHandler {
+			if err, ok := recovered.(error); ok && errors.Is(err, http.ErrAbortHandler) {
 				panic(recovered)
 			}
 			rs.logger.ErrorContext(r.Context(), logPanic,

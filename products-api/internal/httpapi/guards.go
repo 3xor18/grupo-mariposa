@@ -62,10 +62,11 @@ func (rs responder) rejectAuth(w http.ResponseWriter, r *http.Request, err error
 
 func bearerToken(r *http.Request) string {
 	header := r.Header.Get(authorizationHeader)
-	if len(header) < len(bearerPrefix) || !strings.EqualFold(header[:len(bearerPrefix)], bearerPrefix) {
+	prefixLength := len(bearerPrefix)
+	if len(header) < prefixLength || !strings.EqualFold(header[:prefixLength], bearerPrefix) {
 		return ""
 	}
-	return strings.TrimSpace(header[len(bearerPrefix):])
+	return strings.TrimSpace(header[prefixLength:])
 }
 
 func (rs responder) rateLimit(limit RateLimit) Middleware {

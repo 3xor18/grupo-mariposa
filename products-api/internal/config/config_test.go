@@ -64,11 +64,19 @@ func TestLoadOverrides(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	want := fault.Rule{ID: "PRD-012", Kind: fault.KindServiceUnavailable, Times: 2}
-	if cfg.Port != 9000 || cfg.RequestTimeout != 150*time.Millisecond ||
-		cfg.ShutdownTimeout != 250*time.Millisecond || cfg.RateLimit.RPS != 0.5 ||
-		cfg.RateLimit.Burst != 2 || cfg.Auth.Enabled || cfg.Faults.Rules[0] != want ||
-		cfg.Faults.Timeout != 10*time.Millisecond || cfg.LogLevel != slog.LevelDebug {
-		t.Fatalf("overrides not applied: %+v", cfg)
+	checks := map[string]bool{
+		"port":     cfg.Port == 9000,
+		"request":  cfg.RequestTimeout == 150*time.Millisecond,
+		"shutdown": cfg.ShutdownTimeout == 250*time.Millisecond,
+		"rate":     cfg.RateLimit == config.RateLimit{RPS: 0.5, Burst: 2},
+		"auth":     !cfg.Auth.Enabled,
+		"faults":   cfg.Faults.Rules[0] == want && cfg.Faults.Timeout == 10*time.Millisecond,
+		"level":    cfg.LogLevel == slog.LevelDebug,
+	}
+	for name, ok := range checks {
+		if !ok {
+			t.Errorf("override not applied for %s: %+v", name, cfg)
+		}
 	}
 }
 

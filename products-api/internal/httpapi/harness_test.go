@@ -113,7 +113,12 @@ func newHarness(t *testing.T, customize ...func(*httpapi.Dependencies)) harness 
 
 func (h harness) get(t *testing.T, target string, headers ...string) *httptest.ResponseRecorder {
 	t.Helper()
-	return h.do(t, httptest.NewRequest(http.MethodGet, target, nil), headers...)
+	return h.do(t, newRequest(t, http.MethodGet, target), headers...)
+}
+
+func newRequest(t *testing.T, method, target string) *http.Request {
+	t.Helper()
+	return httptest.NewRequestWithContext(t.Context(), method, target, nil)
 }
 
 func (h harness) do(t *testing.T, req *http.Request, headers ...string) *httptest.ResponseRecorder {

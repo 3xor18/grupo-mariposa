@@ -96,7 +96,7 @@ func (c contract) validateProblem(t *testing.T, body []byte) {
 
 func contractRequest(t *testing.T, target string) *http.Request {
 	t.Helper()
-	return httptest.NewRequest(http.MethodGet, contractHost+target, nil)
+	return newRequest(t, http.MethodGet, contractHost+target)
 }
 
 func TestContractProductResponses(t *testing.T) {
