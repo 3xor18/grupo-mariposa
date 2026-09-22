@@ -1,0 +1,194 @@
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: order-processor
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:20s}
+  threads:
+    virtual:
+      enabled: true
+  jackson:
+    generator:
+      write-bigdecimal-as-plain: true
+    serialization:
+      write-dates-as-timestamps: false
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/orders?replicaSet=rs0}
+      auto-index-creation: false
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:250ms}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:250ms}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${app.kafka.consumer-group}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      isolation-level: read_committed
+      max-poll-records: 10
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+      properties:
+        max.poll.interval.ms: 300000
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+        delivery.timeout.ms: 30000
+    listener:
+      ack-mode: record
+      observation-enabled: true
+      missing-topics-fatal: false
+    template:
+      observation-enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER:http://localhost:8180/realms/mariposa}
+          jwk-set-uri: ${AUTH_JWKS_URL:http://localhost:8180/realms/mariposa/protocol/openid-connect/certs}
+      client:
+        registration:
+          order-processor:
+            provider: keycloak
+            client-id: ${OAUTH_CLIENT_ID:order-processor}
+            client-secret: ${OAUTH_CLIENT_SECRET:}
+            authorization-grant-type: client_credentials
+        provider:
+          keycloak:
+            token-uri: ${OAUTH_TOKEN_URI:http://localhost:8180/realms/mariposa/protocol/openid-connect/token}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+        add-additional-paths: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,mongo,kafka
+  health:
+    redis:
+      enabled: false
+  metrics:
+    tags:
+      service: order-processor
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+      export:
+        enabled: ${TRACING_EXPORT_ENABLED:true}
+  datadog:
+    metrics:
+      export:
+        enabled: ${DATADOG_ENABLED:false}
+        api-key: ${DD_API_KEY:}
+
+logging:
+  structured:
+    format:
+      console: ${LOG_FORMAT:ecs}
+  level:
+    root: ${LOG_LEVEL:INFO}
+    org.apache.kafka: WARN
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+app:
+  processing:
+    max-concurrent-lookups: ${PROCESSING_MAX_CONCURRENT_LOOKUPS:64}
+    instance-id: ${HOSTNAME:}
+  kafka:
+    topics:
+      orders-created: ${KAFKA_TOPIC_ORDERS_CREATED:orders.created.v1}
+      orders-created-partitions: 6
+      orders-processed: ${KAFKA_TOPIC_ORDERS_PROCESSED:orders.processed.v1}
+      orders-processed-partitions: 6
+      dead-letter: ${KAFKA_TOPIC_DLT:orders.processing.dlt}
+      dead-letter-partitions: 3
+    consumer-group: ${KAFKA_CONSUMER_GROUP:order-processor}
+    concurrency: ${KAFKA_LISTENER_CONCURRENCY:3}
+    create-topics: ${KAFKA_CREATE_TOPICS:true}
+    replication-factor: ${KAFKA_REPLICATION_FACTOR:1}
+    health-timeout: ${KAFKA_HEALTH_TIMEOUT:2s}
+    record-retry:
+      initial-interval: ${RECORD_RETRY_INITIAL_INTERVAL:1s}
+      multiplier: 2.0
+      max-attempts: ${RECORD_RETRY_MAX_ATTEMPTS:4}
+  http:
+    clients:
+      base-url: ${CLIENTS_API_URL:http://localhost:8082}
+    products:
+      base-url: ${PRODUCTS_API_URL:http://localhost:8081}
+    connect-timeout: ${HTTP_CONNECT_TIMEOUT:500ms}
+    read-timeout: ${HTTP_READ_TIMEOUT:2s}
+    oauth:
+      enabled: ${OAUTH_ENABLED:true}
+      registration-id: order-processor
+    resilience:
+      max-attempts: ${HTTP_RETRY_MAX_ATTEMPTS:3}
+      initial-backoff: ${HTTP_RETRY_INITIAL_BACKOFF:200ms}
+      backoff-multiplier: 2.0
+      jitter: 0.5
+      max-retry-after: 2s
+      sliding-window-size: 20
+      minimum-number-of-calls: 10
+      failure-rate-threshold: 50
+      open-state-duration: 10s
+      half-open-calls: 3
+      bulkhead-max-concurrent-calls: 32
+      bulkhead-max-wait: 500ms
+  cache:
+    products:
+      enabled: ${CACHE_ENABLED:true}
+      ttl: ${CACHE_PRODUCTS_TTL:5m}
+      key-prefix: products
+  persistence:
+    transaction-attempts: 5
+    transaction-retry-backoff: 20ms
+    inbox-retention: 30d
+    outbox-retention: 7d
+  pii:
+    encryption-key: ${PII_ENCRYPTION_KEY}
+    key-id: ${PII_KEY_ID:k1}
+    previous-encryption-key: ${PII_PREVIOUS_ENCRYPTION_KEY:}
+    previous-key-id: ${PII_PREVIOUS_KEY_ID:}
+  outbox:
+    enabled: ${OUTBOX_RELAY_ENABLED:true}
+    fixed-delay: ${OUTBOX_RELAY_INTERVAL:250ms}
+    batch-size: ${OUTBOX_BATCH_SIZE:100}
+    lease: 30s
+    send-timeout: 10s
+    initial-backoff: 1s
+    max-backoff: 60s
+  security:
+    enabled: ${AUTH_ENABLED:true}
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:8090}
+    reader-role: orders-reader
+    admin-role: orders-admin
