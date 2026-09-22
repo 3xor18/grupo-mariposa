@@ -6,6 +6,7 @@ export const environment = {
   username: process.env.E2E_USERNAME ?? defaultUsername,
   password: process.env.E2E_PASSWORD ?? '',
   ci: Boolean(process.env.CI),
+  browserChannel: process.env.E2E_BROWSER_CHANNEL,
 };
 
 export function requirePassword(): string {
