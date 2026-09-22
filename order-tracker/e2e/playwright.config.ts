@@ -8,7 +8,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   forbidOnly: environment.ci,
-  retries: environment.ci ? 1 : 0,
+  retries: 0,
   reporter: environment.ci ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: environment.baseUrl,
