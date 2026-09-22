@@ -12,7 +12,7 @@ readonly WORK_FILE="$(mktemp)"
 env_value() { grep -E "^$1=" "${ROOT_DIR}/.env" | cut -d= -f2-; }
 
 mongo_eval() {
-  docker compose -f "${ROOT_DIR}/docker-compose.yml" exec -T mongo mongosh --quiet \
+  docker compose exec -T mongo mongosh --quiet \
     -u "$(env_value MONGO_ROOT_USERNAME)" -p "$(env_value MONGO_ROOT_PASSWORD)" \
     --authenticationDatabase admin orders --eval "$1"
 }
@@ -34,7 +34,7 @@ generate() {
 }
 
 publish() {
-  docker compose -f "${ROOT_DIR}/docker-compose.yml" exec -T kafka \
+  docker compose exec -T kafka \
     /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9092 \
     --topic orders.created.v1 --property parse.key=true --property "key.separator=|" \
     --producer-property linger.ms=5 < "${WORK_FILE}"
@@ -57,6 +57,7 @@ wait_until_processed() {
 }
 
 main() {
+  cd "${ROOT_DIR}"
   generate
   local sent started finished
   sent="$(wc -l < "${WORK_FILE}")"
