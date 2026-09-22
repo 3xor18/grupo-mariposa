@@ -45,7 +45,7 @@ class OrderCreatedListenerTest {
     @BeforeEach
     void setUp() {
         when(traceContext.currentTraceId()).thenReturn(Optional.of("trace-9"));
-        listener = new OrderCreatedListener(new OrderMessageReader(),
+        listener = new OrderCreatedListener(new OrderMessageReader(), new OrderMessageMapper(),
                 ApplicationFixtures.validator(), useCase, observer,
                 () -> Instant.EPOCH,
                 traceContext, new ProcessingMetrics(registry));

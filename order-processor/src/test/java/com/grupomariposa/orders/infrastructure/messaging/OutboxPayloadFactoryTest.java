@@ -1,4 +1,4 @@
-package com.grupomariposa.orders.infrastructure.persistence.outbox;
+package com.grupomariposa.orders.infrastructure.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;

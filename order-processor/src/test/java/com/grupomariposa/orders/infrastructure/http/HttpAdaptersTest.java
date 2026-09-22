@@ -23,8 +23,10 @@ import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.ProductProfile;
 import com.grupomariposa.orders.domain.model.ProductStatus;
 import com.grupomariposa.orders.domain.model.TaxCategory;
+import com.grupomariposa.orders.infrastructure.http.client.ClientResponseMapper;
 import com.grupomariposa.orders.infrastructure.http.client.HttpClientDirectory;
 import com.grupomariposa.orders.infrastructure.http.product.HttpProductCatalog;
+import com.grupomariposa.orders.infrastructure.http.product.ProductResponseMapper;
 import io.github.resilience4j.bulkhead.BulkheadRegistry;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryRegistry;
@@ -69,10 +71,10 @@ class HttpAdaptersTest {
         final RetryAfterParser retryAfter = new RetryAfterParser(Clock.systemUTC());
         clients = new HttpClientDirectory(restClients.create(properties.clients()),
                 new LookupExchange(Dependency.CLIENTS_API, retryAfter),
-                resilience.create(Dependency.CLIENTS_API));
+                resilience.create(Dependency.CLIENTS_API), new ClientResponseMapper());
         products = new HttpProductCatalog(restClients.create(properties.products()),
                 new LookupExchange(Dependency.PRODUCTS_API, retryAfter),
-                resilience.create(Dependency.PRODUCTS_API));
+                resilience.create(Dependency.PRODUCTS_API), new ProductResponseMapper());
     }
 
     @Test

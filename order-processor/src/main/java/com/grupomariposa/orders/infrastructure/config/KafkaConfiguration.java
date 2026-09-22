@@ -13,6 +13,7 @@ import com.grupomariposa.orders.infrastructure.kafka.dlt.DeadLetterRecoverer;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.DltHeadersFactory;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.OrderDeadLetterPublisher;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderCreatedListener;
+import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderMessageMapper;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderMessageReader;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.RetryableRecordFailure;
 import com.grupomariposa.orders.infrastructure.kafka.outbound.KafkaEventPublisher;
@@ -94,7 +95,8 @@ public class KafkaConfiguration {
                                                      final TimeProvider timeProvider,
                                                      final TraceContext traceContext,
                                                      final ProcessingMetrics metrics) {
-        return new OrderCreatedListener(new OrderMessageReader(), validator, useCase, observer,
+        return new OrderCreatedListener(new OrderMessageReader(), new OrderMessageMapper(),
+                validator, useCase, observer,
                 timeProvider, traceContext, metrics);
     }
 

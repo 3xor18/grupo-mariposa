@@ -2,6 +2,9 @@ package com.grupomariposa.orders.infrastructure.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.grupomariposa.orders.infrastructure.observability.TraceContext;
+import com.grupomariposa.orders.infrastructure.web.OrderRequestParser;
+import com.grupomariposa.orders.infrastructure.web.OrderResponseMapper;
+import com.grupomariposa.orders.infrastructure.web.OrdersApiProperties;
 import com.grupomariposa.orders.infrastructure.web.OrdersController;
 import com.grupomariposa.orders.infrastructure.web.ProblemFactory;
 import com.grupomariposa.orders.infrastructure.web.security.ProblemSecurityHandler;
@@ -49,6 +52,16 @@ public class WebConfiguration {
             "traceparent", "X-Request-Id");
     private static final List<String> CORS_METHODS = List.of(HttpMethod.GET.name(),
             HttpMethod.OPTIONS.name());
+
+    @Bean
+    public OrderRequestParser orderRequestParser(final OrdersApiProperties limits) {
+        return new OrderRequestParser(limits);
+    }
+
+    @Bean
+    public OrderResponseMapper orderResponseMapper() {
+        return new OrderResponseMapper();
+    }
 
     @Bean
     public ProblemFactory problemFactory(final Clock clock, final TraceContext traceContext) {

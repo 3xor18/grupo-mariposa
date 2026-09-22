@@ -9,6 +9,6 @@ public record PageResult<T>(List<T> items, int page, int size, long totalElement
     }
 
     public int totalPages() {
-        return (int) ((totalElements + size - 1) / size);
+        return Math.toIntExact((totalElements + size - 1) / size);
     }
 }

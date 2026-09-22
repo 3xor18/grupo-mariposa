@@ -16,13 +16,15 @@ public final class HttpClientDirectory implements ClientDirectory {
     private final RestClient restClient;
     private final LookupExchange exchange;
     private final ResilientExecutor resilience;
-    private final ClientResponseMapper mapper = new ClientResponseMapper();
+    private final ClientResponseMapper mapper;
 
     public HttpClientDirectory(final RestClient restClient, final LookupExchange exchange,
-                               final ResilientExecutor resilience) {
+                               final ResilientExecutor resilience,
+                               final ClientResponseMapper mapper) {
         this.restClient = Objects.requireNonNull(restClient, "restClient");
         this.exchange = Objects.requireNonNull(exchange, "exchange");
         this.resilience = Objects.requireNonNull(resilience, "resilience");
+        this.mapper = Objects.requireNonNull(mapper, "mapper");
     }
 
     @Override

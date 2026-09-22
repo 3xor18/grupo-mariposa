@@ -17,13 +17,15 @@ public final class HttpProductCatalog implements ProductCatalog {
     private final RestClient restClient;
     private final LookupExchange exchange;
     private final ResilientExecutor resilience;
-    private final ProductResponseMapper mapper = new ProductResponseMapper();
+    private final ProductResponseMapper mapper;
 
     public HttpProductCatalog(final RestClient restClient, final LookupExchange exchange,
-                              final ResilientExecutor resilience) {
+                              final ResilientExecutor resilience,
+                              final ProductResponseMapper mapper) {
         this.restClient = Objects.requireNonNull(restClient, "restClient");
         this.exchange = Objects.requireNonNull(exchange, "exchange");
         this.resilience = Objects.requireNonNull(resilience, "resilience");
+        this.mapper = Objects.requireNonNull(mapper, "mapper");
     }
 
     @Override

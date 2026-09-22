@@ -25,13 +25,14 @@ public class OrdersController {
     private final FindOrderQuery findOrder;
     private final ListOrdersQuery listOrders;
     private final OrderRequestParser parser;
-    private final OrderResponseMapper mapper = new OrderResponseMapper();
+    private final OrderResponseMapper mapper;
 
     public OrdersController(final FindOrderQuery findOrder, final ListOrdersQuery listOrders,
-                            final OrdersApiProperties limits) {
+                            final OrderRequestParser parser, final OrderResponseMapper mapper) {
         this.findOrder = Objects.requireNonNull(findOrder, "findOrder");
         this.listOrders = Objects.requireNonNull(listOrders, "listOrders");
-        this.parser = new OrderRequestParser(limits);
+        this.parser = Objects.requireNonNull(parser, "parser");
+        this.mapper = Objects.requireNonNull(mapper, "mapper");
     }
 
     @Operation(operationId = "getOrder", summary = "Get the processing result of an order")

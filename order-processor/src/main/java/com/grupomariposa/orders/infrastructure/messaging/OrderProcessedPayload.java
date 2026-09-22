@@ -1,4 +1,4 @@
-package com.grupomariposa.orders.infrastructure.persistence.outbox;
+package com.grupomariposa.orders.infrastructure.messaging;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.math.BigDecimal;

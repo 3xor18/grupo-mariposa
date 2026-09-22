@@ -17,7 +17,7 @@ import com.grupomariposa.orders.infrastructure.persistence.document.OrderDocumen
 import com.grupomariposa.orders.infrastructure.persistence.document.OutboxDocument;
 import com.grupomariposa.orders.infrastructure.persistence.document.OutboxStatus;
 import com.grupomariposa.orders.infrastructure.persistence.mapping.OrderDocumentMapper;
-import com.grupomariposa.orders.infrastructure.persistence.outbox.OutboxPayloadFactory;
+import com.grupomariposa.orders.infrastructure.messaging.OutboxPayloadFactory;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;

@@ -13,7 +13,7 @@ import com.grupomariposa.orders.infrastructure.persistence.MongoPoolProperties;
 import com.grupomariposa.orders.infrastructure.persistence.PersistenceProperties;
 import com.grupomariposa.orders.infrastructure.persistence.TransactionRunner;
 import com.grupomariposa.orders.infrastructure.persistence.mapping.OrderDocumentMapper;
-import com.grupomariposa.orders.infrastructure.persistence.outbox.OutboxPayloadFactory;
+import com.grupomariposa.orders.infrastructure.messaging.OutboxPayloadFactory;
 import java.util.concurrent.TimeUnit;
 import org.springframework.boot.autoconfigure.mongo.MongoClientSettingsBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
