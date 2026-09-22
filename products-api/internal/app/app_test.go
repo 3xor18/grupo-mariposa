@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -261,6 +262,28 @@ func TestMainLoadsConfigServer(t *testing.T) {
 	cancel()
 	if code := <-exit; code != app.ExitOK {
 		t.Fatalf("want exit 0, got %d", code)
+	}
+}
+
+func TestHealthcheckIgnoresFullConfiguration(t *testing.T) {
+	r := start(t, testConfig())
+	defer r.cancel()
+	_, port, err := net.SplitHostPort(strings.TrimPrefix(r.url, "http://"))
+	if err != nil {
+		t.Fatalf("split address: %v", err)
+	}
+	probeEnv := env(map[string]string{
+		config.EnvPort: port, config.EnvAuthJWKSURL: "not-a-url",
+		remote.EnvURL: "http://127.0.0.1:1", remote.EnvFailFast: "true",
+	})
+	code := app.Main(context.Background(), []string{"-healthcheck"}, probeEnv, io.Discard)
+	if code != app.ExitOK {
+		t.Fatalf("want healthy probe without auth settings, got exit %d", code)
+	}
+	invalidPort := env(map[string]string{config.EnvPort: "x"})
+	code = app.Main(context.Background(), []string{"-healthcheck"}, invalidPort, io.Discard)
+	if code != app.ExitFailure {
+		t.Fatalf("want failure for invalid port, got %d", code)
 	}
 }
 

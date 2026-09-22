@@ -109,6 +109,29 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 	}
 }
 
+func TestLoadPort(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     map[string]string
+		want    int
+		wantErr bool
+	}{
+		{name: "should_default_without_env", env: map[string]string{}, want: 8081},
+		{name: "should_read_env", env: map[string]string{config.EnvPort: "9090"}, want: 9090},
+		{name: "should_ignore_auth_settings",
+			env: map[string]string{config.EnvAuthJWKSURL: "/relative"}, want: 8081},
+		{name: "should_reject_invalid", env: map[string]string{config.EnvPort: "0"}, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			port, err := config.LoadPort(lookupFrom(tc.env))
+			if tc.wantErr != errors.Is(err, config.ErrInvalid) || port != tc.want {
+				t.Fatalf("want %d (err %v), got %d %v", tc.want, tc.wantErr, port, err)
+			}
+		})
+	}
+}
+
 func TestLoadRequiresAuthSettingsWhenEnabled(t *testing.T) {
 	_, err := config.Load(lookupFrom(map[string]string{}))
 	for _, key := range []string{config.EnvAuthIssuer, config.EnvAuthJWKSURL} {

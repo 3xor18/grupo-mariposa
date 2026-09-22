@@ -90,6 +90,15 @@ func Load(lookup LookupFunc) (Config, error) {
 	return cfg, nil
 }
 
+func LoadPort(lookup LookupFunc) (int, error) {
+	r := &reader{lookup: lookup}
+	port := r.intInRange(EnvPort, defaultPort, minPort, maxPort)
+	if err := errors.Join(r.errs...); err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	return port, nil
+}
+
 func loadAuth(r *reader) Auth {
 	auth := Auth{
 		Enabled:      r.boolean(EnvAuthEnabled, true),
