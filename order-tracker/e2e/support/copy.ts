@@ -9,7 +9,7 @@ export const copy = {
 } as const;
 
 export const seed = {
-  approvedOrderId: 'ORD-MX-000147',
+  approvedOrderId: 'ORD-MX-E2EUI01',
   approvedGrandTotal: /^Total del pedido: \$2,100\.11$/,
   unknownOrderId: 'ORD-XX-999999',
 } as const;

@@ -7,6 +7,7 @@ readonly ROOT_DIR
 readonly ENV_FILE="${ROOT_DIR}/.env"
 readonly ENV_TEMPLATE="${ROOT_DIR}/.env.example"
 readonly SAMPLES_DIR="${ROOT_DIR}/samples/events"
+readonly UI_SEED_ORDER="${ROOT_DIR}/samples/e2e/ui-golden-order.json"
 readonly KAFKA_BIN=/opt/kafka/bin
 readonly KAFKA_INTERNAL_BOOTSTRAP=kafka:9092
 readonly INPUT_TOPIC=orders.created.v1
@@ -162,6 +163,7 @@ cmd_e2e() {
   local keycloak_url demo_password
   keycloak_url="$(env_value KEYCLOAK_PUBLIC_URL)"
   demo_password="$(env_value DEMO_USER_PASSWORD)"
+  cmd_publish "${UI_SEED_ORDER}"
   (cd "${ROOT_DIR}/e2e/karate" \
     && KEYCLOAK_URL="${keycloak_url}" DEMO_PASSWORD="${demo_password}" ./mvnw -B test)
   (cd "${ROOT_DIR}/order-tracker/e2e" && npm ci && npx playwright install chromium \
