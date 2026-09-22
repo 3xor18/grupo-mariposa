@@ -2,7 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.grupomariposa.dev/events/orders.processed.v1.schema.json",
   "title": "OrderProcessed v1",
-  "description": "Topic orders.processed.v1, key = orderId. Owner: order-processor team. Delivery is at-least-once: consumers must deduplicate by eventId and discard eventVersion lower than the last seen for the orderId.",
+  "description": "Topic orders.processed.v1, key = orderId. Owner: order-processor team.",
+  "$comment": "At-least-once: dedupe by eventId, drop eventVersion below the last seen.",
   "type": "object",
   "required": [
     "eventId",
