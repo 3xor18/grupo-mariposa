@@ -1,0 +1,52 @@
+image:
+  repository: 000000000000.dkr.ecr.us-east-1.amazonaws.com/grupo-mariposa/order-processor
+containerPort: 8080
+probes:
+  liveness: /actuator/health/liveness
+  readiness: /actuator/health/readiness
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 3
+metrics:
+  enabled: true
+  path: /actuator/prometheus
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 768Mi
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+env:
+  KAFKA_BOOTSTRAP_SERVERS: b-1.mariposa-msk.kafka.us-east-1.amazonaws.com:9098
+  PRODUCTS_API_URL: http://products-api
+  CLIENTS_API_URL: http://clients-api
+  AUTH_ISSUER: https://auth.grupomariposa.dev/realms/mariposa
+  AUTH_JWKS_URL: https://auth.grupomariposa.dev/realms/mariposa/protocol/openid-connect/certs
+  OAUTH_TOKEN_URI: https://auth.grupomariposa.dev/realms/mariposa/protocol/openid-connect/token
+  OAUTH_CLIENT_ID: order-processor
+  REDIS_HOST: mariposa-cache.xxxxxx.use1.cache.amazonaws.com
+  REDIS_PORT: "6379"
+  ALLOWED_ORIGINS: https://tracker.grupomariposa.dev
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://datadog-agent.monitoring:4318
+  DATADOG_ENABLED: "false"
+externalSecret:
+  enabled: true
+  remoteKey: grupo-mariposa/order-processor
+  keys:
+    - MONGODB_URI
+    - OAUTH_CLIENT_SECRET
+    - REDIS_PASSWORD
+    - PII_ENCRYPTION_KEY
+serviceAccount:
+  roleArn: arn:aws:iam::000000000000:role/mariposa-order-processor
+networkPolicy:
+  enabled: true
+  allowedFrom:
+    - order-tracker
+ingress:
+  enabled: false

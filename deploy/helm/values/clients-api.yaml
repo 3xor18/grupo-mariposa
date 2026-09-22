@@ -1,0 +1,22 @@
+image:
+  repository: 000000000000.dkr.ecr.us-east-1.amazonaws.com/grupo-mariposa/clients-api
+containerPort: 3000
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+env:
+  PORT: "3000"
+  AUTH_ENABLED: "true"
+  AUTH_ISSUER: https://auth.grupomariposa.dev/realms/mariposa
+  AUTH_JWKS_URL: https://auth.grupomariposa.dev/realms/mariposa/protocol/openid-connect/certs
+  AUTH_REQUIRED_ROLE: clients-reader
+  FAULT_RULES: ""
+  RATE_LIMIT_RPS: "500"
+  RATE_LIMIT_BURST: "1000"
+networkPolicy:
+  enabled: true
+  allowedFrom:
+    - order-processor

@@ -1,0 +1,66 @@
+nameOverride: ""
+
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+containerPort: 8080
+
+service:
+  type: ClusterIP
+  port: 80
+
+probes:
+  liveness: /health/live
+  readiness: /health/ready
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  failureThreshold: 3
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  minAvailable: 1
+
+env: {}
+
+externalSecret:
+  enabled: false
+  refreshInterval: 1h
+  secretStore: aws-secrets-manager
+  remoteKey: ""
+  keys: []
+
+serviceAccount:
+  roleArn: ""
+
+ingress:
+  enabled: false
+  className: alb
+  host: ""
+  path: /
+  annotations: {}
+
+metrics:
+  enabled: true
+  path: /metrics
+
+networkPolicy:
+  enabled: true
+  allowedFrom: []
+
+podAnnotations: {}

@@ -1,0 +1,34 @@
+image:
+  repository: 000000000000.dkr.ecr.us-east-1.amazonaws.com/grupo-mariposa/order-tracker
+containerPort: 8080
+probes:
+  liveness: /healthz
+  readiness: /healthz
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+metrics:
+  enabled: false
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    memory: 64Mi
+env:
+  ORDERS_API_URL: http://order-processor
+  API_BASE_URL: /api
+  KEYCLOAK_URL: https://auth.grupomariposa.dev
+  KEYCLOAK_REALM: mariposa
+  KEYCLOAK_CLIENT_ID: order-tracker
+ingress:
+  enabled: true
+  className: alb
+  host: tracker.grupomariposa.dev
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+networkPolicy:
+  enabled: false

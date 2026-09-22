@@ -1,0 +1,210 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      contracts: ${{ steps.filter.outputs.contracts }}
+      products: ${{ steps.filter.outputs.products }}
+      clients: ${{ steps.filter.outputs.clients }}
+      processor: ${{ steps.filter.outputs.processor }}
+      tracker: ${{ steps.filter.outputs.tracker }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            contracts: ['contracts/**']
+            products: ['products-api/**', 'contracts/**']
+            clients: ['clients-api/**', 'contracts/**']
+            processor: ['order-processor/**', 'contracts/**']
+            tracker: ['order-tracker/**', 'contracts/http/order-processor.openapi.yaml']
+
+  contracts:
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect breaking OpenAPI changes
+        run: |
+          for spec in contracts/http/*.openapi.yaml; do
+            if git cat-file -e "origin/${{ github.base_ref }}:${spec}" 2>/dev/null; then
+              git show "origin/${{ github.base_ref }}:${spec}" > /tmp/base.yaml
+              docker run --rm -v "$PWD:/w" -v /tmp:/tmp tufin/oasdiff:latest \
+                breaking /tmp/base.yaml "/w/${spec}" --fail-on ERR
+            fi
+          done
+      - name: Validate event JSON Schemas compile
+        run: npx --yes ajv-cli@5 compile --spec=draft2020 -c ajv-formats -s "contracts/events/*.json"
+
+  products-api:
+    needs: changes
+    if: needs.changes.outputs.products == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: products-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: products-api/go.mod
+          cache-dependency-path: products-api/go.sum
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          working-directory: products-api
+      - run: go test ./... -race -coverprofile=coverage.out -covermode=atomic
+      - run: go tool cover -func=coverage.out | tail -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: products-api-coverage
+          path: products-api/coverage.out
+
+  clients-api:
+    needs: changes
+    if: needs.changes.outputs.clients == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: clients-api/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run test:cov
+      - run: npm run test:e2e
+
+  order-processor:
+    needs: changes
+    if: needs.changes.outputs.processor == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: order-processor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - name: Unit, integration (Testcontainers), architecture and coverage gates
+        run: ./mvnw -B verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: order-processor-reports
+          path: |
+            order-processor/target/site/jacoco
+            order-processor/target/surefire-reports
+            order-processor/target/failsafe-reports
+
+  order-tracker:
+    needs: changes
+    if: needs.changes.outputs.tracker == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: order-tracker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --line-length 100 --output=none --set-exit-if-changed lib test
+      - run: flutter analyze
+      - run: flutter test --coverage
+
+  images:
+    needs: [products-api, clients-api, order-processor, order-tracker]
+    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [products-api, clients-api, order-processor, order-tracker]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.service }}
+          push: false
+          load: true
+          tags: grupo-mariposa/${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: grupo-mariposa/${{ matrix.service }}:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+  e2e:
+    needs: images
+    if: github.event_name == 'push' || github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build .env from GitHub Secrets
+        env:
+          MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
+          MONGO_APP_PASSWORD: ${{ secrets.MONGO_APP_PASSWORD }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+          ORDER_PROCESSOR_CLIENT_SECRET: ${{ secrets.ORDER_PROCESSOR_CLIENT_SECRET }}
+          DEMO_USER_PASSWORD: ${{ secrets.DEMO_USER_PASSWORD }}
+          PII_ENCRYPTION_KEY: ${{ secrets.PII_ENCRYPTION_KEY }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: ./scripts/ci/write-env-from-secrets.sh
+      - name: Start platform
+        run: docker compose --env-file .env up -d --build --wait --wait-timeout 600
+      - name: Karate API and event-flow suite
+        run: ./mariposa.sh e2e
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color > compose-logs.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-reports
+          path: |
+            compose-logs.txt
+            e2e/karate/target/karate-reports
+            order-tracker/e2e/playwright-report
