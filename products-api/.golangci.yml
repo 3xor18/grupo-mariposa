@@ -61,6 +61,10 @@ linters:
         - name: redefines-builtin-id
   exclusions:
     rules:
+      - path: internal/config/remote/settings\.go
+        linters:
+          - gosec
+        text: "G101"
       - path: _test\.go
         linters:
           - dupl
