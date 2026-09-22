@@ -60,6 +60,3 @@ docker run --rm --network grupo-mariposa_default -v "$PWD/load/k6:/scripts" \
 El token se obtiene una sola vez en `setup()` y se comparte entre los usuarios virtuales: 30 logins simultáneos
 del mismo usuario activan la protección de fuerza bruta de Keycloak (`user_temporarily_disabled`), que es el
 comportamiento correcto del IdP, no un fallo de la plataforma.
-
-```text
-```
