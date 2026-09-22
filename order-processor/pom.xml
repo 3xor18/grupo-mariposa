@@ -34,6 +34,7 @@
         <spotbugs-plugin.version>4.9.3.2</spotbugs-plugin.version>
         <coverage.overall.minimum>0.90</coverage.overall.minimum>
         <coverage.core.minimum>1.00</coverage.core.minimum>
+        <skipITs>false</skipITs>
         <surefireArgLine/>
         <failsafeArgLine/>
         <jacoco.unit.file>${project.build.directory}/jacoco-unit.exec</jacoco.unit.file>
@@ -298,24 +299,14 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>check</id>
+                        <id>check-unit-core</id>
                         <phase>verify</phase>
                         <goals>
                             <goal>check</goal>
                         </goals>
                         <configuration>
-                            <dataFile>${jacoco.merged.file}</dataFile>
+                            <dataFile>${jacoco.unit.file}</dataFile>
                             <rules>
-                                <rule>
-                                    <element>BUNDLE</element>
-                                    <limits>
-                                        <limit>
-                                            <counter>LINE</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>${coverage.overall.minimum}</minimum>
-                                        </limit>
-                                    </limits>
-                                </rule>
                                 <rule>
                                     <element>PACKAGE</element>
                                     <includes>
@@ -327,6 +318,29 @@
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
                                             <minimum>${coverage.core.minimum}</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>check-overall</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${skipITs}</skip>
+                            <dataFile>${jacoco.merged.file}</dataFile>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${coverage.overall.minimum}</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
