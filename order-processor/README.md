@@ -87,8 +87,8 @@ Las propiedades son inmutables: un cambio en el config server se aplica con un r
 | `API_DEFAULT_PAGE_SIZE` / `API_MAX_PAGE_SIZE` / `API_MAX_OFFSET` | `20` / `100` / `10000` | paginación de `GET /orders` (`page * size` acotado) |
 | `API_DOCS_ENABLED` | `false` | publica Swagger UI y `/v3/api-docs` |
 | `VALIDATION_PRODUCT_ID_PATTERN` / `VALIDATION_CLIENT_ID_PATTERN` | `^PRD-[A-Z0-9]{1,20}$` / `^CLI-[A-Z0-9]{1,20}$` | identificadores del contrato |
-| `VALIDATION_PRICE_MAX_PRECISION` / `VALIDATION_PRICE_MAX_SCALE` / `VALIDATION_PRICE_MAX_VALUE` | `18` / `4` / `1000000000000` | límites de `unitPrice` |
-| `AUTH_ENABLED`, `AUTH_ISSUER`, `AUTH_JWKS_URL`, `AUTH_AUDIENCE`, `AUTH_READER_ROLE`, `AUTH_ADMIN_ROLE` | `true`, realm `mariposa` local, vacío, `orders-reader`, `orders-admin` | JWT de Keycloak (`AUTH_ENABLED=false` sólo con el perfil `local`) |
+| `VALIDATION_PRICE_MAX_PRECISION` / `VALIDATION_PRICE_MAX_SCALE` / `VALIDATION_PRICE_MAX_VALUE` | `18` / `4` / `1000000000000` | límites de `unitPrice`; la API devuelve `unitPrice` tal como llegó (hasta 4 decimales), los importes siempre con 2 |
+| `AUTH_ENABLED`, `AUTH_REALM_URL`, `AUTH_ISSUER`, `AUTH_JWKS_URL`, `AUTH_AUDIENCE`, `AUTH_READER_ROLE`, `AUTH_ADMIN_ROLE` | `true`, realm `mariposa` local, derivados del realm, `${spring.application.name}`, `orders-reader`, `orders-admin` | JWT de Keycloak. `AUTH_ENABLED=false` sólo con el perfil `local`; con autenticación activa el servicio no arranca sin audiencia |
 | `ALLOWED_ORIGINS` | `http://localhost:8090` | CORS del order-tracker |
 | `PII_KEY_ID` / `PII_PREVIOUS_KEY_ID` | `k1` / vacío | identificador de llave (prefijo del texto cifrado) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACING_SAMPLING_PROBABILITY`, `TRACING_EXPORT_ENABLED` | `http://localhost:4318/v1/traces`, `0.1`, `true` | trazas OTLP |
