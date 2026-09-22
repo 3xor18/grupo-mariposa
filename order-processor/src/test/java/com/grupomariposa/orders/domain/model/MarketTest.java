@@ -32,7 +32,6 @@ class MarketTest {
         assertThat(subset.supportedMarkets()).containsExactly(Market.MX, Market.PE);
         assertThat(subset.supports(Market.CO)).isFalse();
         assertThat(subset.currencyOf(Market.CO)).isEmpty();
-        assertThat(subset.markets()).containsExactlyInAnyOrder(Market.MX, Market.PE);
     }
 
     @Test

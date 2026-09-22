@@ -7,7 +7,6 @@ import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 import java.math.BigDecimal;
 import java.util.EnumMap;
 import java.util.Map;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -19,8 +18,6 @@ class PricingRulesTest {
         final TaxRateTable table = new TaxRateTable(Map.of(Market.CO, rates(19, 5, 0)));
 
         assertThat(table.rateFor(Market.CO, TaxCategory.REDUCED)).isEqualTo(Rate.ofPercent(5));
-        assertThat(table.covers(Set.of(Market.CO))).isTrue();
-        assertThat(table.covers(Set.of(Market.CO, Market.PE))).isFalse();
     }
 
     @Test

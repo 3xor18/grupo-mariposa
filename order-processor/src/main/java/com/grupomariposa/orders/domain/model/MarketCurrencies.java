@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 public record MarketCurrencies(Map<Market, Currency> currencies) {
 
@@ -35,9 +34,5 @@ public record MarketCurrencies(Map<Market, Currency> currencies) {
 
     public List<Market> supportedMarkets() {
         return List.copyOf(currencies.keySet());
-    }
-
-    public Set<Market> markets() {
-        return currencies.keySet();
     }
 }
