@@ -19,7 +19,8 @@ import org.springframework.web.client.RestClientException;
 public final class LookupExchange {
 
     private static final Set<Integer> TRANSIENT_STATUSES = Set.of(
-            HttpStatus.TOO_MANY_REQUESTS.value(), HttpStatus.INTERNAL_SERVER_ERROR.value(),
+            HttpStatus.REQUEST_TIMEOUT.value(), HttpStatus.TOO_MANY_REQUESTS.value(),
+            HttpStatus.INTERNAL_SERVER_ERROR.value(),
             HttpStatus.BAD_GATEWAY.value(), HttpStatus.SERVICE_UNAVAILABLE.value(),
             HttpStatus.GATEWAY_TIMEOUT.value());
     private static final String RESPONDED = "%s responded %d";
@@ -56,7 +57,7 @@ public final class LookupExchange {
                                        final Class<B> bodyType,
                                        final Function<B, T> mapper) throws IOException {
         final HttpStatusCode status = response.getStatusCode();
-        if (status.value() == HttpStatus.OK.value()) {
+        if (status.is2xxSuccessful()) {
             return Lookup.found(mapper.apply(readBody(response, bodyType)));
         }
         if (status.value() == HttpStatus.NOT_FOUND.value()) {

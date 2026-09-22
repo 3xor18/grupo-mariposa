@@ -15,7 +15,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryRegistry;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
-import java.util.Optional;
+import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -81,13 +81,13 @@ public class HttpConfiguration {
         return oauthInterceptor(manager, authorizedClients, oauth.registrationId());
     }
 
-    @Bean
+    @Bean(destroyMethod = "close")
     public RestClientFactory restClientFactory(
             final RestClient.Builder builder, final HttpDependenciesProperties properties,
             final ObjectProvider<OAuth2ClientHttpRequestInterceptor> tokenInterceptor) {
-        final Optional<ClientHttpRequestInterceptor> authentication =
-                Optional.ofNullable(tokenInterceptor.getIfAvailable());
-        return new RestClientFactory(builder, properties, authentication);
+        final List<ClientHttpRequestInterceptor> interceptors =
+                tokenInterceptor.stream().map(ClientHttpRequestInterceptor.class::cast).toList();
+        return new RestClientFactory(builder, properties, interceptors);
     }
 
     @Bean

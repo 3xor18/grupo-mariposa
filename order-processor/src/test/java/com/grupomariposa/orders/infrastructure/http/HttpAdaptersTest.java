@@ -31,7 +31,7 @@ import io.github.resilience4j.retry.RetryRegistry;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.Optional;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -65,7 +65,7 @@ class HttpAdaptersTest {
         final ResilienceFactory resilience = new ResilienceFactory(properties.resilience(),
                 retries, circuitBreakers, BulkheadRegistry.ofDefaults());
         final RestClientFactory restClients =
-                new RestClientFactory(RestClient.builder(), properties, Optional.empty());
+                new RestClientFactory(RestClient.builder(), properties, List.of());
         final RetryAfterParser retryAfter = new RetryAfterParser(Clock.systemUTC());
         clients = new HttpClientDirectory(restClients.create(properties.clients()),
                 new LookupExchange(Dependency.CLIENTS_API, retryAfter),
@@ -109,8 +109,26 @@ class HttpAdaptersTest {
         API.verify(1, getRequestedFor(urlPathEqualTo("/clients/CLI-404")));
     }
 
+    @Test
+    void should_treat_any_2xx_with_body_as_found() {
+        API.stubFor(get("/clients/CLI-203").willReturn(aResponse().withStatus(203)
+                .withHeader("Content-Type", "application/json").withBody(CLIENT_BODY)));
+
+        assertThat(clients.findClient("CLI-203").value()).isPresent();
+    }
+
+    @Test
+    void should_close_created_http_clients() {
+        final RestClientFactory factory = new RestClientFactory(RestClient.builder(),
+                properties(), List.of());
+        factory.create(properties().clients());
+
+        factory.close();
+        factory.close();
+    }
+
     @ParameterizedTest
-    @ValueSource(ints = {429, 500, 502, 503, 504})
+    @ValueSource(ints = {408, 429, 500, 502, 503, 504})
     void should_retry_and_then_fail_transient_statuses(final int status) {
         API.stubFor(get("/clients/CLI-DOWN").willReturn(aResponse().withStatus(status)));
 
