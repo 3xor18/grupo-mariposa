@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:order_tracker/core/json/json_map.dart';
 import 'package:order_tracker/core/money/money.dart';
+import 'package:order_tracker/core/money/unit_price.dart';
 import 'package:order_tracker/features/orders/data/dto/order_dto.dart';
 import 'package:order_tracker/features/orders/data/dto/order_page_dto.dart';
 import 'package:order_tracker/features/orders/data/mappers/order_codes.dart';
@@ -46,9 +47,22 @@ void main() {
     test('should parse amounts into money of the order currency', () {
       final order = OrderDto.fromJson(JsonMap(approvedOrderJson())).toDomain();
       expect(order.totals.grandTotal, const Money(minorUnits: 210011, currency: 'MXN'));
-      expect(order.lines.last.unitPrice.minorUnits, 8200);
+      expect(order.lines.last.unitPrice.tenThousandths, 820000);
       expect(order.eventVersion, 1);
       expect(order.market, Market.mx);
+    });
+
+    test('should accept unit prices with four decimals', () {
+      final json = approvedOrderJson();
+      ((json['lines']! as List<Object?>).first! as Map<String, Object?>)['unitPrice'] = 12.3456;
+      final order = OrderDto.fromJson(JsonMap(json)).toDomain();
+      expect(order.lines.first.unitPrice, UnitPrice.parse('12.3456', currency: 'MXN'));
+    });
+
+    test('should reject unit prices with more than four decimals', () {
+      final json = approvedOrderJson();
+      ((json['lines']! as List<Object?>).first! as Map<String, Object?>)['unitPrice'] = 1.23456;
+      expect(OrderDto.fromJson(JsonMap(json)).toDomain, throwsFormatException);
     });
 
     test('should reject amounts with more than two decimals when mapping', () {

@@ -1,4 +1,5 @@
 import 'package:order_tracker/core/money/money.dart';
+import 'package:order_tracker/core/money/unit_price.dart';
 import 'package:order_tracker/features/orders/domain/entities/market.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_line.dart';
@@ -129,7 +130,7 @@ final detailedLine = OrderLine(
   sku: 'BEB-600-PET',
   taxCategory: 'STANDARD',
   quantity: 24,
-  unitPrice: mxn('35.5'),
+  unitPrice: UnitPrice.parse('35.5', currency: 'MXN'),
   grossSubtotal: mxn('852'),
   discountRate: 0.03,
   discount: mxn('25.56'),
@@ -139,7 +140,11 @@ final detailedLine = OrderLine(
   lineTotal: mxn('958.67'),
 );
 
-final bareLine = OrderLine(productId: 'PRD-008', quantity: 12, unitPrice: mxn('82'));
+final bareLine = OrderLine(
+  productId: 'PRD-008',
+  quantity: 12,
+  unitPrice: UnitPrice.parse('82', currency: 'MXN'),
+);
 
 OrderTotals zeroTotals(Money Function(String amount) money) => OrderTotals(
   grossSubtotal: money('0'),
@@ -179,7 +184,13 @@ Order rejectedOrder() => Order(
   market: Market.co,
   currency: 'COP',
   client: const OrderClient(clientId: 'CLI-20002'),
-  lines: [OrderLine(productId: 'PRD-007', quantity: 3, unitPrice: cop('4500'))],
+  lines: [
+    OrderLine(
+      productId: 'PRD-007',
+      quantity: 3,
+      unitPrice: UnitPrice.parse('4500', currency: 'COP'),
+    ),
+  ],
   totals: OrderTotals(
     grossSubtotal: cop('13500'),
     discount: cop('0'),

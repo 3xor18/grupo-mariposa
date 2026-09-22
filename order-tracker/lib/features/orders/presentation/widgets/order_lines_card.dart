@@ -48,7 +48,7 @@ class _OrderLineTile extends StatelessWidget {
   List<String> _details(AppFormatters formatters) {
     return [
       line.sku ?? line.productId,
-      AppStrings.quantityTimesPrice(line.quantity, formatters.money(line.unitPrice)),
+      AppStrings.quantityTimesPrice(line.quantity, formatters.unitPrice(line.unitPrice)),
       if ((line.discountRate, line.discount) case (final double rate, final Money amount))
         AppStrings.discountDetail(formatters.percent(rate), formatters.money(amount)),
       if ((line.taxRate, line.taxAmount) case (final double rate, final Money amount))

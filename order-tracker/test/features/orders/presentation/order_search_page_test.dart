@@ -5,10 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:order_tracker/core/error/app_failure.dart';
 import 'package:order_tracker/core/l10n/app_strings.dart';
+import 'package:order_tracker/core/money/unit_price.dart';
 import 'package:order_tracker/core/result/result.dart';
 import 'package:order_tracker/core/widgets/failure_view.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_id.dart';
+import 'package:order_tracker/features/orders/domain/entities/order_line.dart';
 import 'package:order_tracker/features/orders/presentation/orders_keys.dart';
 import 'package:order_tracker/features/orders/presentation/pages/order_search_page.dart';
 
@@ -78,6 +80,35 @@ void main() {
     expect(find.text(AppStrings.eventVersion), findsOneWidget);
     expect(find.byKey(OrdersKeys.rejectionCard), findsNothing);
     verify(() => repository.findById(approvedOrderId)).called(1);
+  });
+
+  testWidgets('should render unit prices with four decimals', (tester) async {
+    final order = approvedOrder();
+    final line = OrderLine(
+      productId: 'PRD-777',
+      quantity: 2,
+      unitPrice: UnitPrice.parse('12.3456', currency: 'MXN'),
+    );
+    answer(
+      Ok(
+        Order(
+          orderId: order.orderId,
+          eventVersion: order.eventVersion,
+          status: order.status,
+          market: order.market,
+          currency: order.currency,
+          client: order.client,
+          lines: [line],
+          totals: order.totals,
+          receivedAt: order.receivedAt,
+          processedAt: order.processedAt,
+        ),
+      ),
+    );
+    await pumpPage(tester);
+    await search(tester, approvedOrderId);
+    await tester.pumpAndSettle();
+    expect(find.text(AppStrings.joinDetails(['PRD-777', r'2 × $12.3456'])), findsOneWidget);
   });
 
   testWidgets('should render the rejection reason and violations', (tester) async {

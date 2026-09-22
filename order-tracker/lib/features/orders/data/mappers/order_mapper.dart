@@ -1,4 +1,5 @@
 import 'package:order_tracker/core/money/money.dart';
+import 'package:order_tracker/core/money/unit_price.dart';
 import 'package:order_tracker/features/orders/data/dto/order_dto.dart';
 import 'package:order_tracker/features/orders/data/dto/order_page_dto.dart';
 import 'package:order_tracker/features/orders/data/mappers/order_codes.dart';
@@ -52,7 +53,7 @@ extension OrderLineDtoMapper on OrderLineDto {
       sku: sku,
       taxCategory: taxCategory,
       quantity: quantity,
-      unitPrice: Money.parse(unitPrice, currency: currency),
+      unitPrice: UnitPrice.parse(unitPrice, currency: currency),
       grossSubtotal: money(grossSubtotal),
       discountRate: discountRate,
       discount: money(discount),

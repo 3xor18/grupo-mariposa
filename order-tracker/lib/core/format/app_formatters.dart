@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 import 'package:order_tracker/core/format/app_locale.dart';
 import 'package:order_tracker/core/format/money_formatter.dart';
 import 'package:order_tracker/core/money/money.dart';
+import 'package:order_tracker/core/money/unit_price.dart';
 
 final class AppFormatters {
   AppFormatters()
@@ -19,6 +20,8 @@ final class AppFormatters {
   final NumberFormat _percent;
 
   String money(Money value) => _money.format(value);
+
+  String unitPrice(UnitPrice value) => _money.formatUnitPrice(value);
 
   String dateTime(DateTime value) => _dateTime.format(value.toLocal());
 

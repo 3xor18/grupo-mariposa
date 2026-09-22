@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:order_tracker/core/money/money.dart';
+import 'package:order_tracker/core/money/unit_price.dart';
 
 final class OrderLine extends Equatable {
   const OrderLine({
@@ -23,7 +24,7 @@ final class OrderLine extends Equatable {
   final String? sku;
   final String? taxCategory;
   final int quantity;
-  final Money unitPrice;
+  final UnitPrice unitPrice;
   final Money? grossSubtotal;
   final double? discountRate;
   final Money? discount;

@@ -28,7 +28,8 @@ test.describe('order tracker smoke', () => {
 
     test('renders the recent orders screen', async ({ page }) => {
       await openOrdersTab(page);
-      await expect(page.getByRole('heading', { name: copy.recentOrders, exact: true })).toBeVisible();
+      const heading = page.getByRole('heading', { name: copy.recentOrders, exact: true });
+      await expect(heading).toBeVisible();
     });
   });
 });
