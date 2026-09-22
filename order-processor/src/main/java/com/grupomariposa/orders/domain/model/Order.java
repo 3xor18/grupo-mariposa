@@ -50,8 +50,4 @@ public record Order(
     public Optional<RejectionCode> reason() {
         return violations.stream().map(Violation::code).findFirst();
     }
-
-    public Optional<FailureDetails> failureDetails() {
-        return Optional.ofNullable(failure);
-    }
 }

@@ -5,6 +5,8 @@ import java.util.Objects;
 
 public record Rate(BigDecimal value) {
 
+    private static final String NEGATIVE = "Rate cannot be negative";
+
     private static final int PERCENT_SCALE_SHIFT = 2;
 
     public static final Rate ZERO = ofPercent(0);
@@ -12,7 +14,7 @@ public record Rate(BigDecimal value) {
     public Rate {
         Objects.requireNonNull(value, "value");
         if (value.signum() < 0) {
-            throw new IllegalArgumentException("Rate cannot be negative");
+            throw new IllegalArgumentException(NEGATIVE);
         }
     }
 

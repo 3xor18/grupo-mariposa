@@ -58,7 +58,7 @@ class ModelInvariantsTest {
         assertThat(OrderLine.unpriced(requested, Lookup.found(product("PRD-1",
                 TaxCategory.REDUCED))).taxCategory()).isEqualTo(TaxCategory.REDUCED);
         assertThat(OrderLine.unpriced(requested, Lookup.notFound()).name()).isNull();
-        assertThat(OrderLine.unpriced(requested).pricing()).isEmpty();
+        assertThat(OrderLine.unpriced(requested).amounts()).isNull();
     }
 
     @Test
@@ -70,15 +70,11 @@ class ModelInvariantsTest {
     }
 
     @Test
-    void should_expose_order_accessors() {
-        final Order order = rejectedOrder();
-
-        assertThat(order.orderId()).isEqualTo("ORD-1");
-        assertThat(order.sourceEventId()).isEqualTo("EVT-1");
-        assertThat(order.eventVersion()).isEqualTo(2);
-        assertThat(order.processedAt()).isEqualTo(NOW);
-        assertThat(order.reason()).contains(RejectionCode.CLIENT_NOT_FOUND);
-        assertThat(order.failureDetails()).contains(new FailureDetails("X", "cause", 1));
+    void should_derive_reason_from_first_violation_only() {
+        assertThat(order(List.of(Violation.of(RejectionCode.CLIENT_NOT_FOUND),
+                Violation.of(RejectionCode.CLIENT_NOT_ACTIVE))).reason())
+                .contains(RejectionCode.CLIENT_NOT_FOUND);
+        assertThat(order(List.of()).reason()).isEmpty();
     }
 
     @Test
@@ -96,10 +92,11 @@ class ModelInvariantsTest {
         assertThat(wholesaleClient(Market.PE).isTaxExempt()).isFalse();
     }
 
-    private static Order rejectedOrder() {
-        return new Order(new OrderIdentity("ORD-1", "EVT-1", 2), OrderStatus.REJECTED,
+    private static Order order(final List<Violation> violations) {
+        return new Order(new OrderIdentity("ORD-1", "EVT-1", 2),
+                violations.isEmpty() ? OrderStatus.APPROVED : OrderStatus.REJECTED,
                 Market.MX, Currency.MXN, null, ClientSnapshot.unresolved("CLI-1"),
-                List.of(), Totals.ZERO, List.of(Violation.of(RejectionCode.CLIENT_NOT_FOUND)),
-                new FailureDetails("X", "cause", 1), new OrderTimeline(null, NOW, NOW), null);
+                List.of(), Totals.ZERO, violations, null, new OrderTimeline(null, NOW, NOW),
+                null);
     }
 }

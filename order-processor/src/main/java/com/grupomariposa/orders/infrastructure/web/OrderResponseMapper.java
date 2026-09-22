@@ -5,6 +5,7 @@ import static com.grupomariposa.orders.infrastructure.support.Enums.nameOf;
 import com.grupomariposa.orders.application.query.OrderSummary;
 import com.grupomariposa.orders.application.query.PageResult;
 import com.grupomariposa.orders.domain.model.ClientSnapshot;
+import com.grupomariposa.orders.domain.model.FailureDetails;
 import com.grupomariposa.orders.domain.model.LineAmounts;
 import com.grupomariposa.orders.domain.model.Money;
 import com.grupomariposa.orders.domain.model.Order;
@@ -34,8 +35,7 @@ public final class OrderResponseMapper {
                 order.violations().stream().map(violation -> new ViolationResponse(
                         violation.code().name(), violation.message(), violation.productId()))
                         .toList(),
-                order.failureDetails().map(failure -> new FailureResponse(failure.category(),
-                        failure.cause(), failure.attempts())).orElse(null),
+                failure(order.failure()),
                 order.timeline().occurredAt(), order.timeline().receivedAt(),
                 order.processedAt(), order.traceId());
     }
@@ -67,6 +67,11 @@ public final class OrderResponseMapper {
                 money(amounts, LineAmounts::discount), money(amounts, LineAmounts::netSubtotal),
                 rate(amounts, LineAmounts::taxRate), money(amounts, LineAmounts::taxAmount),
                 money(amounts, LineAmounts::lineTotal));
+    }
+
+    private static FailureResponse failure(final FailureDetails failure) {
+        return failure == null ? null
+                : new FailureResponse(failure.category(), failure.cause(), failure.attempts());
     }
 
     private static TotalsResponse totals(final Totals totals) {

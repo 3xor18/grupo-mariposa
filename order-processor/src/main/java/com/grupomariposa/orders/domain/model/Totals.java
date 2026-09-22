@@ -22,19 +22,20 @@ public record Totals(
     }
 
     public static Totals sumOf(final Collection<LineAmounts> lines) {
-        Totals totals = ZERO;
-        for (final LineAmounts line : lines) {
-            totals = totals.plus(line);
-        }
-        return totals;
+        return lines.stream().map(Totals::of).reduce(ZERO, Totals::plus);
     }
 
-    private Totals plus(final LineAmounts line) {
+    private static Totals of(final LineAmounts line) {
+        return new Totals(line.grossSubtotal(), line.discount(), line.netSubtotal(),
+                line.taxAmount(), line.lineTotal());
+    }
+
+    private Totals plus(final Totals other) {
         return new Totals(
-                grossSubtotal.plus(line.grossSubtotal()),
-                discount.plus(line.discount()),
-                netSubtotal.plus(line.netSubtotal()),
-                tax.plus(line.taxAmount()),
-                grandTotal.plus(line.lineTotal()));
+                grossSubtotal.plus(other.grossSubtotal),
+                discount.plus(other.discount),
+                netSubtotal.plus(other.netSubtotal),
+                tax.plus(other.tax),
+                grandTotal.plus(other.grandTotal));
     }
 }

@@ -9,6 +9,8 @@ import java.util.Objects;
 
 public final class OutboxPayloadFactory {
 
+    private static final String UNSERIALIZABLE = "Outbox payload could not be serialized";
+
     private final ObjectMapper objectMapper;
 
     public OutboxPayloadFactory(final ObjectMapper objectMapper) {
@@ -19,11 +21,11 @@ public final class OutboxPayloadFactory {
         try {
             return objectMapper.writeValueAsString(payload(order, eventId));
         } catch (JsonProcessingException failure) {
-            throw new IllegalStateException("Outbox payload could not be serialized", failure);
+            throw new IllegalStateException(UNSERIALIZABLE, failure);
         }
     }
 
-    public OrderProcessedPayload payload(final Order order, final String eventId) {
+    private OrderProcessedPayload payload(final Order order, final String eventId) {
         return new OrderProcessedPayload(eventId, order.eventVersion(), order.processedAt(),
                 order.sourceEventId(), order.orderId(), order.client().clientId(),
                 order.status().name(), order.market().name(), order.currency().name(),

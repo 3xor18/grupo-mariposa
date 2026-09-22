@@ -51,7 +51,7 @@ class OrderEvaluatorTest {
             assertThat(rejected.status()).isEqualTo(OrderStatus.REJECTED);
             assertThat(rejected.totals()).isEqualTo(Totals.ZERO);
             assertThat(rejected.lines()).singleElement().satisfies(line -> {
-                assertThat(line.pricing()).isEmpty();
+                assertThat(line.amounts()).isNull();
                 assertThat(line.name()).isEqualTo("Product PRD-001");
             });
         });

@@ -2,7 +2,6 @@ package com.grupomariposa.orders.domain.model;
 
 import java.math.BigDecimal;
 import java.util.Objects;
-import java.util.Optional;
 
 public record OrderLine(
         String productId,
@@ -35,9 +34,5 @@ public record OrderLine(
     public static OrderLine unpriced(final RequestedItem item) {
         return new OrderLine(item.productId(), null, null, null, item.quantity(),
                 item.unitPrice(), null);
-    }
-
-    public Optional<LineAmounts> pricing() {
-        return Optional.ofNullable(amounts);
     }
 }

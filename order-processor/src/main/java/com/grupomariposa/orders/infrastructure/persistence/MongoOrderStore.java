@@ -33,6 +33,10 @@ import org.springframework.transaction.TransactionStatus;
 public final class MongoOrderStore implements OrderStore {
 
     private static final String READ_FAILED = "MongoDB read failed: %s";
+    private static final String ORDER_DISAPPEARED =
+            "Order disappeared while classifying a conflict";
+    private static final String INCOMPLETE_STATE = "Order document %s has no version or status";
+    private static final String NOT_A_DECISION = "Technical failures never reach the inbox";
 
     private final MongoTemplate mongo;
     private final TransactionRunner transactions;
@@ -89,7 +93,7 @@ public final class MongoOrderStore implements OrderStore {
         } catch (DuplicateKeyException terminalResultExists) {
             return false;
         } catch (DataAccessException failure) {
-            throw TransactionRunner.translate(failure, 1);
+            throw TransactionRunner.translate(failure);
         }
     }
 
@@ -101,7 +105,7 @@ public final class MongoOrderStore implements OrderStore {
         } catch (DuplicateKeyException alreadyRecorded) {
             return;
         } catch (DataAccessException failure) {
-            throw TransactionRunner.translate(failure, 1);
+            throw TransactionRunner.translate(failure);
         }
     }
 
@@ -109,7 +113,7 @@ public final class MongoOrderStore implements OrderStore {
                                        final TransactionStatus status) {
         try {
             mongo.insert(new InboxDocument(order.sourceEventId(), order.orderId(),
-                    order.eventVersion(), InboxOutcome.valueOf(order.status().name()).name(),
+                    order.eventVersion(), inboxOutcomeOf(order.status()).name(),
                     order.timeline().receivedAt()));
         } catch (DuplicateKeyException duplicate) {
             status.setRollbackOnly();
@@ -143,13 +147,27 @@ public final class MongoOrderStore implements OrderStore {
 
     private StoredOrderState currentState(final String orderId) {
         return findState(orderId).orElseThrow(() ->
-                new PersistenceException("Order disappeared while classifying a conflict", null));
+                new PersistenceException(ORDER_DISAPPEARED,
+                        new IllegalStateException(ORDER_DISAPPEARED)));
+    }
+
+    private static InboxOutcome inboxOutcomeOf(final OrderStatus status) {
+        return switch (status) {
+            case APPROVED -> InboxOutcome.APPROVED;
+            case REJECTED -> InboxOutcome.REJECTED;
+            case TECHNICAL_FAILURE -> throw new IllegalArgumentException(NOT_A_DECISION);
+        };
     }
 
     private static StoredOrderState stateOf(final Document document) {
-        return new StoredOrderState(document.getInteger(Fields.EVENT_VERSION),
-                document.getString(Fields.SOURCE_EVENT_ID),
-                OrderStatus.valueOf(document.getString(Fields.STATUS)));
+        final Integer version = document.getInteger(Fields.EVENT_VERSION);
+        final String status = document.getString(Fields.STATUS);
+        if (version == null || status == null) {
+            throw new PersistenceException(INCOMPLETE_STATE.formatted(document.get(Fields.ID)),
+                    new IllegalStateException(INCOMPLETE_STATE));
+        }
+        return new StoredOrderState(version, document.getString(Fields.SOURCE_EVENT_ID),
+                OrderStatus.valueOf(status));
     }
 
     private static Query byId(final String id) {

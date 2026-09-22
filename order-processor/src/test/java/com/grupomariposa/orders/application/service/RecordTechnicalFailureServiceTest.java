@@ -43,9 +43,9 @@ class RecordTechnicalFailureServiceTest {
         verify(store).saveTechnicalFailure(stored.capture());
         assertThat(stored.getValue().status()).isEqualTo(OrderStatus.TECHNICAL_FAILURE);
         assertThat(stored.getValue().totals()).isEqualTo(Totals.ZERO);
-        assertThat(stored.getValue().failureDetails()).contains(failure);
+        assertThat(stored.getValue().failure()).isEqualTo(failure);
         assertThat(stored.getValue().lines()).allSatisfy(line ->
-                assertThat(line.pricing()).isEmpty());
+                assertThat(line.amounts()).isNull());
         verify(observer).outcome(outcome);
     }
 }

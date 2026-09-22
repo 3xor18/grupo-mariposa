@@ -8,16 +8,11 @@ import com.grupomariposa.orders.application.error.ExternalPermanentException;
 import com.grupomariposa.orders.application.error.ExternalTransientException;
 import com.grupomariposa.orders.application.error.PersistenceException;
 import com.grupomariposa.orders.application.query.OrderSearchCriteria;
-import com.grupomariposa.orders.application.query.OrderSummary;
 import com.grupomariposa.orders.application.query.PageResult;
 import com.grupomariposa.orders.application.service.RelaySettings;
-import com.grupomariposa.orders.domain.model.Currency;
 import com.grupomariposa.orders.domain.model.Market;
-import com.grupomariposa.orders.domain.model.Money;
 import com.grupomariposa.orders.domain.model.OrderStatus;
-import com.grupomariposa.orders.domain.model.RejectionCode;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -60,12 +55,9 @@ class ApplicationModelTest {
     }
 
     @Test
-    void should_carry_summary_fields() {
-        final OrderSummary summary = new OrderSummary("ORD-1", OrderStatus.REJECTED, Market.MX,
-                Currency.MXN, "CLI-1", 2, Money.ZERO, RejectionCode.CLIENT_NOT_FOUND,
-                Instant.EPOCH);
-
-        assertThat(summary.reason()).isEqualTo(RejectionCode.CLIENT_NOT_FOUND);
+    void should_reject_empty_page_size() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> new PageResult<>(List.of(), 0, 0, 0));
     }
 
     @ParameterizedTest
