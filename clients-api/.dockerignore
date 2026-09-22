@@ -1,0 +1,15 @@
+node_modules
+dist
+coverage
+test
+**/*.spec.ts
+.env
+*.env.local
+*.log
+Dockerfile
+.dockerignore
+.prettierrc.json
+.prettierignore
+eslint.config.mjs
+jest.config.js
+README.md
