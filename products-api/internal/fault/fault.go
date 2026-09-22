@@ -29,9 +29,14 @@ const (
 
 var ErrInvalidRule = errors.New("invalid fault rule")
 
-var kinds = map[Kind]struct{}{
-	KindBadRequest: {}, KindTooManyRequests: {}, KindInternalError: {},
-	KindBadGateway: {}, KindServiceUnavailable: {}, KindTimeout: {},
+func (k Kind) valid() bool {
+	switch k {
+	case KindBadRequest, KindTooManyRequests, KindInternalError,
+		KindBadGateway, KindServiceUnavailable, KindTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
 type Rule struct {
@@ -67,7 +72,7 @@ func parseRule(entry string) (Rule, error) {
 		return Rule{}, fmt.Errorf("%w: %q", ErrInvalidRule, entry)
 	}
 	kind := Kind(fields[1])
-	if _, ok := kinds[kind]; !ok {
+	if !kind.valid() {
 		return Rule{}, fmt.Errorf("%w: unknown type in %q", ErrInvalidRule, entry)
 	}
 	rule := Rule{ID: fields[0], Kind: kind, Times: alwaysFail}
