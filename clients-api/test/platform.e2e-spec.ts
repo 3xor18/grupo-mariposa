@@ -1,9 +1,11 @@
 import { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { ReadinessState } from '../src/health/readiness.state';
+import { AddressInfo } from 'node:net';
+import { ErrorCode } from '../src/shared/errors/error-code.enum';
+import { SHUTTING_DOWN_DETAIL } from '../src/shared/fault-injection/fault-injection.interceptor';
 import { TestIdentityProvider } from './support/identity-provider';
-import { createTestApp, testConfig } from './support/test-app';
+import { createTestApp, NO_AUTH, testConfig } from './support/test-app';
 
 describe('platform endpoints', () => {
   let idp: TestIdentityProvider;
@@ -54,18 +56,37 @@ describe('platform endpoints', () => {
   });
 });
 
-describe('graceful shutdown', () => {
-  it('should_report_readiness_down_once_shutdown_starts', async () => {
-    const idp = await TestIdentityProvider.start();
-    const app = await createTestApp(testConfig(idp.jwksUrl));
-    const server = app.getHttpServer() as App;
+describe('graceful shutdown through app.close()', () => {
+  it('should_drain_with_readiness_down_cancel_held_requests_and_close_connections', async () => {
+    const config = testConfig('http://unused');
+    const app = await createTestApp({
+      ...config,
+      auth: NO_AUTH,
+      faultInjection: { ...config.faultInjection, timeoutMs: 30_000 },
+      shutdown: { drainMs: 400, timeoutMs: 1000 },
+    });
+    await app.listen(0, '127.0.0.1');
+    const { port } = app.getHttpServer().address() as AddressInfo;
+    const base = `http://127.0.0.1:${String(port)}`;
+    await expect(fetch(`${base}/health/ready`)).resolves.toMatchObject({ status: 200 });
+    const held = fetch(`${base}/clients/CLI-SLOW`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const startedAt = Date.now();
 
-    app.get(ReadinessState).beforeApplicationShutdown();
-    const response = await request(server).get('/health/ready').expect(503);
+    const closing = app.close();
+    const heldResponse = await held;
+    const readiness = await fetch(`${base}/health/ready`);
+    await closing;
 
-    expect(response.body).toEqual({ status: 'DOWN' });
-    await request(server).get('/health/live').expect(200);
-    await app.close();
-    await idp.stop();
+    expect(heldResponse.status).toBe(503);
+    expect(await heldResponse.json()).toMatchObject({
+      code: ErrorCode.SERVICE_UNAVAILABLE,
+      detail: SHUTTING_DOWN_DETAIL,
+    });
+    expect(readiness.status).toBe(503);
+    expect(await readiness.json()).toEqual({ status: 'DOWN' });
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(390);
+    expect(Date.now() - startedAt).toBeLessThan(5000);
+    await expect(fetch(`${base}/health/live`)).rejects.toThrow('fetch failed');
   });
 });

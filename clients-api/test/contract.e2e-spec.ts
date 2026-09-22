@@ -30,7 +30,9 @@ describe('contract compliance', () => {
   beforeAll(async () => {
     idp = await TestIdentityProvider.start();
     app = await createTestApp(
-      testConfig(idp.jwksUrl, { rateLimit: { requestsPerSecond: 1, burst: 60 } }),
+      testConfig(idp.jwksUrl, {
+        rateLimit: { requestsPerSecond: 1, burst: 60, maxTrackedCallers: 10 },
+      }),
     );
     server = app.getHttpServer();
     validators = createContractValidators();

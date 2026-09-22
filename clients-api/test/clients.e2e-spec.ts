@@ -9,7 +9,7 @@ import { TaxRegime } from '../src/clients/domain/tax-regime.enum';
 import { ErrorCode } from '../src/shared/errors/error-code.enum';
 import { PROBLEM_CONTENT_TYPE } from '../src/shared/errors/problem-details';
 import { TestIdentityProvider } from './support/identity-provider';
-import { createTestApp, testConfig } from './support/test-app';
+import { createTestApp, NO_AUTH, testConfig } from './support/test-app';
 
 const TRACE_ID = '0af7651916cd43dd8448eb211c80319c';
 const TRACEPARENT = `00-${TRACE_ID}-b7ad6b7169203331-01`;
@@ -65,7 +65,8 @@ describe('GET /clients/:clientId', () => {
         status: 400,
         code: ErrorCode.VALIDATION_ERROR,
         instance: `/clients/${clientId}`,
-        errors: [{ field: 'clientId', message: expect.stringContaining('must match') as string }],
+        detail: 'The request contains invalid parameters',
+        errors: [{ field: 'clientId', message: 'clientId must match ^CLI-[A-Z0-9]{1,20}$' }],
       });
     },
   );
@@ -85,17 +86,22 @@ describe('GET /clients/:clientId', () => {
     expect(response.headers['x-request-id']).toBe(TRACE_ID);
   });
 
-  it('should_propagate_request_id_when_header_is_present', async () => {
+  it('should_echo_request_id_but_keep_a_w3c_trace_id_when_only_request_id_is_sent', async () => {
     const response = await get('/clients/CLI-00000').set('X-Request-Id', 'req-123').expect(404);
+    const body = response.body as { traceId: string };
 
     expect(response.headers['x-request-id']).toBe('req-123');
-    expect(response.body).toMatchObject({ traceId: 'req-123' });
+    expect(body.traceId).toMatch(/^[\da-f]{32}$/);
   });
 
   it('should_return_401_when_token_is_missing', async () => {
     const response = await request(server).get('/clients/CLI-99821').expect(401);
 
-    expect(response.body).toMatchObject({ status: 401, code: ErrorCode.UNAUTHORIZED });
+    expect(response.body).toMatchObject({
+      status: 401,
+      code: ErrorCode.UNAUTHORIZED,
+      detail: 'A bearer token is required',
+    });
   });
 
   it('should_return_401_when_token_is_expired', async () => {
@@ -139,13 +145,55 @@ describe('GET /clients/:clientId', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(403);
 
-    expect(response.body).toMatchObject({ status: 403, code: ErrorCode.FORBIDDEN });
+    expect(response.body).toMatchObject({
+      status: 403,
+      code: ErrorCode.FORBIDDEN,
+      detail: 'The token does not grant the required role',
+    });
+  });
+
+  it('should_return_401_when_token_targets_another_audience', async () => {
+    const token = await idp.token({ audience: 'products-api' });
+
+    const response = await request(server)
+      .get('/clients/CLI-99821')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(401);
+
+    expect(response.body).toMatchObject({
+      code: ErrorCode.UNAUTHORIZED,
+      detail: 'The bearer token is invalid or expired',
+    });
+  });
+
+  it('should_accept_lowercase_bearer_scheme', async () => {
+    const response = await request(server)
+      .get('/clients/CLI-99821')
+      .set('Authorization', `bearer ${await idp.token()}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({ clientId: 'CLI-99821' });
+  });
+
+  it('should_return_401_with_malformed_detail_when_scheme_is_not_bearer', async () => {
+    const response = await request(server)
+      .get('/clients/CLI-99821')
+      .set('Authorization', 'Basic dXNlcjpwYXNz')
+      .expect(401);
+
+    expect(response.body).toMatchObject({
+      detail: 'The authorization header must be "Bearer <jwt>"',
+    });
   });
 
   it('should_return_problem_for_unknown_route', async () => {
     const response = await get('/unknown').expect(404);
 
-    expect(response.body).toMatchObject({ code: ErrorCode.NOT_FOUND, instance: '/unknown' });
+    expect(response.body).toMatchObject({
+      code: ErrorCode.NOT_FOUND,
+      instance: '/unknown',
+      detail: 'Cannot GET /unknown',
+    });
   });
 });
 
@@ -153,7 +201,7 @@ describe('GET /clients/:clientId with authentication disabled', () => {
   let app: NestExpressApplication;
 
   beforeAll(async () => {
-    app = await createTestApp({ ...testConfig('http://unused'), auth: { enabled: false } });
+    app = await createTestApp({ ...testConfig('http://unused'), auth: NO_AUTH });
   });
 
   afterAll(async () => {
@@ -161,9 +209,11 @@ describe('GET /clients/:clientId with authentication disabled', () => {
   });
 
   it('should_return_client_without_token_when_auth_is_disabled', async () => {
-    await request(app.getHttpServer() as App)
+    const response = await request(app.getHttpServer() as App)
       .get('/clients/CLI-30002')
       .expect(200);
+
+    expect(response.body).toMatchObject({ clientId: 'CLI-30002', market: 'PE' });
   });
 });
 
@@ -173,7 +223,7 @@ describe('GET /clients/:clientId when the repository fails unexpectedly', () => 
   beforeAll(async () => {
     const failingRepository = { findById: () => Promise.reject(new Error('database is down')) };
     app = await createTestApp(
-      { ...testConfig('http://unused'), auth: { enabled: false } },
+      { ...testConfig('http://unused'), auth: NO_AUTH },
       { token: CLIENT_REPOSITORY, value: failingRepository },
     );
   });
