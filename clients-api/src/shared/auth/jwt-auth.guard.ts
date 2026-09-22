@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Request } from 'express';
 import { ACCESS_TOKEN_VERIFIER, AccessTokenVerifier } from './access-token-verifier';
+import { AuthenticatedRequest } from './principal';
 import { IS_PUBLIC_KEY } from './public.decorator';
 
 @Injectable()
@@ -13,8 +13,11 @@ export class JwtAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (!this.isPublic(context)) {
-      const request = context.switchToHttp().getRequest<Request>();
-      await this.verifier.authenticate(request.headers.authorization);
+      const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+      const principal = await this.verifier.authenticate(request.headers.authorization);
+      if (principal !== undefined) {
+        request.principal = principal;
+      }
     }
     return true;
   }
