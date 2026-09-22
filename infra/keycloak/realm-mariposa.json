@@ -16,10 +16,22 @@
   "ssoSessionIdleTimeout": 1800,
   "roles": {
     "realm": [
-      { "name": "orders-reader", "description": "Read processed orders" },
-      { "name": "orders-admin", "description": "Operate the orders platform" },
-      { "name": "products-reader", "description": "Read the product catalog" },
-      { "name": "clients-reader", "description": "Read the client master data" }
+      {
+        "name": "orders-reader",
+        "description": "Read processed orders"
+      },
+      {
+        "name": "orders-admin",
+        "description": "Operate the orders platform"
+      },
+      {
+        "name": "products-reader",
+        "description": "Read the product catalog"
+      },
+      {
+        "name": "clients-reader",
+        "description": "Read the client master data"
+      }
     ]
   },
   "clients": [
@@ -33,7 +45,31 @@
       "serviceAccountsEnabled": true,
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
-      "protocol": "openid-connect"
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "audience-products-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "products-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "audience-clients-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "clients-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     },
     {
       "clientId": "order-tracker",
@@ -46,12 +82,28 @@
         "http://localhost:8090/*",
         "http://localhost:8080/swagger-ui/oauth2-redirect.html"
       ],
-      "webOrigins": ["http://localhost:8090", "http://localhost:8080"],
+      "webOrigins": [
+        "http://localhost:8090",
+        "http://localhost:8080"
+      ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "http://localhost:8090/*"
       },
-      "protocol": "openid-connect"
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "audience-order-processor",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "order-processor",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     },
     {
       "clientId": "orders-cli",
@@ -60,7 +112,42 @@
       "publicClient": true,
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": true,
-      "protocol": "openid-connect"
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "audience-order-processor",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "order-processor",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "audience-products-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "products-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "audience-clients-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "clients-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     }
   ],
   "users": [
@@ -68,7 +155,10 @@
       "username": "service-account-order-processor",
       "enabled": true,
       "serviceAccountClientId": "order-processor",
-      "realmRoles": ["products-reader", "clients-reader"]
+      "realmRoles": [
+        "products-reader",
+        "clients-reader"
+      ]
     },
     {
       "username": "analyst",
@@ -78,9 +168,15 @@
       "emailVerified": true,
       "enabled": true,
       "credentials": [
-        { "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["orders-reader"]
+      "realmRoles": [
+        "orders-reader"
+      ]
     },
     {
       "username": "admin",
@@ -90,9 +186,18 @@
       "emailVerified": true,
       "enabled": true,
       "credentials": [
-        { "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["orders-reader", "orders-admin", "products-reader", "clients-reader"]
+      "realmRoles": [
+        "orders-reader",
+        "orders-admin",
+        "products-reader",
+        "clients-reader"
+      ]
     },
     {
       "username": "viewer",
@@ -102,7 +207,11 @@
       "emailVerified": true,
       "enabled": true,
       "credentials": [
-        { "type": "password", "value": "${DEMO_USER_PASSWORD}", "temporary": false }
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
       ],
       "realmRoles": []
     }

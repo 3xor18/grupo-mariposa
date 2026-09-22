@@ -1,2 +1,3 @@
 fault:
+  injection-enabled: true
   rules: PRD-012:503:2,PRD-013:timeout,PRD-014:400

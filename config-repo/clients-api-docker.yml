@@ -1,2 +1,3 @@
 fault:
+  injection-enabled: true
   rules: CLI-40001:503:2,CLI-40002:503
