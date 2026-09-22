@@ -7,7 +7,8 @@ import org.springframework.validation.annotation.Validated;
 
 @Validated
 @ConfigurationProperties(prefix = "app.api.orders")
-public record OrdersApiProperties(@Min(1) int defaultPageSize, @Min(1) int maxPageSize) {
+public record OrdersApiProperties(@Min(1) int defaultPageSize, @Min(1) int maxPageSize,
+                                  @Min(1) long maxOffset) {
 
     @AssertTrue(message = "default page size cannot exceed the maximum page size")
     public boolean isDefaultWithinMaximum() {

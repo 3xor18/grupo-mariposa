@@ -230,6 +230,7 @@ app:
     orders:
       default-page-size: ${API_DEFAULT_PAGE_SIZE:20}
       max-page-size: ${API_MAX_PAGE_SIZE:100}
+      max-offset: ${API_MAX_OFFSET:10000}
   security:
     enabled: ${AUTH_ENABLED:true}
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:8090}

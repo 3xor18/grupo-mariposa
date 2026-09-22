@@ -19,6 +19,7 @@ import org.bson.BsonString;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.mongodb.UncategorizedMongoDbException;
+import org.springframework.transaction.TransactionSystemException;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -66,8 +67,8 @@ class TransactionRunnerTest {
     }
 
     @Test
-    void should_keep_persistence_exceptions_untouched() {
-        final PersistenceException original = new PersistenceException("x", null);
+    void should_not_translate_non_database_failures() {
+        final IllegalStateException original = new IllegalStateException("serializer");
         when(template.execute(any())).thenThrow(original);
 
         assertThatThrownBy(() -> runner.<String>inTransaction(status -> "ignored"))
@@ -90,6 +91,11 @@ class TransactionRunnerTest {
         assertThat(MongoErrors.isTransient(new RuntimeException(labelled))).isTrue();
         assertThat(MongoErrors.isTransient(new MongoException("plain"))).isFalse();
         assertThat(MongoErrors.isTransient(new IllegalStateException())).isFalse();
+        assertThat(MongoErrors.isDatabaseFailure(new RuntimeException(labelled))).isTrue();
+        assertThat(MongoErrors.isDatabaseFailure(
+                new TransactionSystemException("commit")))
+                .isTrue();
+        assertThat(MongoErrors.isDatabaseFailure(new IllegalStateException())).isFalse();
     }
 
     private static RuntimeException writeConflict() {

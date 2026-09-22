@@ -80,6 +80,7 @@ public final class MongoOrderStore implements OrderStore {
         final Query guard = query(where(Fields.ID).is(order.orderId()).orOperator(
                 where(Fields.EVENT_VERSION).lt(order.eventVersion()),
                 where(Fields.EVENT_VERSION).is(order.eventVersion())
+                        .and(Fields.SOURCE_EVENT_ID).is(order.sourceEventId())
                         .and(Fields.STATUS).is(OrderStatus.TECHNICAL_FAILURE.name())));
         try {
             mongo.findAndReplace(guard, mapper.toDocument(order),

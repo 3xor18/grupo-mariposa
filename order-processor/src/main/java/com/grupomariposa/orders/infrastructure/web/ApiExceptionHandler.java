@@ -1,5 +1,6 @@
 package com.grupomariposa.orders.infrastructure.web;
 
+import com.grupomariposa.orders.application.error.PersistenceException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -20,6 +21,7 @@ public class ApiExceptionHandler {
     private static final String NOT_FOUND = "Resource does not exist";
     private static final String NOT_ALLOWED = "HTTP method is not supported for this resource";
     private static final String INTERNAL = "Unexpected error while processing the request";
+    private static final String UNAVAILABLE = "Orders are temporarily unavailable";
 
     private final ProblemFactory problems;
 
@@ -39,6 +41,14 @@ public class ApiExceptionHandler {
                                                  final HttpServletRequest request) {
         return respond(problems.invalid(failure.violations(), failure.getMessage(),
                 request.getRequestURI()));
+    }
+
+    @ExceptionHandler(PersistenceException.class)
+    public ResponseEntity<ProblemDetail> unavailable(final PersistenceException failure,
+                                                     final HttpServletRequest request) {
+        LOG.warn("Order store unavailable serving {}", request.getRequestURI());
+        return respond(problems.create(HttpStatus.SERVICE_UNAVAILABLE,
+                ApiErrorCode.SERVICE_UNAVAILABLE, UNAVAILABLE, request.getRequestURI()));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

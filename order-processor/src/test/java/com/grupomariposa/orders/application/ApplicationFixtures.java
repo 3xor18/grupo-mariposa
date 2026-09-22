@@ -39,7 +39,12 @@ public final class ApplicationFixtures {
     }
 
     public static OrderCommand command(final String eventId, final int version) {
-        return new OrderCommand(eventId, version, ORDER_ID, Market.MX, Currency.MXN, CLIENT_ID,
+        return command(ORDER_ID, eventId, version);
+    }
+
+    public static OrderCommand command(final String orderId, final String eventId,
+                                       final int version) {
+        return new OrderCommand(eventId, version, orderId, Market.MX, Currency.MXN, CLIENT_ID,
                 "C1", OCCURRED_AT, List.of(
                 new RequestedItem("PRD-001", 24, new BigDecimal("35.5")),
                 new RequestedItem("PRD-008", 12, new BigDecimal("82.0"))), RECEPTION);

@@ -2,9 +2,11 @@ package com.grupomariposa.orders.infrastructure.persistence;
 
 import com.mongodb.MongoException;
 import java.util.Set;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.data.mongodb.TransientClientSessionException;
 import org.springframework.data.mongodb.TransientMongoDbException;
+import org.springframework.transaction.TransactionException;
 
 final class MongoErrors {
 
@@ -14,6 +16,16 @@ final class MongoErrors {
             MongoException.UNKNOWN_TRANSACTION_COMMIT_RESULT_LABEL);
 
     private MongoErrors() {
+    }
+
+    static boolean isDatabaseFailure(final Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof DataAccessException || cause instanceof MongoException
+                    || cause instanceof TransactionException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static boolean isTransient(final Throwable failure) {
