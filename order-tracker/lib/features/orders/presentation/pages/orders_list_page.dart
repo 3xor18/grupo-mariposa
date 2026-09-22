@@ -92,7 +92,7 @@ class _ListPane extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
+          padding: AppInsets.pageHeader,
           child: Semantics(
             header: true,
             child: Text(

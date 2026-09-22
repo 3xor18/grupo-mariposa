@@ -30,7 +30,7 @@ final class IdTokenValidator {
     return switch (claims.raw[JwtClaimNames.audience]) {
       final String audience => audience == clientId,
       final List<Object?> audiences => audiences.contains(clientId),
-      _ => false,
+      Object() || null => false,
     };
   }
 

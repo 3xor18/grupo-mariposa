@@ -5,7 +5,7 @@ import 'package:order_tracker/core/l10n/app_strings.dart';
 import 'package:order_tracker/core/theme/app_tokens.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/presentation/orders_keys.dart';
-import 'package:order_tracker/features/orders/presentation/widgets/labeled_value.dart';
+import 'package:order_tracker/features/orders/presentation/widgets/section_card.dart';
 
 class OrderTotalsCard extends StatelessWidget {
   const OrderTotalsCard({required this.totals, super.key});

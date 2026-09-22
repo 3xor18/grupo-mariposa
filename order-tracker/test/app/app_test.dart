@@ -8,8 +8,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:order_tracker/app/app_dependencies.dart';
 import 'package:order_tracker/app/bootstrap.dart';
 import 'package:order_tracker/app/config_error_app.dart';
-import 'package:order_tracker/app/home_shell.dart';
 import 'package:order_tracker/app/order_tracker_app.dart';
+import 'package:order_tracker/app/shell_keys.dart';
 import 'package:order_tracker/core/config/app_config.dart';
 import 'package:order_tracker/core/format/app_formatters.dart';
 import 'package:order_tracker/core/l10n/app_strings.dart';
@@ -87,6 +87,29 @@ void main() {
       final before = disposals;
       await tester.pumpWidget(const SizedBox.shrink());
       expect(disposals, before + 1);
+    });
+
+    testWidgets('should load the orders list only when its tab is opened', (tester) async {
+      await pumpApp(tester, size: phoneSize, user: user);
+      verifyNever(
+        () => orderRepository.list(
+          filter: any(named: 'filter'),
+          page: any(named: 'page'),
+          size: any(named: 'size'),
+        ),
+      );
+      await tester.tap(find.text(AppStrings.navOrders).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(AppStrings.search).last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(OrdersKeys.searchField), findsOneWidget);
+      verify(
+        () => orderRepository.list(
+          filter: any(named: 'filter'),
+          page: any(named: 'page'),
+          size: any(named: 'size'),
+        ),
+      ).called(1);
     });
 
     testWidgets('should use a bottom navigation bar on phones', (tester) async {

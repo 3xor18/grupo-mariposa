@@ -25,7 +25,7 @@ abstract final class FailureMapper {
         statusCode: status,
         traceId: traceId,
       ),
-      _ => UnexpectedResponseFailure(traceId: traceId),
+      int() => UnexpectedResponseFailure(traceId: traceId),
     };
   }
 

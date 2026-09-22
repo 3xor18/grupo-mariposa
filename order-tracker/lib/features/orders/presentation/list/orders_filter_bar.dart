@@ -34,7 +34,7 @@ class OrdersFilterBar extends StatelessWidget {
             ],
           ),
           _ChipGroup(
-            label: AppStrings.filterMarket,
+            label: AppStrings.market,
             chips: [
               for (final market in MarketPresentation.filterable)
                 FilterChip(

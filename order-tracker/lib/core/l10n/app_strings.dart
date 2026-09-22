@@ -1,7 +1,7 @@
 abstract final class AppStrings {
   static const appTitle = 'Mariposa Order Tracker';
 
-  static const navSearch = 'Buscar';
+  static const search = 'Buscar';
   static const navOrders = 'Pedidos';
 
   static const loginSubtitle =
@@ -16,7 +16,6 @@ abstract final class AppStrings {
 
   static const orderIdLabel = 'ID del pedido';
   static const orderIdHint = 'Ej. ORD-MX-000147';
-  static const searchButton = 'Buscar';
   static const clearSearch = 'Limpiar búsqueda';
   static const orderIdRequired = 'Ingresa un ID de pedido';
   static const searchIdleTitle = 'Consulta un pedido';
@@ -55,7 +54,6 @@ abstract final class AppStrings {
 
   static const recentOrders = 'Pedidos recientes';
   static const filterStatus = 'Estado';
-  static const filterMarket = 'Mercado';
   static const loadMore = 'Cargar más';
   static const loadingOrders = 'Cargando pedidos…';
   static const emptyListTitle = 'Sin pedidos';

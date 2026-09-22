@@ -45,7 +45,10 @@ void main() {
           home: const OrderStatusChip(status: OrderStatus.unknown, compact: true),
         ),
       );
-      expect(find.bySemanticsLabel('Estado: Desconocido'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(AppStrings.statusSemantics(AppStrings.statusUnknown)),
+        findsOneWidget,
+      );
     });
   });
 

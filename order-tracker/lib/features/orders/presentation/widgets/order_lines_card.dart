@@ -4,7 +4,7 @@ import 'package:order_tracker/core/format/app_formatters.dart';
 import 'package:order_tracker/core/l10n/app_strings.dart';
 import 'package:order_tracker/core/money/money.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_line.dart';
-import 'package:order_tracker/features/orders/presentation/widgets/labeled_value.dart';
+import 'package:order_tracker/features/orders/presentation/widgets/section_card.dart';
 
 class OrderLinesCard extends StatelessWidget {
   const OrderLinesCard({required this.lines, super.key});

@@ -9,6 +9,10 @@ abstract final class AppSpacing {
   static const xl = 32.0;
 }
 
+abstract final class AppInsets {
+  static const pageHeader = EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0);
+}
+
 abstract final class AppBreakpoints {
   static const medium = 600.0;
   static const expanded = 840.0;
