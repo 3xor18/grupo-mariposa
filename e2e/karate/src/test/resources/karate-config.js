@@ -1,6 +1,7 @@
 function fn() {
   var prop = function (name, fallback) {
-    return karate.properties[name] || java.lang.System.getenv(name.toUpperCase().replace(/\./g, '_')) || fallback;
+    var envName = name.toUpperCase().replace(/\./g, '_');
+    return karate.properties[name] || java.lang.System.getenv(envName) || fallback;
   };
   var config = {
     ordersUrl: prop('orders.url', 'http://localhost:8080'),
@@ -14,10 +15,15 @@ function fn() {
       processed: 'orders.processed.v1',
       dlt: 'orders.processing.dlt'
     },
+    waits: {
+      eventMillis: 30000,
+      quietMillis: 3000
+    },
     runId: java.lang.System.currentTimeMillis() + ''
   };
   var Gateway = Java.type('mariposa.e2e.KafkaGateway');
   config.kafka = new Gateway(config.kafkaBootstrap);
+  config.tokens = karate.callSingle('classpath:mariposa/e2e/common/tokens.feature', config).tokens;
   karate.configure('connectTimeout', 5000);
   karate.configure('readTimeout', 15000);
   return config;

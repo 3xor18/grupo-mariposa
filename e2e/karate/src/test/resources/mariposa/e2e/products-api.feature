@@ -1,15 +1,13 @@
 Feature: products-api contract, validation, errors and security
 
   Background:
-    * def admin = call read('common/token.feature') { username: 'admin' }
-    * def analyst = call read('common/token.feature') { username: 'analyst' }
     * url productsUrl
     * def problem = { type: '#string', title: '#string', status: '#number', code: '#string', detail: '#string', instance: '#string', traceId: '#string', timestamp: '#string', errors: '##array' }
 
   Scenario: returns a product available in the requested market
     Given path 'products', 'PRD-001'
     And param market = 'MX'
-    And header Authorization = 'Bearer ' + admin.accessToken
+    And header Authorization = 'Bearer ' + tokens.admin
     When method get
     Then status 200
     And match response == { productId: 'PRD-001', name: 'Bebida 600 ml', sku: 'BEB-600-PET', status: 'ACTIVE', taxCategory: 'STANDARD' }
@@ -17,7 +15,7 @@ Feature: products-api contract, validation, errors and security
   Scenario: returns 404 when the product exists but not in that market
     Given path 'products', 'PRD-008'
     And param market = 'PE'
-    And header Authorization = 'Bearer ' + admin.accessToken
+    And header Authorization = 'Bearer ' + tokens.admin
     When method get
     Then status 404
     And match response == problem
@@ -26,7 +24,7 @@ Feature: products-api contract, validation, errors and security
   Scenario Outline: rejects invalid input with 400 and field errors (<case>)
     Given path 'products', '<productId>'
     And params <query>
-    And header Authorization = 'Bearer ' + admin.accessToken
+    And header Authorization = 'Bearer ' + tokens.admin
     When method get
     Then status 400
     And match response == problem
@@ -49,7 +47,7 @@ Feature: products-api contract, validation, errors and security
   Scenario: requires the products-reader role
     Given path 'products', 'PRD-001'
     And param market = 'MX'
-    And header Authorization = 'Bearer ' + analyst.accessToken
+    And header Authorization = 'Bearer ' + tokens.analyst
     When method get
     Then status 403
     And match response.code == 'FORBIDDEN'

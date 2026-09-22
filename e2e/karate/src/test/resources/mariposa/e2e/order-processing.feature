@@ -1,13 +1,12 @@
 Feature: order-processor business outcomes through Kafka, MongoDB and the query API
 
   Background:
-    * def analyst = call read('common/token.feature') { username: 'analyst' }
-    * def token = analyst.accessToken
     * def orderEvent = read('common/order-event.js')
     * def newOrderId = function(market, suffix) { return 'ORD-' + market + '-E2E' + runId + suffix }
 
   Scenario: golden example is approved with the totals of the contract
     * def event = orderEvent({ orderId: newOrderId('MX', 'A1') })
+    * def processedMark = kafka.mark(topics.processed)
     * call read('common/publish-order.feature') { event: '#(event)' }
     * def result = call read('common/wait-order.feature') { orderId: '#(event.orderId)', expectedStatus: 'APPROVED' }
     * def order = result.order
@@ -17,7 +16,7 @@ Feature: order-processor business outcomes through Kafka, MongoDB and the query 
     And match order.client.name == 'Distribuidora Central'
     And match order.lines[0] contains { productId: 'PRD-001', quantity: 24, discount: 25.56 }
     And match order.reason == null
-    * def published = kafka.readByKey(topics.processed, event.orderId, 5000)
+    * def published = kafka.readAfter(processedMark, event.orderId, 1, waits.eventMillis)
     And match published == '#[1]'
     * def outEvent = karate.fromString(published[0].value)
     And match outEvent contains { sourceEventId: '#(event.eventId)', orderId: '#(event.orderId)', status: 'APPROVED', market: 'MX', currency: 'MXN', reason: null }
@@ -46,11 +45,13 @@ Feature: order-processor business outcomes through Kafka, MongoDB and the query 
   Scenario Outline: business rejection is explicit and traceable (<reason>)
     * def items = [{ productId: '<product>', quantity: 5, unitPrice: 10.0 }]
     * def event = orderEvent({ orderId: newOrderId('<market>', '<suffix>'), market: '<market>', currency: '<currency>', clientId: '<client>', items: items })
+    * def processedMark = kafka.mark(topics.processed)
     * call read('common/publish-order.feature') { event: '#(event)' }
     * def result = call read('common/wait-order.feature') { orderId: '#(event.orderId)', expectedStatus: 'REJECTED' }
     And match result.order.reason == '<reason>'
     And match result.order.violations[0].code == '<reason>'
-    * def published = kafka.readByKey(topics.processed, event.orderId, 5000)
+    * def published = kafka.readAfter(processedMark, event.orderId, 1, waits.eventMillis)
+    And match published == '#[1]'
     And match karate.fromString(published[0].value) contains { status: 'REJECTED', reason: '<reason>' }
 
     Examples:

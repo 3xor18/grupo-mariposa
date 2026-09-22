@@ -7,7 +7,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -17,16 +16,17 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
 public final class KafkaGateway {
 
-    private static final String EARLIEST = "earliest";
     private static final String ALL_ACKS = "all";
     private static final long SEND_TIMEOUT_SECONDS = 10;
-    private static final Duration POLL_INTERVAL = Duration.ofMillis(500);
+    private static final Duration METADATA_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration POLL_INTERVAL = Duration.ofMillis(200);
     private static final String KEY_FIELD = "key";
     private static final String VALUE_FIELD = "value";
     private static final String HEADERS_FIELD = "headers";
@@ -45,12 +45,23 @@ public final class KafkaGateway {
         }
     }
 
-    public List<Map<String, Object>> readByKey(String topic, String key, long waitMillis) {
+    public Mark mark(String topic) {
+        try (var consumer = new KafkaConsumer<String, String>(consumerProperties())) {
+            var partitions = consumer.partitionsFor(topic, METADATA_TIMEOUT).stream()
+                    .map(info -> new TopicPartition(topic, info.partition()))
+                    .toList();
+            return new Mark(topic, Map.copyOf(consumer.endOffsets(partitions, METADATA_TIMEOUT)));
+        }
+    }
+
+    public List<Map<String, Object>> readAfter(
+            Mark mark, String key, int expectedCount, long timeoutMillis) {
         var matches = new ArrayList<Map<String, Object>>();
         try (var consumer = new KafkaConsumer<String, String>(consumerProperties())) {
-            consumer.subscribe(List.of(topic));
-            var deadline = System.currentTimeMillis() + waitMillis;
-            while (System.currentTimeMillis() < deadline) {
+            consumer.assign(mark.offsets().keySet());
+            mark.offsets().forEach(consumer::seek);
+            var deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+            while (matches.size() < expectedCount && System.nanoTime() < deadline) {
                 consumer.poll(POLL_INTERVAL).forEach(record -> collect(record, key, matches));
             }
         }
@@ -84,10 +95,12 @@ public final class KafkaGateway {
     private Properties consumerProperties() {
         var properties = new Properties();
         properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        properties.put(ConsumerConfig.GROUP_ID_CONFIG, UUID.randomUUID().toString());
-        properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, EARLIEST);
+        properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         return properties;
+    }
+
+    public record Mark(String topic, Map<TopicPartition, Long> offsets) {
     }
 }
