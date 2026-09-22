@@ -1,13 +1,13 @@
 version: 2
 updates:
   - package-ecosystem: maven
-    directory: /order-processor
+    directories: [/order-processor, /config-server, /e2e/karate]
     schedule: { interval: weekly }
   - package-ecosystem: gomod
     directory: /products-api
     schedule: { interval: weekly }
   - package-ecosystem: npm
-    directory: /clients-api
+    directories: [/clients-api, /order-tracker/e2e]
     schedule: { interval: weekly }
   - package-ecosystem: pub
     directory: /order-tracker
@@ -16,5 +16,8 @@ updates:
     directory: /
     schedule: { interval: weekly }
   - package-ecosystem: docker
-    directories: [/order-processor, /products-api, /clients-api, /order-tracker]
+    directories: [/order-processor, /products-api, /clients-api, /order-tracker, /config-server]
+    schedule: { interval: weekly }
+  - package-ecosystem: docker-compose
+    directory: /
     schedule: { interval: weekly }
