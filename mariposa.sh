@@ -206,10 +206,14 @@ cmd_mongo() {
 cmd_test() {
   (cd "${ROOT_DIR}/products-api" && go test ./... -race -cover)
   (cd "${ROOT_DIR}/clients-api" && npm ci && npm run lint && npm run test:cov)
-  (cd "${ROOT_DIR}/order-processor" && ./mvnw -B verify)
-  (cd "${ROOT_DIR}/config-server" && ./mvnw -B verify)
+  (cd "${ROOT_DIR}/order-processor" && maven -B verify)
+  (cd "${ROOT_DIR}/config-server" && maven -B verify)
   docker run --rm -v "${ROOT_DIR}/order-tracker:/app" -w /app "${FLUTTER_IMAGE}" \
     sh -c "flutter pub get && flutter test --coverage"
+}
+
+maven() {
+  env -u MSYS_NO_PATHCONV ./mvnw "$@"
 }
 
 cmd_e2e() {
@@ -219,7 +223,7 @@ cmd_e2e() {
   demo_password="$(env_value DEMO_USER_PASSWORD)"
   cmd_publish "${UI_SEED_ORDER}"
   (cd "${ROOT_DIR}/e2e/karate" \
-    && KEYCLOAK_URL="${keycloak_url}" DEMO_PASSWORD="${demo_password}" ./mvnw -B test)
+    && KEYCLOAK_URL="${keycloak_url}" DEMO_PASSWORD="${demo_password}" maven -B test)
   (cd "${ROOT_DIR}/order-tracker/e2e" && npm ci && npx playwright install chromium \
     && E2E_USERNAME="${DEFAULT_USER}" E2E_PASSWORD="${demo_password}" npx playwright test)
 }
