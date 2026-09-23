@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:order_tracker/core/config/config_load_exception.dart';
 import 'package:order_tracker/core/json/json_map.dart';
 import 'package:order_tracker/core/markets/market_catalog.dart';
 
@@ -35,6 +36,88 @@ void main() {
           }),
         ),
         throwsFormatException,
+      );
+    });
+
+    Map<String, Object?> catalogWith({
+      List<Map<String, Object?>>? markets,
+      Map<String, Object?>? currencies,
+    }) {
+      return {
+        'markets':
+            markets ??
+            [
+              {'code': 'MX', 'currency': 'MXN', 'locale': 'es-MX'},
+            ],
+        'currencies': currencies ?? {'MXN': 2},
+      };
+    }
+
+    Matcher rejectedWith(String detail) {
+      return throwsA(
+        isA<ConfigLoadException>()
+            .having((error) => error.failure, 'failure', ConfigLoadFailure.invalidMarketCatalog)
+            .having((error) => error.detail, 'detail', contains(detail)),
+      );
+    }
+
+    void expectRejected(Map<String, Object?> json, String detail) {
+      expect(() => MarketCatalog.fromJson(JsonMap(json)), rejectedWith(detail));
+    }
+
+    test('should reject an empty catalog', () {
+      expectRejected(catalogWith(markets: []), 'empty');
+    });
+
+    test('should reject codes and locales outside the shared grammar', () {
+      for (final code in ['mx', 'MEX', 'M1', '']) {
+        expectRejected(
+          catalogWith(
+            markets: [
+              {'code': code, 'currency': 'MXN', 'locale': 'es-MX'},
+            ],
+          ),
+          'Invalid market code',
+        );
+      }
+      for (final locale in ['es', 'es_MX', 'ES-mx', 'es-MX-x']) {
+        expectRejected(
+          catalogWith(
+            markets: [
+              {'code': 'MX', 'currency': 'MXN', 'locale': locale},
+            ],
+          ),
+          'Invalid locale',
+        );
+      }
+      expectRejected(catalogWith(currencies: {'MXN': 2, 'mxn': 2}), 'Invalid currency code');
+    });
+
+    test('should reject fraction digits outside 0..4', () {
+      expectRejected(catalogWith(currencies: {'MXN': 5}), 'out of range');
+      expectRejected(catalogWith(currencies: {'MXN': -1}), 'out of range');
+    });
+
+    test('should reject duplicated markets', () {
+      expectRejected(
+        catalogWith(
+          markets: [
+            {'code': 'MX', 'currency': 'MXN', 'locale': 'es-MX'},
+            {'code': 'MX', 'currency': 'MXN', 'locale': 'es-MX'},
+          ],
+        ),
+        'Duplicated market MX',
+      );
+    });
+
+    test('should reject markets whose currency has no declared digits', () {
+      expectRejected(
+        catalogWith(
+          markets: [
+            {'code': 'EC', 'currency': 'USD', 'locale': 'es-EC'},
+          ],
+        ),
+        'USD',
       );
     });
   });

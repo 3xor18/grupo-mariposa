@@ -3,15 +3,10 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:order_tracker/core/config/app_config.dart';
+import 'package:order_tracker/core/config/config_load_exception.dart';
 import 'package:order_tracker/core/http/app_timeouts.dart';
 import 'package:order_tracker/core/http/http_status_codes.dart';
 import 'package:order_tracker/core/json/json_map.dart';
-
-final class ConfigLoadException implements Exception {
-  const ConfigLoadException(this.uri);
-
-  final Uri uri;
-}
 
 final class ConfigLoader {
   const ConfigLoader(this._httpClient, {this._timeout = AppTimeouts.network});
@@ -29,15 +24,17 @@ final class ConfigLoader {
     try {
       final response = await _httpClient.get(uri).timeout(_timeout);
       if (!HttpStatusCodes.isSuccess(response.statusCode)) {
-        throw ConfigLoadException(uri);
+        throw ConfigLoadException(ConfigLoadFailure.unavailable, uri: uri);
       }
       return AppConfig.fromJson(JsonMap.parse(jsonDecode(utf8.decode(response.bodyBytes))));
+    } on ConfigLoadException catch (error) {
+      throw error.at(uri);
     } on FormatException {
-      throw ConfigLoadException(uri);
+      throw ConfigLoadException(ConfigLoadFailure.malformed, uri: uri);
     } on http.ClientException {
-      throw ConfigLoadException(uri);
+      throw ConfigLoadException(ConfigLoadFailure.unavailable, uri: uri);
     } on TimeoutException {
-      throw ConfigLoadException(uri);
+      throw ConfigLoadException(ConfigLoadFailure.unavailable, uri: uri);
     }
   }
 }
