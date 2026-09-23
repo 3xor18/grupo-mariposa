@@ -38,7 +38,7 @@ flowchart LR
 | `deploy/helm/` | Chart reutilizable y values por servicio (EKS) |
 | `e2e/karate/` | Suite de aceptación end-to-end |
 | `load/` | Prueba de carga (ráfaga Kafka + k6) |
-| `samples/events/` | 21 escenarios listos para publicar |
+| `samples/events/` | 26 escenarios listos para publicar (`samples/changes/`: eventos de cambio de ejemplo) |
 | `docs/` | Propuesta, ADRs, notas de implementación, liderazgo técnico, runbook y resultados de carga |
 
 ## Requisitos
@@ -55,8 +55,9 @@ flowchart LR
 
 Este comando:
 1. Genera `.env` con **secretos aleatorios** si no existe. Nunca se commitea; ver `.env.example`.
-2. Construye las imágenes y levanta 14 contenedores esperando sus healthchecks: 13 de larga duración y
-   `kafka-init`, que crea los tópicos y termina (`datadog-agent` es un perfil opcional).
+2. Construye las imágenes y levanta 15 contenedores esperando sus healthchecks: 13 de larga duración y dos
+   pasos únicos que terminan, `kafka-init` (tópicos) y `mongo-users` (crea o sincroniza los usuarios de las bases
+   `orders`, `clients` y `products`, también sobre volúmenes existentes). `datadog-agent` es un perfil opcional.
 3. Imprime las URLs. La contraseña de los usuarios demo sólo se muestra con `./mariposa.sh urls --show-secrets`.
 
 | URL | Qué hay |
@@ -76,18 +77,64 @@ Todos los puertos se publican sólo en `127.0.0.1`. Los usuarios demo (`analyst`
 (`infra/keycloak/realm-mariposa.json`); en staging y producción el realm no los incluye y los usuarios vienen del
 proveedor de identidad corporativo.
 
-Otros comandos: `./mariposa.sh down | clean | status | logs [svc] | urls [--show-secrets] | token [usuario]`.
+Otros comandos: `./mariposa.sh down | clean | status | logs [svc] | urls [--show-secrets] | token [usuario]`,
+`./mariposa.sh block-client <id> | unblock-client <id>` (demo de invalidación de caché).
+
+Si ya tenías un `.env` de una versión anterior, `./mariposa.sh init` (o `up`) le agrega las variables nuevas de
+`.env.example` con secretos aleatorios sin tocar las existentes. Keycloak importa el realm sólo al crearse:
+para tener los roles nuevos en una plataforma ya levantada, `docker compose up -d --force-recreate keycloak`.
 
 ## Publicar un evento de ejemplo
 
 ```bash
 ./mariposa.sh publish 01-approved-golden-mx.json   # el ejemplo del enunciado → grandTotal 2100.11
-./mariposa.sh scenarios                            # publica los 21 escenarios de samples/events
+./mariposa.sh scenarios                            # publica los 26 escenarios de samples/events
 ```
 
 Los escenarios cubren: aprobados por mercado, cliente exento, rechazos (cliente bloqueado, mercado distinto, producto
 descontinuado o inexistente), inválidos (moneda, producto repetido, campos faltantes), fallos transitorios que se
 recuperan, fallos técnicos definitivos, duplicado exacto, conflicto de versión, versión nueva y versión obsoleta.
+Desde el catálogo de mercados (22 a 26): pedido aprobado en Chile con montos enteros en CLP, aprobado en Ecuador en
+USD, rechazado en Chile por producto descontinuado (`PRD-017`), mercado desconocido `AR` a la DLT como `VALIDATION`
+y cliente exento en Ecuador.
+
+## Mercados y monedas (ADR 0006)
+
+Los mercados no están en el código: son un catálogo en `config-repo/application.yml` que el config server entrega a
+los cuatro servicios.
+
+| Mercado | Moneda | Decimales | IVA estándar / reducido / exento |
+|---|---|---|---|
+| MX | MXN | 2 | 16 % / 8 % / 0 % |
+| CO | COP | 2 | 19 % / 5 % / 0 % |
+| PE | PEN | 2 | 18 % / 10 % / 0 % |
+| CL | CLP | 0 | 19 % / 19 % / 0 % (sin IVA reducido) |
+| EC | USD | 2 | 15 % / 5 % / 0 % (moneda compartida) |
+
+- Todos los importes se redondean HALF_UP a los decimales de la moneda (en CLP, pesos enteros). El cálculo de los
+  pedidos de Chile y Ecuador está desarrollado en [`e2e/karate/README.md`](e2e/karate/README.md).
+- Un país nuevo es un PR a `config-repo` (`platform.markets`, `platform.currencies` y las tasas `PRICING_TAX_*`)
+  más sus datos de productos y clientes; `order-processor` no arranca si falta alguna tasa de un mercado del
+  catálogo. Un mercado fuera del catálogo termina en la DLT como `VALIDATION`.
+
+## Datos maestros y caché (ADR 0007)
+
+- `clients-api` y `products-api` guardan sus datos en MongoDB, cada una en su base (`clients`, `products`) con un
+  usuario propio sin acceso a `orders`. La semilla se carga al arrancar sólo si falta.
+- Endpoints de administración con concurrencia optimista (`ETag` / `If-Match`, `412` si la versión no coincide):
+  `PATCH /clients/{clientId}` (rol `clients-admin`) y `PATCH /products/{productId}?market=` (rol
+  `products-admin`). El usuario demo `admin` tiene ambos roles.
+- Cada cambio publica `clients.changed.v1` / `products.changed.v1` (tópicos compactados) con Transactional Outbox.
+  `order-processor` cachea clientes y productos en Redis con su versión y los actualiza al recibir el evento; el TTL
+  (clientes 60 s, productos 10 min) queda sólo como red de seguridad.
+
+```bash
+./mariposa.sh block-client CLI-70001     # el siguiente pedido de CLI-70001 se rechaza (CLIENT_NOT_ACTIVE)
+./mariposa.sh unblock-client CLI-70001
+./mariposa.sh consume clients.changed.v1
+```
+
+Si los pedidos siguen aprobándose después de un bloqueo: [runbook de invalidación de caché](docs/runbooks/cache-invalidation-lag.md).
 
 ## Verificar MongoDB y el evento de salida
 
@@ -114,7 +161,7 @@ curl -H "Authorization: Bearer $(./mariposa.sh token)" localhost:8080/orders/ORD
 | clients-api | `npm run lint && npm run test:cov` | unitarias, e2e con Supertest, contrato con Ajv | 100 % líneas, ramas y funciones (gate) |
 | order-tracker | `docker build --target test order-tracker` | bloc, widgets, responsive, PKCE, carreras de respuestas | 100 % líneas |
 | config-server | `./mvnw verify` | arranque, seguridad, servicio de configuración | 100 % (gate) |
-| Plataforma | `./mariposa.sh e2e` | 38 escenarios Karate (APIs, flujo, DLT, idempotencia, concurrencia, resiliencia) + 8 Playwright (escritorio y móvil) | — |
+| Plataforma | `./mariposa.sh e2e` | 45 escenarios Karate (APIs, flujo, DLT, idempotencia, concurrencia, resiliencia, mercados, invalidación de caché) + 8 Playwright (escritorio y móvil) | — |
 | Carga | `./load/event-burst.sh` y `load/k6/apis.js` | ver `docs/load-test-results.md` | — |
 
 **Simulación de fallos**: `products-api` y `clients-api` aceptan reglas `FAULT_RULES=id:tipo[:veces]` (`429`, `500`,
@@ -127,14 +174,20 @@ hace timeout, `PRD-014` responde 400, `CLI-40001` falla 2 veces y `CLI-40002` si
 Precedencia en todos los servicios: **variable de entorno > config server > valor por defecto**.
 
 - Parámetros (timeouts, reintentos, circuit breaker, TTL de caché, relay, tasas de impuesto, descuento, reglas de
-  fallo, rate limit): `config-repo/<servicio>.yml` y `config-repo/<servicio>-docker.yml`. Las tasas se cambian
-  aquí para los mercados existentes; un mercado nuevo requiere código hasta completar TODO-1 del roadmap.
+  fallo, rate limit, catálogo de mercados): `config-repo/application.yml`, `config-repo/<servicio>.yml` y
+  `config-repo/<servicio>-docker.yml`.
 - Secretos: sólo por variables de entorno. En local vienen del `.env` generado; en CI de GitHub Secrets; en EKS de
   AWS Secrets Manager mediante External Secrets.
+- GitHub Secrets que usa el job E2E: `MONGO_ROOT_PASSWORD`, `MONGO_APP_PASSWORD`, `MONGO_CLIENTS_PASSWORD`,
+  `MONGO_PRODUCTS_PASSWORD`, `REDIS_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `ORDER_PROCESSOR_CLIENT_SECRET`,
+  `DEMO_USER_PASSWORD`, `PII_ENCRYPTION_KEY`, `GRAFANA_ADMIN_PASSWORD`, `CONFIG_SERVER_PASSWORD`.
+- Secrets Manager (EKS): `grupo-mariposa/<servicio>` con `MONGODB_URI` para `clients-api`, `products-api` y
+  `order-processor`, más `grupo-mariposa/config-server` con las credenciales del config server.
 
 | Variable (`.env`) | Uso |
 |---|---|
-| `MONGO_ROOT_*`, `MONGO_APP_*` | usuario administrador y usuario de aplicación de MongoDB |
+| `MONGO_ROOT_*`, `MONGO_APP_*` | usuario administrador y usuario de `order-processor` (base `orders`) |
+| `MONGO_CLIENTS_*`, `MONGO_PRODUCTS_*` | usuarios de `clients-api` (base `clients`) y `products-api` (base `products`) |
 | `REDIS_PASSWORD` | Redis |
 | `KEYCLOAK_ADMIN_*`, `KEYCLOAK_PUBLIC_URL` | administración y URL pública de Keycloak |
 | `ORDER_PROCESSOR_CLIENT_SECRET` | client credentials de `order-processor` |
@@ -189,17 +242,15 @@ Documentos: [propuesta](docs/architecture-proposal.md) · [ADRs](docs/adr) ·
 
 - Kafka y MongoDB corren con un solo nodo en local: sirve para demostrar transacciones y particiones, no la
   tolerancia a fallos del cluster.
-- Las APIs de productos y clientes usan datos semilla en memoria (permitido por el enunciado). Reemplazarlos es
-  implementar un adaptador del puerto de repositorio.
 - Sin Schema Registry: los contratos son JSON Schema versionados y validados en tests y CI.
 - El reproceso de la DLT es manual (re-publicar el mensaje original, que es seguro por diseño).
 - Con `CONFIG_SERVER_FAIL_FAST=true`, si el config server está caído no arrancan nuevas instancias.
-- **Mercados fijos**: MX, CO y PE son un `enum` en los cuatro servicios y en los contratos. Las tasas y monedas se
-  configuran en `config-repo`, pero agregar un país hoy requiere cambiar código (TODO-1 del
-  [roadmap](docs/roadmap.md)). Un mercado no soportado se rechaza como `VALIDATION` y va a la DLT.
-- **Tasas sin vigencia**: se aplica la tasa configurada al procesar y cambiarla requiere reinicio (TODO-2).
-- **Clientes sin caché**: para no aprobar pedidos de un cliente recién bloqueado; la caché con invalidación por
-  eventos está diseñada en TODO-3.
+- **Tasas sin vigencia**: se aplica la tasa configurada al procesar y cambiarla requiere reinicio (TODO-2 del
+  [roadmap](docs/roadmap.md)).
+- **Ventana de invalidación**: entre el cambio de un cliente o producto y la actualización de la caché queda la
+  latencia del evento (milisegundos a segundos); si el evento se pierde, el TTL de respaldo la acota (ADR 0007).
+- **Catálogo por PR**: agregar un mercado no requiere código, pero sí un PR revisado a `config-repo` y un reinicio
+  progresivo (ADR 0006).
 - Más detalle en [implementation-notes](docs/implementation-notes.md).
 
 ## Uso de herramientas de inteligencia artificial

@@ -17,6 +17,10 @@ consciente y los riesgos que quedan.
 | `UNEXPECTED` | sólo DLT | también se registra como `TECHNICAL_FAILURE` | el contrato de la DLT lo declara reprocesable; así el pedido tiene un estado consultable |
 | Cliente HTTP | HTTP/2 por defecto del JDK | forzado a HTTP/1.1 | el *upgrade* h2c producía envíos duplicados contra servidores HTTP/1.1 |
 | Transacción con `DuplicateKey` | no contemplado | `setRollbackOnly()` explícito antes de clasificar | sin eso el commit falla con `NoSuchTransaction` etiquetado como transitorio y reintenta en bucle |
+| Mercados | `enum` MX, CO, PE en cada servicio | catálogo `platform.markets` / `platform.currencies` en `config-repo/application.yml`, `MarketCode` validado contra él, redondeo a los decimales de la moneda; CL (CLP, 0 decimales) y EC (USD) habilitados ([ADR 0006](adr/0006-configurable-market-catalog.md)) | el negocio sumará países; CLP sin decimales y USD compartido rompían los supuestos del enum |
+| Datos maestros | datos semilla en memoria, sólo lectura | bases propias `clients` y `products` con usuario propio, `PATCH` con `If-Match`, outbox a `clients.changed.v1` / `products.changed.v1` ([ADR 0007](adr/0007-master-data-change-events-and-cache.md)) | bloquear un cliente o descontinuar un producto debe verse en segundos, no al vencer un TTL |
+| Caché en `order-processor` | productos con TTL de 5 min, clientes sin caché | clientes y productos en Redis con versión, actualizados por evento; TTL de respaldo 60 s y 10 min | menos llamadas por pedido sin aprobar datos viejos |
+| Usuarios de MongoDB | script de `initdb` (sólo con volumen vacío) | paso único `mongo-users` idempotente que crea o sincroniza los tres usuarios en cada `up` | los volúmenes existentes también reciben los usuarios nuevos y las contraseñas quedan alineadas con `.env` |
 | Protección de fuerza bruta en Keycloak | valores por defecto | `failureFactor` 10, `quickLoginCheckMilliSeconds` 100 | las suites E2E ahora corren en serie y Karate pide un token por usuario para toda la corrida (`callSingle`), así que ya no hay ráfagas de logins del mismo usuario |
 
 ## 2. Evidencia nueva y restricciones encontradas
@@ -37,10 +41,10 @@ consciente y los riesgos que quedan.
 | Límites del contrato (largo de ids, 500 ítems, 256 caracteres de causa) son constantes | reflejan el JSON Schema, no son *tunables* | generarlos desde el esquema en build |
 | El build de la imagen de `order-processor` no corre los tests | Testcontainers no puede correr dentro del build | se corren en CI antes del build |
 | Configuración inmutable (records) | simplicidad y seguridad | un cambio en `config-repo` requiere reinicio progresivo; `@RefreshScope` sólo si se necesitara en caliente |
-| Datos semilla en memoria en las APIs | lo permite el enunciado | implementar el puerto de repositorio con una base de datos; ni el dominio ni los consumidores cambian |
-| Mercado como `enum` en los cuatro servicios y en los contratos | el enunciado fija MX, CO y PE *inicialmente*; el compilador impide procesar un mercado desconocido | catálogo de mercados configurable (TODO-1 de `roadmap.md`) antes del cuarto país |
+| Catálogo de mercados en `config-repo` | cambio auditado por PR, validado al arrancar en los cuatro servicios | servicio de *pricing* con persistencia si negocio necesita editarlo sin PR (ADR 0006) |
+| Dos outbox y dos relays más (APIs) además del de `order-processor` | mismo patrón probado, sin CDC que operar | Debezium si aparecen muchos consumidores de cambios (ADR 0007) |
 | Tasas de impuesto en `config-repo` sin fecha de vigencia | cambio auditado por PR, validación completa al arrancar y tasa guardada en cada línea | colección `tax_rates` con `validFrom`/`validTo` y tasa elegida por `occurredAt` (TODO-2) |
-| Clientes sin caché | una caché sólo por TTL podría aprobar pedidos de un cliente recién bloqueado | caché con invalidación por `clients.changed.v1` y TTL corto de respaldo (TODO-3) |
+| Ventana entre un cambio de datos maestros y la caché | la latencia del evento es de milisegundos y el TTL la acota si se pierde | consulta en línea del estado del cliente si negocio exige ventana cero (ADR 0007) |
 
 ## 4. Funcionalidades no terminadas
 
@@ -52,7 +56,10 @@ consciente y los riesgos que quedan.
 ## 5. Riesgos residuales
 
 - **Orden global**: sólo se garantiza por `orderId`. Si alguien consume `orders.processed.v1` asumiendo orden global, falla.
-- **Caché de productos**: un producto descontinuado puede aprobarse hasta 5 minutos después (TTL configurable).
+- **Caché de datos maestros**: un cliente bloqueado o un producto descontinuado puede aprobarse durante la latencia
+  del evento de cambio; si el evento o su aplicación fallan, hasta el TTL de respaldo (60 s clientes, 10 min
+  productos). Hay alertas (`MasterDataOutboxAging`, `CacheInvalidationFailures`) y un
+  [runbook](runbooks/cache-invalidation-lag.md).
 - **Rotación de la llave de PII**: soportada con `PII_KEY_ID`/`PII_PREVIOUS_ENCRYPTION_KEY`, pero falta el job que
   recifra documentos antiguos.
 - **Config server como dependencia de arranque**: con `CONFIG_SERVER_FAIL_FAST=true` un config server caído impide
@@ -64,8 +71,8 @@ consciente y los riesgos que quedan.
 2. Tests de contrato *consumer-driven* (Pact) entre `order-processor` y las dos APIs, publicados en un broker.
 3. Autoescalado del worker por **lag de consumo** (KEDA) en lugar de CPU.
 4. Endpoint de reproceso de la DLT con auditoría.
-5. Mercados configurables, tasas con vigencia y caché de clientes invalidada por eventos: diseñados como TODO-1,
-   TODO-2 y TODO-3 en [`roadmap.md`](roadmap.md), pensando en sumar más países de Latinoamérica.
+5. Tasas de impuesto con vigencia (TODO-2 de [`roadmap.md`](roadmap.md)). TODO-1 (mercados configurables) y
+   TODO-3 (caché invalidada por eventos) ya están hechos con los ADR 0006 y 0007.
 
 ## 7. Despliegue en EKS
 
