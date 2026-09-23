@@ -2,15 +2,18 @@ package com.grupomariposa.orders.infrastructure.http.product;
 
 import com.grupomariposa.orders.application.port.out.ProductCatalog;
 import com.grupomariposa.orders.domain.model.Lookup;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.ProductProfile;
+import com.grupomariposa.orders.infrastructure.http.EntityVersions;
 import com.grupomariposa.orders.infrastructure.http.LookupExchange;
 import com.grupomariposa.orders.infrastructure.http.ResilientExecutor;
+import com.grupomariposa.orders.infrastructure.masterdata.Versioned;
+import com.grupomariposa.orders.infrastructure.masterdata.VersionedProductSource;
 import java.util.Objects;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
 
-public final class HttpProductCatalog implements ProductCatalog {
+public final class HttpProductCatalog implements ProductCatalog, VersionedProductSource {
 
     private static final String PRODUCT_PATH = "/products/{productId}?market={market}";
 
@@ -29,10 +32,17 @@ public final class HttpProductCatalog implements ProductCatalog {
     }
 
     @Override
-    public Lookup<ProductProfile> findProduct(final String productId, final Market market) {
+    public Lookup<ProductProfile> findProduct(final String productId, final MarketCode market) {
+        return findVersionedProduct(productId, market).map(Versioned::value);
+    }
+
+    @Override
+    public Lookup<Versioned<ProductProfile>> findVersionedProduct(final String productId,
+                                                                  final MarketCode market) {
         return resilience.execute(() -> exchange.fetch(
-                restClient.get().uri(PRODUCT_PATH, productId, market.name())
+                restClient.get().uri(PRODUCT_PATH, productId, market.value())
                         .accept(MediaType.APPLICATION_JSON),
-                ProductResponse.class, mapper::toProfile));
+                ProductResponse.class, (body, headers) -> new Versioned<>(mapper.toProfile(body),
+                        EntityVersions.of(body.version(), headers))));
     }
 }

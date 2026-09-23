@@ -4,6 +4,7 @@ import com.grupomariposa.orders.application.command.OrderCommand;
 import com.grupomariposa.orders.application.port.out.TimeProvider;
 import com.grupomariposa.orders.domain.model.ClientProfile;
 import com.grupomariposa.orders.domain.model.ClientSnapshot;
+import com.grupomariposa.orders.domain.model.CurrencyCatalog;
 import com.grupomariposa.orders.domain.model.Decision;
 import com.grupomariposa.orders.domain.model.FailureDetails;
 import com.grupomariposa.orders.domain.model.Lookup;
@@ -19,9 +20,11 @@ import java.util.Objects;
 public final class OrderAssembler {
 
     private final TimeProvider timeProvider;
+    private final CurrencyCatalog currencies;
 
-    public OrderAssembler(final TimeProvider timeProvider) {
+    public OrderAssembler(final TimeProvider timeProvider, final CurrencyCatalog currencies) {
         this.timeProvider = Objects.requireNonNull(timeProvider, "timeProvider");
+        this.currencies = Objects.requireNonNull(currencies, "currencies");
     }
 
     public Order decided(final OrderCommand command, final Lookup<ClientProfile> client,
@@ -38,7 +41,8 @@ public final class OrderAssembler {
         return new Order(identity(command), OrderStatus.TECHNICAL_FAILURE, command.market(),
                 command.currency(), command.channel(),
                 ClientSnapshot.unresolved(command.clientId()),
-                lines, Totals.ZERO, List.of(), failure, timeline(command),
+                lines, Totals.zero(currencies.fractionDigitsOf(command.currency())), List.of(),
+                failure, timeline(command),
                 command.reception().traceId());
     }
 

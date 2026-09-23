@@ -5,8 +5,8 @@ import static com.grupomariposa.orders.domain.DomainFixtures.retailClient;
 import static com.grupomariposa.orders.domain.DomainFixtures.wholesaleClient;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.grupomariposa.orders.domain.Markets;
 import com.grupomariposa.orders.domain.model.DiscountRule;
-import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.Rate;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -19,7 +19,7 @@ class WholesaleVolumeDiscountPolicyTest {
     @ParameterizedTest(name = "wholesale qty {0} -> {1}%")
     @CsvSource({"1, 0", "19, 0", "20, 3", "21, 3", "500, 3"})
     void should_discount_wholesale_from_threshold(final int quantity, final int percent) {
-        assertThat(policy.rateFor(wholesaleClient(Market.MX), quantity))
+        assertThat(policy.rateFor(wholesaleClient(Markets.MX), quantity))
                 .isEqualTo(Rate.ofPercent(percent));
     }
 
@@ -30,13 +30,13 @@ class WholesaleVolumeDiscountPolicyTest {
         final DiscountPolicy configured = new WholesaleVolumeDiscountPolicy(
                 new DiscountRule(Rate.ofPercent(percent), threshold));
 
-        assertThat(configured.rateFor(wholesaleClient(Market.PE), quantity))
+        assertThat(configured.rateFor(wholesaleClient(Markets.PE), quantity))
                 .isEqualTo(Rate.ofPercent(expected));
     }
 
     @ParameterizedTest(name = "retail qty {0} -> no discount")
     @ValueSource(ints = {1, 19, 20, 21, 1000})
     void should_never_discount_retail(final int quantity) {
-        assertThat(policy.rateFor(retailClient(Market.CO), quantity).value()).isZero();
+        assertThat(policy.rateFor(retailClient(Markets.CO), quantity).value()).isZero();
     }
 }

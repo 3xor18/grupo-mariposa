@@ -2,7 +2,7 @@ package com.grupomariposa.orders.domain.policy;
 
 import com.grupomariposa.orders.domain.model.ClientProfile;
 import com.grupomariposa.orders.domain.model.LineAmounts;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.Money;
 import com.grupomariposa.orders.domain.model.OrderLine;
 import com.grupomariposa.orders.domain.model.ProductProfile;
@@ -20,9 +20,10 @@ public final class LinePricer {
         this.discountPolicy = Objects.requireNonNull(discountPolicy, "discountPolicy");
     }
 
-    public OrderLine price(final Market market, final ClientProfile client,
-                           final RequestedItem item, final ProductProfile product) {
-        final Money gross = Money.ofUnits(item.unitPrice(), item.quantity());
+    public OrderLine price(final MarketCode market, final int fractionDigits,
+                           final ClientProfile client, final RequestedItem item,
+                           final ProductProfile product) {
+        final Money gross = Money.ofUnits(item.unitPrice(), item.quantity(), fractionDigits);
         final Rate discountRate = discountPolicy.rateFor(client, item.quantity());
         final Money discount = gross.times(discountRate);
         final Money net = gross.minus(discount);

@@ -4,13 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
-import com.grupomariposa.orders.domain.model.Currency;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.Currencies;
+import com.grupomariposa.orders.domain.DomainFixtures;
+import com.grupomariposa.orders.domain.Markets;
+import com.grupomariposa.orders.domain.model.MarketCatalog;
 import com.grupomariposa.orders.domain.model.Rate;
 import com.grupomariposa.orders.domain.model.TaxCategory;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.SpringApplication;
 import org.springframework.mock.env.MockEnvironment;
 
@@ -23,29 +28,63 @@ class ConfigurationSupportTest {
 
     @Test
     void should_build_domain_pricing_rules_from_properties() {
-        final PricingProperties pricing = new PricingProperties(Map.of(Market.MX, MX_RATES),
-                new PricingProperties.WholesaleDiscount(new BigDecimal("0.03"), 20),
-                Map.of(Market.MX, Currency.MXN));
+        final PricingProperties pricing = new PricingProperties(Map.of("MX", MX_RATES),
+                new PricingProperties.WholesaleDiscount(new BigDecimal("0.03"), 20));
 
-        assertThat(pricing.taxRateTable().rateFor(Market.MX, TaxCategory.STANDARD).value())
-                .isEqualByComparingTo("0.16");
+        assertThat(pricing.taxRateTable(mexicoOnly()).rateFor(Markets.MX, TaxCategory.STANDARD)
+                .value()).isEqualByComparingTo("0.16");
         assertThat(pricing.discountRule().rate()).isEqualTo(new Rate(new BigDecimal("0.03")));
         assertThat(pricing.discountRule().minimumQuantity()).isEqualTo(20);
-        assertThat(pricing.markets().accepts(Market.MX, Currency.MXN)).isTrue();
     }
 
     @Test
-    void should_flag_tables_that_do_not_cover_supported_markets() {
-        final PricingProperties missingMarket = new PricingProperties(Map.of(Market.MX, MX_RATES),
-                new PricingProperties.WholesaleDiscount(BigDecimal.ZERO, 1),
-                Map.of(Market.MX, Currency.MXN, Market.PE, Currency.PEN));
+    void should_fail_startup_when_a_catalog_market_has_no_complete_tax_rates() {
+        final PricingProperties mexicoRates = new PricingProperties(Map.of("MX", MX_RATES),
+                new PricingProperties.WholesaleDiscount(BigDecimal.ZERO, 1));
         final PricingProperties missingCategory = new PricingProperties(
-                Map.of(Market.MX, Map.of(TaxCategory.STANDARD, BigDecimal.ONE)),
-                new PricingProperties.WholesaleDiscount(BigDecimal.ZERO, 1),
-                Map.of(Market.MX, Currency.MXN));
+                Map.of("MX", Map.of(TaxCategory.STANDARD, BigDecimal.ONE)),
+                new PricingProperties.WholesaleDiscount(BigDecimal.ZERO, 1));
 
-        assertThatIllegalStateException().isThrownBy(missingMarket::taxRateTable);
-        assertThatIllegalArgumentException().isThrownBy(missingCategory::taxRateTable);
+        assertThatIllegalStateException()
+                .isThrownBy(() -> mexicoRates.taxRateTable(DomainFixtures.MARKETS));
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> missingCategory.taxRateTable(mexicoOnly()));
+    }
+
+    @Test
+    void should_parse_the_platform_catalog() {
+        final MarketCatalog catalog = PlatformCatalogParser.parse(new PlatformProperties(
+                " MX:MXN:es-MX, CL:CLP:es-CL ,EC:USD:es-EC", "MXN:2,CLP:0,USD:2"));
+
+        assertThat(catalog.supportedMarkets()).containsExactly(Markets.MX, Markets.CL,
+                Markets.EC);
+        assertThat(catalog.fractionDigitsOf(Markets.CL)).isZero();
+        assertThat(catalog.accepts(Markets.EC, Currencies.USD)).isTrue();
+    }
+
+    @ParameterizedTest(name = "markets={0} currencies={1}")
+    @CsvSource(delimiter = '|', value = {
+        "MX:MXN|MXN:2",
+        "MEX:MXN:es-MX|MXN:2",
+        "MX:mxn:es-MX|MXN:2",
+        "MX:MXN:|MXN:2",
+        "MX:MXN:es-MX,MX:MXN:es-MX|MXN:2",
+        "MX:ARS:es-MX|MXN:2",
+        "MX:MXN:es-MX|MXN",
+        "MX:MXN:es-MX|MXN:two",
+        "MX:MXN:es-MX|mxn:2",
+        "MX:MXN:es-MX|MXN:2,MXN:2",
+        "MX:MXN:es-MX|MXN:9"
+    })
+    void should_fail_fast_on_malformed_platform_catalog(final String markets,
+                                                       final String currencies) {
+        assertThatIllegalStateException().isThrownBy(() ->
+                PlatformCatalogParser.parse(new PlatformProperties(markets, currencies)));
+    }
+
+    private static MarketCatalog mexicoOnly() {
+        return new MarketCatalog(List.of(DomainFixtures.market(Markets.MX, Currencies.MXN,
+                "es-MX")), DomainFixtures.CURRENCIES);
     }
 
     @Test

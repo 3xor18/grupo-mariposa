@@ -7,12 +7,14 @@ import static com.grupomariposa.orders.domain.DomainFixtures.product;
 import static com.grupomariposa.orders.domain.DomainFixtures.wholesaleClient;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.grupomariposa.orders.domain.DomainFixtures;
+import com.grupomariposa.orders.domain.Markets;
 import com.grupomariposa.orders.domain.model.ClientProfile;
 import com.grupomariposa.orders.domain.model.ClientSegment;
 import com.grupomariposa.orders.domain.model.ClientStatus;
 import com.grupomariposa.orders.domain.model.EvaluationInput;
 import com.grupomariposa.orders.domain.model.Lookup;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.ProductProfile;
 import com.grupomariposa.orders.domain.model.RejectionCode;
 import com.grupomariposa.orders.domain.model.ResolvedItem;
@@ -31,7 +33,13 @@ class EligibilityPolicyTest {
 
     @Test
     void should_accept_active_client_in_market_with_active_products() {
-        assertThat(policy.violations(input(Lookup.found(wholesaleClient(Market.MX)),
+        assertThat(policy.violations(input(Lookup.found(wholesaleClient(Markets.MX)),
+                ACTIVE_PRODUCT))).isEmpty();
+    }
+
+    @Test
+    void should_compare_markets_by_value() {
+        assertThat(policy.violations(input(Lookup.found(wholesaleClient(new MarketCode("MX"))),
                 ACTIVE_PRODUCT))).isEmpty();
     }
 
@@ -43,34 +51,34 @@ class EligibilityPolicyTest {
 
     @Test
     void should_reject_blocked_client() {
-        assertThat(codes(policy.violations(input(Lookup.found(blocked(Market.MX)),
+        assertThat(codes(policy.violations(input(Lookup.found(blocked(Markets.MX)),
                 ACTIVE_PRODUCT)))).containsExactly(RejectionCode.CLIENT_NOT_ACTIVE);
     }
 
     @Test
     void should_reject_client_from_another_market() {
-        assertThat(codes(policy.violations(input(Lookup.found(wholesaleClient(Market.CO)),
+        assertThat(codes(policy.violations(input(Lookup.found(wholesaleClient(Markets.CO)),
                 ACTIVE_PRODUCT)))).containsExactly(RejectionCode.CLIENT_MARKET_MISMATCH);
     }
 
     @Test
     void should_reject_unknown_product_with_its_id() {
-        assertThat(policy.violations(input(Lookup.found(wholesaleClient(Market.MX)),
+        assertThat(policy.violations(input(Lookup.found(wholesaleClient(Markets.MX)),
                 Lookup.notFound()))).containsExactly(
                 Violation.ofProduct(RejectionCode.PRODUCT_NOT_FOUND, "PRD-1"));
     }
 
     @Test
     void should_reject_discontinued_product_with_its_id() {
-        assertThat(policy.violations(input(Lookup.found(wholesaleClient(Market.MX)),
+        assertThat(policy.violations(input(Lookup.found(wholesaleClient(Markets.MX)),
                 Lookup.found(discontinued("PRD-1"))))).containsExactly(
                 Violation.ofProduct(RejectionCode.PRODUCT_NOT_ACTIVE, "PRD-1"));
     }
 
     @Test
     void should_collect_every_violation_in_evaluation_order() {
-        final EvaluationInput input = new EvaluationInput(Market.MX,
-                Lookup.found(blocked(Market.PE)), List.of(
+        final EvaluationInput input = new EvaluationInput(Markets.MX, 2,
+                Lookup.found(blocked(Markets.PE)), List.of(
                 resolved("PRD-1", Lookup.found(discontinued("PRD-1"))),
                 resolved("PRD-2", ACTIVE_PRODUCT),
                 resolved("PRD-3", Lookup.notFound())));
@@ -86,7 +94,8 @@ class EligibilityPolicyTest {
 
     @Test
     void should_combine_missing_client_and_missing_products() {
-        final EvaluationInput input = new EvaluationInput(Market.CO, Lookup.notFound(), List.of(
+        final EvaluationInput input = new EvaluationInput(Markets.CO,
+                DomainFixtures.digits(Markets.CO), Lookup.notFound(), List.of(
                 resolved("PRD-1", Lookup.notFound()), resolved("PRD-2", Lookup.notFound())));
 
         assertThat(codes(policy.violations(input))).containsExactly(
@@ -94,13 +103,14 @@ class EligibilityPolicyTest {
                 RejectionCode.PRODUCT_NOT_FOUND);
     }
 
-    private static ClientProfile blocked(final Market market) {
+    private static ClientProfile blocked(final MarketCode market) {
         return client(market, ClientSegment.RETAIL, TaxRegime.GENERAL, ClientStatus.BLOCKED);
     }
 
     private static EvaluationInput input(final Lookup<ClientProfile> client,
                                          final Lookup<ProductProfile> product) {
-        return new EvaluationInput(Market.MX, client, List.of(resolved("PRD-1", product)));
+        return new EvaluationInput(Markets.MX, DomainFixtures.digits(Markets.MX), client,
+                List.of(resolved("PRD-1", product)));
     }
 
     private static ResolvedItem resolved(final String productId,

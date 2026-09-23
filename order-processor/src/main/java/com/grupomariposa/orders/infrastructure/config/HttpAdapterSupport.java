@@ -1,7 +1,5 @@
 package com.grupomariposa.orders.infrastructure.config;
 
-import com.grupomariposa.orders.application.port.out.ClientDirectory;
-import com.grupomariposa.orders.application.port.out.ProductCatalog;
 import com.grupomariposa.orders.infrastructure.http.Dependency;
 import com.grupomariposa.orders.infrastructure.http.HttpDependenciesProperties;
 import com.grupomariposa.orders.infrastructure.http.LookupExchange;
@@ -36,13 +34,13 @@ public final class HttpAdapterSupport {
         this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
-    ClientDirectory clientDirectory() {
+    HttpClientDirectory clientDirectory() {
         return new HttpClientDirectory(restClients.create(properties.clients()),
                 new LookupExchange(Dependency.CLIENTS_API, retryAfter),
                 resilient(Dependency.CLIENTS_API), new ClientResponseMapper());
     }
 
-    ProductCatalog productCatalog() {
+    HttpProductCatalog productCatalog() {
         return new HttpProductCatalog(restClients.create(properties.products()),
                 new LookupExchange(Dependency.PRODUCTS_API, retryAfter),
                 resilient(Dependency.PRODUCTS_API), new ProductResponseMapper());

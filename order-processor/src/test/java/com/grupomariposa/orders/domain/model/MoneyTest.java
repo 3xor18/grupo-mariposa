@@ -10,26 +10,31 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 class MoneyTest {
 
-    @ParameterizedTest(name = "{0} rounds to {1}")
+    @ParameterizedTest(name = "{0} with {1} decimals rounds to {2}")
     @CsvSource({
-        "1.005, 1.01",
-        "2.675, 2.68",
-        "0.125, 0.13",
-        "10.0049, 10.00",
-        "132.2304, 132.23",
-        "0.004, 0.00",
-        "-1.005, -1.01",
-        "7, 7.00"
+        "1.005, 2, 1.01",
+        "2.675, 2, 2.68",
+        "0.125, 2, 0.13",
+        "10.0049, 2, 10.00",
+        "132.2304, 2, 132.23",
+        "0.004, 2, 0.00",
+        "-1.005, 2, -1.01",
+        "7, 2, 7.00",
+        "1432.8, 0, 1433",
+        "1432.5, 0, 1433",
+        "1432.49, 0, 1432",
+        "8802.13, 0, 8802"
     })
-    void should_round_half_up_to_two_decimals_when_created(final String raw,
-                                                           final String expected) {
-        assertThat(Money.of(raw).amount()).isEqualByComparingTo(expected)
-                .hasScaleOf(Money.SCALE);
+    void should_round_half_up_to_currency_decimals(final String raw, final int digits,
+                                                  final String expected) {
+        assertThat(Money.rounded(new BigDecimal(raw), digits))
+                .isEqualTo(Money.of(expected));
     }
 
     @Test
     void should_multiply_unit_price_by_quantity_and_round_once() {
-        assertThat(Money.ofUnits(new BigDecimal("0.335"), 3)).isEqualTo(Money.of("1.01"));
+        assertThat(Money.ofUnits(new BigDecimal("0.335"), 3, 2)).isEqualTo(Money.of("1.01"));
+        assertThat(Money.ofUnits(new BigDecimal("1990"), 24, 0)).isEqualTo(Money.of("47760"));
     }
 
     @Test
@@ -41,19 +46,20 @@ class MoneyTest {
     }
 
     @Test
-    void should_round_half_up_when_applying_rate() {
+    void should_keep_currency_precision_when_applying_rate() {
         assertThat(Money.of("826.44").times(Rate.ofPercent(16))).isEqualTo(Money.of("132.23"));
         assertThat(Money.of("0.50").times(Rate.ofPercent(3))).isEqualTo(Money.of("0.02"));
+        assertThat(Money.of("47760").times(Rate.ofPercent(3))).isEqualTo(Money.of("1433"));
     }
 
     @Test
-    void should_compare_equal_regardless_of_input_scale() {
-        assertThat(Money.of(new BigDecimal("5"))).isEqualTo(Money.of("5.000"));
-        assertThat(Money.ZERO.amount()).isEqualByComparingTo("0.00");
+    void should_create_zero_with_currency_precision() {
+        assertThat(Money.zero(2)).isEqualTo(Money.of("0.00"));
+        assertThat(Money.zero(0)).isEqualTo(Money.of("0"));
     }
 
     @Test
     void should_reject_null_amount() {
-        assertThatNullPointerException().isThrownBy(() -> Money.of((BigDecimal) null));
+        assertThatNullPointerException().isThrownBy(() -> new Money(null));
     }
 }

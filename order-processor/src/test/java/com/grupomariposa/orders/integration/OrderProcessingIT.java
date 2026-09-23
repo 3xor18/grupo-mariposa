@@ -111,6 +111,45 @@ class OrderProcessingIT extends IntegrationTest {
     }
 
     @Test
+    void should_price_chilean_orders_in_whole_pesos_end_to_end() throws IOException {
+        stubs.client("CLI-CHILE1", "CL", "WHOLESALE", "GENERAL", "ACTIVE");
+        stubs.product("PRD-001", "CL", "ACTIVE", "STANDARD");
+        final OrderEvents event = OrderEvents.goldenWithFreshIds("CHILE").market("CL")
+                .currency("CLP").clientId("CLI-CHILE1").singleItem("PRD-001", 24, 1990);
+
+        publish(event);
+
+        final Document order = awaitOrder(event.orderId(), "APPROVED");
+        assertThat(order.get("totals", Document.class).get("grandTotal", Decimal128.class)
+                .bigDecimalValue()).isEqualByComparingTo("55129");
+        try (TopicProbe processed = probe(ORDERS_PROCESSED)) {
+            final ConsumerRecord<String, byte[]> consumerRecord =
+                    processed.awaitKey(event.orderId(), 1).getFirst();
+            assertThat(Contracts.validateEvent(PROCESSED_SCHEMA,
+                    objectMapper.readTree(consumerRecord.value()))).isEmpty();
+            assertThat(new String(consumerRecord.value(), StandardCharsets.UTF_8))
+                    .contains("\"grossSubtotal\":47760,", "\"discount\":1433,",
+                            "\"tax\":8802,", "\"grandTotal\":55129", "\"currency\":\"CLP\"");
+        }
+    }
+
+    @Test
+    void should_dead_letter_orders_for_markets_outside_the_catalog() {
+        final OrderEvents event = OrderEvents.goldenWithFreshIds("ARGENTINA").market("AR")
+                .currency("ARS");
+
+        publish(event);
+
+        try (TopicProbe dlt = probe(DLT)) {
+            final ConsumerRecord<String, byte[]> consumerRecord = dlt.awaitKey(event.orderId(), 1)
+                    .getFirst();
+            assertThat(header(consumerRecord, "x-error-category")).isEqualTo("VALIDATION");
+            assertThat(header(consumerRecord, "x-error-cause")).contains("market");
+        }
+        assertThat(order(event.orderId())).isNull();
+    }
+
+    @Test
     void should_send_contract_violations_to_dlt_with_original_bytes_and_persist_nothing() {
         final OrderEvents event = OrderEvents.goldenWithFreshIds("INVALID").currency("PEN");
         final Instant before = Instant.now();

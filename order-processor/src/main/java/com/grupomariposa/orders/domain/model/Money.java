@@ -6,25 +6,27 @@ import java.util.Objects;
 
 public record Money(BigDecimal amount) {
 
-    public static final int SCALE = 2;
     public static final RoundingMode ROUNDING = RoundingMode.HALF_UP;
-    public static final Money ZERO = new Money(BigDecimal.ZERO);
 
     public Money {
         Objects.requireNonNull(amount, "amount");
-        amount = amount.setScale(SCALE, ROUNDING);
-    }
-
-    public static Money of(final BigDecimal amount) {
-        return new Money(amount);
     }
 
     public static Money of(final String amount) {
         return new Money(new BigDecimal(amount));
     }
 
-    public static Money ofUnits(final BigDecimal unitPrice, final int quantity) {
-        return new Money(unitPrice.multiply(BigDecimal.valueOf(quantity)));
+    public static Money rounded(final BigDecimal amount, final int fractionDigits) {
+        return new Money(amount.setScale(fractionDigits, ROUNDING));
+    }
+
+    public static Money zero(final int fractionDigits) {
+        return rounded(BigDecimal.ZERO, fractionDigits);
+    }
+
+    public static Money ofUnits(final BigDecimal unitPrice, final int quantity,
+                                final int fractionDigits) {
+        return rounded(unitPrice.multiply(BigDecimal.valueOf(quantity)), fractionDigits);
     }
 
     public Money plus(final Money other) {
@@ -36,6 +38,6 @@ public record Money(BigDecimal amount) {
     }
 
     public Money times(final Rate rate) {
-        return new Money(amount.multiply(rate.value()));
+        return rounded(amount.multiply(rate.value()), amount.scale());
     }
 }

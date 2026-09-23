@@ -3,7 +3,7 @@ package com.grupomariposa.orders.infrastructure.http.client;
 import com.grupomariposa.orders.domain.model.ClientProfile;
 import com.grupomariposa.orders.domain.model.ClientSegment;
 import com.grupomariposa.orders.domain.model.ClientStatus;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.TaxRegime;
 import com.grupomariposa.orders.infrastructure.http.Dependency;
 import com.grupomariposa.orders.infrastructure.http.ResponseFields;
@@ -24,6 +24,6 @@ public final class ClientResponseMapper {
                 fields.parse(ClientStatus.class, STATUS, response.status()),
                 fields.parse(ClientSegment.class, SEGMENT, response.segment()),
                 fields.parse(TaxRegime.class, TAX_REGIME, response.taxRegime()),
-                Market.fromCode(response.market()).orElseThrow(() -> fields.invalid(MARKET)));
+                MarketCode.parse(response.market()).orElseThrow(() -> fields.invalid(MARKET)));
     }
 }

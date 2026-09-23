@@ -28,9 +28,10 @@ import com.grupomariposa.orders.application.port.out.ProcessingObserver;
 import com.grupomariposa.orders.application.port.out.ProcessingStage;
 import com.grupomariposa.orders.application.port.out.SaveResult;
 import com.grupomariposa.orders.application.port.out.StoredOrderState;
+import com.grupomariposa.orders.domain.DomainFixtures;
+import com.grupomariposa.orders.domain.Markets;
 import com.grupomariposa.orders.domain.model.EvaluationInput;
 import com.grupomariposa.orders.domain.model.Lookup;
-import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.Money;
 import com.grupomariposa.orders.domain.model.Order;
 import com.grupomariposa.orders.domain.model.OrderStatus;
@@ -55,7 +56,8 @@ class ProcessOrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ProcessOrderService(enricher, evaluator(), new OrderAssembler(() -> NOW),
+        service = new ProcessOrderService(enricher, evaluator(), new OrderAssembler(() -> NOW,
+                DomainFixtures.CURRENCIES),
                 store, ids, observer, new VersionArbiter());
         when(ids.newEventId()).thenReturn(OUTPUT_EVENT_ID);
         when(store.findState(ORDER_ID)).thenReturn(Optional.empty());
@@ -88,7 +90,8 @@ class ProcessOrderServiceTest {
     void should_persist_rejected_order_when_client_is_unknown() {
         final EvaluationInput golden = goldenInput();
         when(enricher.enrich(command)).thenReturn(
-                new EvaluationInput(Market.MX, Lookup.notFound(), golden.items()));
+                new EvaluationInput(Markets.MX, DomainFixtures.digits(Markets.MX),
+                        Lookup.notFound(), golden.items()));
         when(store.save(any(), eq(OUTPUT_EVENT_ID))).thenReturn(new SaveResult.Saved());
 
         final ProcessingOutcome outcome = service.process(command);

@@ -6,9 +6,9 @@ import com.grupomariposa.orders.application.validation.ContractRules;
 import com.grupomariposa.orders.application.validation.OrderCommandValidator;
 import com.grupomariposa.orders.application.validation.UnvalidatedItem;
 import com.grupomariposa.orders.application.validation.UnvalidatedOrder;
+import com.grupomariposa.orders.domain.Currencies;
 import com.grupomariposa.orders.domain.DomainFixtures;
-import com.grupomariposa.orders.domain.model.Currency;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.Markets;
 import com.grupomariposa.orders.domain.model.RequestedItem;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -44,7 +44,7 @@ public final class ApplicationFixtures {
 
     public static OrderCommand command(final String orderId, final String eventId,
                                        final int version) {
-        return new OrderCommand(eventId, version, orderId, Market.MX, Currency.MXN, CLIENT_ID,
+        return new OrderCommand(eventId, version, orderId, Markets.MX, Currencies.MXN, CLIENT_ID,
                 "C1", OCCURRED_AT, List.of(
                 new RequestedItem("PRD-001", 24, new BigDecimal("35.5")),
                 new RequestedItem("PRD-008", 12, new BigDecimal("82.0"))), RECEPTION);

@@ -51,7 +51,7 @@ class OrderDocumentMapperTest {
 
         assertThat(summary.status()).isEqualTo(OrderStatus.REJECTED);
         assertThat(summary.reason()).isEqualTo(RejectionCode.CLIENT_NOT_FOUND);
-        assertThat(summary.grandTotal()).isEqualTo(Money.ZERO);
+        assertThat(summary.grandTotal()).isEqualTo(Money.zero(2));
         assertThat(summary.clientId()).isEqualTo("CLI-99821");
     }
 

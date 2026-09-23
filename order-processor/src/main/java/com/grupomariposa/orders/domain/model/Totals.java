@@ -10,9 +10,6 @@ public record Totals(
         Money tax,
         Money grandTotal) {
 
-    public static final Totals ZERO =
-            new Totals(Money.ZERO, Money.ZERO, Money.ZERO, Money.ZERO, Money.ZERO);
-
     public Totals {
         Objects.requireNonNull(grossSubtotal, "grossSubtotal");
         Objects.requireNonNull(discount, "discount");
@@ -21,8 +18,13 @@ public record Totals(
         Objects.requireNonNull(grandTotal, "grandTotal");
     }
 
-    public static Totals sumOf(final Collection<LineAmounts> lines) {
-        return lines.stream().map(Totals::of).reduce(ZERO, Totals::plus);
+    public static Totals zero(final int fractionDigits) {
+        final Money zero = Money.zero(fractionDigits);
+        return new Totals(zero, zero, zero, zero, zero);
+    }
+
+    public static Totals sumOf(final Collection<LineAmounts> lines, final int fractionDigits) {
+        return lines.stream().map(Totals::of).reduce(zero(fractionDigits), Totals::plus);
     }
 
     private static Totals of(final LineAmounts line) {

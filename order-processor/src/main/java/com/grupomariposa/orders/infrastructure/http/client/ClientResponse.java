@@ -9,5 +9,6 @@ public record ClientResponse(
         String status,
         String segment,
         String taxRegime,
-        String market) {
+        String market,
+        Long version) {
 }

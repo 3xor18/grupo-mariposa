@@ -14,7 +14,7 @@ import com.grupomariposa.orders.application.port.in.FindOrderQuery;
 import com.grupomariposa.orders.application.port.in.ListOrdersQuery;
 import com.grupomariposa.orders.application.query.OrderSearchCriteria;
 import com.grupomariposa.orders.application.query.PageResult;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.Markets;
 import com.grupomariposa.orders.domain.model.OrderStatus;
 import com.grupomariposa.orders.infrastructure.config.WebConfiguration;
 import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
@@ -143,7 +143,7 @@ class OrdersControllerTest {
 
     @Test
     void should_validate_every_listing_parameter() throws Exception {
-        mockMvc.perform(reader(get("/orders").param("status", "LOST").param("market", "AR")
+        mockMvc.perform(reader(get("/orders").param("status", "LOST").param("market", "ARG")
                         .param("page", "-1").param("size", "500")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.length()").value(4));
@@ -152,7 +152,7 @@ class OrdersControllerTest {
     @Test
     void should_pass_typed_filters_to_the_query() throws Exception {
         final OrderSearchCriteria expected =
-                new OrderSearchCriteria(OrderStatus.REJECTED, Market.CO, 2, 5);
+                new OrderSearchCriteria(OrderStatus.REJECTED, Markets.CO, 2, 5);
         when(listOrders.list(expected)).thenReturn(new PageResult<>(List.of(), 2, 5, 11));
 
         mockMvc.perform(reader(get("/orders").param("status", "REJECTED").param("market", "CO")
