@@ -10,6 +10,10 @@ import {
 } from '../../src/config/app-config';
 import { randomUUID } from 'node:crypto';
 import { parseFaultRules } from '../../src/shared/fault-injection/fault-rule';
+import {
+  DEFAULT_PLATFORM_CURRENCIES,
+  parseCurrencies,
+} from '../../src/shared/markets/currency-catalog';
 import { DEFAULT_PLATFORM_MARKETS, parseMarkets } from '../../src/shared/markets/market-catalog';
 import { MONGO_URI_VARIABLE } from './containers';
 import { TEST_ADMIN_ROLE, TEST_AUDIENCE, TEST_ISSUER, TEST_ROLE } from './identity-provider';
@@ -57,9 +61,17 @@ export function testConfig(jwksUrl: string, overrides: Partial<AppConfig> = {}):
     shutdown: { drainMs: 0, timeoutMs: 1000 },
     http: { apiDocsEnabled: true, trustProxy: false },
     markets: parseMarkets(DEFAULT_PLATFORM_MARKETS),
+    currencies: parseCurrencies(DEFAULT_PLATFORM_CURRENCIES),
     storage: testMongoSettings(),
-    outbox: { relayIntervalMs: 50, batchSize: 10, leaseMs: 30_000 },
-    kafka: { bootstrapServers: [], changesTopic: 'clients.changed.v1' },
+    outbox: {
+      relayIntervalMs: 50,
+      batchSize: 10,
+      leaseMs: 30_000,
+      retryDelayMs: 50,
+      retentionSeconds: 3600,
+    },
+    kafka: { bootstrapServers: [], changesTopic: 'clients.changed.v1', tlsEnabled: false },
+    seedEnabled: true,
     ...overrides,
   };
 }
