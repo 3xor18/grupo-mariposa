@@ -94,6 +94,7 @@ func baseEnv(extra ...string) map[string]string {
 	env := map[string]string{
 		config.EnvAuthEnabled:          "false",
 		config.EnvShutdownDrainDelayMS: "0",
+		config.EnvStorageDriver:        config.StorageMemory,
 	}
 	for i := 0; i+1 < len(extra); i += 2 {
 		env[extra[i]] = extra[i+1]
@@ -322,6 +323,11 @@ func TestMainFailures(t *testing.T) {
 		"listen_error":       {env: baseEnv(), listen: failingListen},
 		"closed_listener":    {env: baseEnv(), listen: closedListen},
 		"invalid_remote_url": {env: baseEnv(remote.EnvURL, "nope")},
+		"mongo_uri_invalid": {env: baseEnv(config.EnvStorageDriver, config.StorageMongo,
+			config.EnvMongoURI, "not-a-uri", config.EnvKafkaBootstrap, "127.0.0.1:1")},
+		"mongo_unreachable": {env: baseEnv(config.EnvStorageDriver, config.StorageMongo,
+			config.EnvMongoURI, "mongodb://127.0.0.1:1/?directConnection=true",
+			config.EnvMongoTimeoutMS, "200", config.EnvKafkaBootstrap, "127.0.0.1:1")},
 		"config_server_down": {env: baseEnv(remote.EnvURL, "http://127.0.0.1:1",
 			remote.EnvRetries, "0", remote.EnvFailFast, "true")},
 	}

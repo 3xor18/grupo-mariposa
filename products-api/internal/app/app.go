@@ -18,7 +18,6 @@ import (
 	"github.com/grupomariposa/platform/products-api/internal/fault"
 	"github.com/grupomariposa/platform/products-api/internal/httpapi"
 	"github.com/grupomariposa/platform/products-api/internal/ratelimit"
-	"github.com/grupomariposa/platform/products-api/internal/storage/memory"
 	"github.com/grupomariposa/platform/products-api/internal/telemetry"
 )
 
@@ -32,6 +31,8 @@ const (
 	logKeyFaultsEnabled = "faultInjectionEnabled"
 	logKeyFaultRules    = "faultRules"
 	logKeyDrainDelay    = "drainDelayMs"
+	logKeyStorage       = "storage"
+	logKeyMarkets       = "markets"
 )
 
 type ListenFunc func(ctx context.Context, network, address string) (net.Listener, error)
@@ -41,12 +42,19 @@ type application struct {
 	logger   *slog.Logger
 	handler  http.Handler
 	verifier *auth.Verifier
+	backend  backend
 	serving  atomic.Bool
 }
 
-func newApplication(cfg config.Config, logger *slog.Logger) *application {
-	a := &application{cfg: cfg, logger: logger}
-	deps := dependencies(cfg, logger, a)
+func newApplication(ctx context.Context, cfg config.Config, logger *slog.Logger,
+) (*application, error) {
+	metrics := telemetry.NewMetrics()
+	store, err := openBackend(ctx, cfg, logger, metrics)
+	if err != nil {
+		return nil, err
+	}
+	a := &application{cfg: cfg, logger: logger, backend: store}
+	deps := dependencies(cfg, logger, a, metrics)
 	if cfg.Auth.Enabled {
 		a.verifier = auth.NewVerifier(authSettings(cfg.Auth), logger)
 		deps.Verifier = a.verifier
@@ -55,20 +63,24 @@ func newApplication(cfg config.Config, logger *slog.Logger) *application {
 		deps.Faults = fault.NewInjector(cfg.Faults.Rules)
 	}
 	a.handler = httpapi.NewHandler(deps)
-	return a
+	return a, nil
 }
 
-func dependencies(cfg config.Config, logger *slog.Logger, readiness httpapi.Readiness,
+func dependencies(cfg config.Config, logger *slog.Logger, a *application,
+	metrics *telemetry.Metrics,
 ) httpapi.Dependencies {
-	metrics := telemetry.NewMetrics()
 	limit := cfg.RateLimit
+	events := catalog.NewChangeEvents(time.Now, newEventID)
 	return httpapi.Dependencies{
-		Products:         catalog.NewService(memory.NewSeededRepository()),
+		Products: catalog.NewService(a.backend.repository, a.backend.writer, cfg.Markets,
+			events),
+		ReaderRole:       cfg.Auth.RequiredRole,
+		AdminRole:        cfg.Auth.AdminRole,
 		FaultHold:        cfg.Faults.Timeout,
 		ClientLimiter:    ratelimit.NewKeyed(limit.RPS, limit.Burst, limit.MaxKeys),
 		PrincipalLimiter: ratelimit.NewKeyed(limit.RPS, limit.Burst, limit.MaxKeys),
 		RequestTimeout:   cfg.RequestTimeout,
-		Readiness:        readiness,
+		Readiness:        a,
 		Recorder:         metrics,
 		MetricsHandler:   metrics.Handler(),
 		Logger:           logger,
@@ -82,7 +94,6 @@ func authSettings(a config.Auth) auth.Settings {
 		Issuer:         a.Issuer,
 		Audience:       a.Audience,
 		JWKSURL:        a.JWKSURL,
-		RequiredRole:   a.RequiredRole,
 		ClockLeeway:    a.ClockLeeway,
 		JWKSTimeout:    a.JWKSTimeout,
 		Refresh:        a.JWKSRefresh,
@@ -90,29 +101,49 @@ func authSettings(a config.Auth) auth.Settings {
 	}
 }
 
-func (a *application) Ready() bool {
-	return a.serving.Load() && (a.verifier == nil || a.verifier.Ready())
+func (a *application) Ready(ctx context.Context) bool {
+	if !a.serving.Load() || (a.verifier != nil && !a.verifier.Ready()) {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, a.cfg.Storage.Timeout)
+	defer cancel()
+	return a.backend.ping(ctx) == nil
 }
 
 func run(ctx context.Context, cfg config.Config, logger *slog.Logger, listen ListenFunc) error {
+	application, err := newApplication(ctx, cfg, logger)
+	if err != nil {
+		return err
+	}
 	address := net.JoinHostPort("", strconv.Itoa(cfg.Port))
 	listener, err := listen(ctx, network, address)
 	if err != nil {
-		return fmt.Errorf("listen on port %d: %w", cfg.Port, err)
+		return errors.Join(fmt.Errorf("listen on port %d: %w", cfg.Port, err),
+			application.closeBackend(ctx))
 	}
-	return newApplication(cfg, logger).serve(ctx, listener)
+	return application.serve(ctx, listener)
 }
 
 func (a *application) serve(ctx context.Context, listener net.Listener) error {
 	lifecycle, stopBackground := context.WithCancel(context.WithoutCancel(ctx))
 	var background sync.WaitGroup
-	defer func() {
-		stopBackground()
-		background.Wait()
-	}()
+	a.startBackground(lifecycle, &background)
+	err := a.serveUntilDone(ctx, listener)
+	stopBackground()
+	background.Wait()
+	return errors.Join(err, a.closeBackend(ctx))
+}
+
+func (a *application) startBackground(ctx context.Context, background *sync.WaitGroup) {
 	if a.verifier != nil {
-		background.Go(func() { a.verifier.Run(lifecycle) })
+		background.Go(func() { a.verifier.Run(ctx) })
 	}
+	if a.backend.relay != nil {
+		background.Go(func() { a.backend.relay.Run(ctx) })
+	}
+}
+
+func (a *application) serveUntilDone(ctx context.Context, listener net.Listener) error {
 	server := a.newServer()
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(listener) }()
@@ -144,7 +175,22 @@ func (a *application) logStart(ctx context.Context, listener net.Listener) {
 	a.logger.InfoContext(ctx, logListening, logKeyAddress, listener.Addr().String(),
 		logKeyAuthEnabled, a.cfg.Auth.Enabled,
 		logKeyFaultsEnabled, a.cfg.Faults.Enabled,
-		logKeyFaultRules, len(a.cfg.Faults.Rules))
+		logKeyFaultRules, len(a.cfg.Faults.Rules),
+		logKeyStorage, a.cfg.Storage.Driver,
+		logKeyMarkets, a.cfg.Markets.Codes())
+}
+
+func (a *application) closeBackend(ctx context.Context) error {
+	closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.cfg.Storage.Timeout)
+	defer cancel()
+	return wrapClose(a.backend.close(closeCtx))
+}
+
+func wrapClose(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("close backend: %w", err)
 }
 
 func (a *application) shutdown(ctx context.Context, server *http.Server) error {
