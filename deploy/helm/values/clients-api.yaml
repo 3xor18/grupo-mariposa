@@ -22,11 +22,15 @@ env:
   CONFIG_APP_NAME: clients-api
   CONFIG_SERVER_USERNAME: config-reader
   CONFIG_SERVER_FAIL_FAST: "true"
+  KAFKA_TOPIC_CHANGES: clients.changed.v1
 externalSecret:
   enabled: true
-  remoteKey: grupo-mariposa/config-server
+  remoteKey: grupo-mariposa/clients-api
   keys:
-    - CONFIG_SERVER_PASSWORD
+    - MONGODB_URI
+    - secretKey: CONFIG_SERVER_PASSWORD
+      remoteKey: grupo-mariposa/config-server
+      property: CONFIG_SERVER_PASSWORD
 networkPolicy:
   enabled: true
   allowedFrom:
