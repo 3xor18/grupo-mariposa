@@ -30,6 +30,16 @@ Feature: configurable market catalog (ADR 0006): currency decimals, shared curre
         grandTotal: 70480
       }
       """
+    Given url ordersUrl + '/orders/' + orderId
+    And header Authorization = 'Bearer ' + tokens.analyst
+    When method get
+    Then status 200
+    * def raw = new java.lang.String(responseBytes, 'UTF-8')
+    * def totalKeys = ['grossSubtotal', 'discount', 'netSubtotal', 'tax', 'grandTotal']
+    * def integerPattern = function(key) { return '"' + key + '"\\s*:\\s*-?\\d+[,}]' }
+    * def serializedAsInteger = function(key) { return new RegExp(integerPattern(key)).test(raw) }
+    * match karate.filter(totalKeys, serializedAsInteger) == totalKeys
+    * match raw !contains '70480.0'
 
   Scenario: Ecuador uses the shared USD currency with two decimals
     * def items =
