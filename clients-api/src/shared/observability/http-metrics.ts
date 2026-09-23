@@ -1,11 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import {
-  collectDefaultMetrics,
-  Counter,
-  exponentialBuckets,
-  Histogram,
-  Registry,
-} from 'prom-client';
+import { Counter, exponentialBuckets, Histogram } from 'prom-client';
+import { MetricsRegistry } from './metrics-registry';
 
 export const UNMATCHED_ROUTE = 'UNMATCHED';
 
@@ -23,31 +18,27 @@ export interface HttpObservation {
 
 @Injectable()
 export class HttpMetrics {
-  private readonly registry = new Registry();
-  private readonly requests = new Counter({
-    name: 'http_requests_total',
-    help: 'Total HTTP requests by method, route and status code',
-    labelNames: LABELS,
-    registers: [this.registry],
-  });
-  private readonly latency = new Histogram({
-    name: 'http_request_duration_seconds',
-    help: 'HTTP request latency in seconds by method, route and status code',
-    labelNames: LABELS,
-    buckets: exponentialBuckets(
-      LATENCY_BUCKET_START_SECONDS,
-      LATENCY_BUCKET_FACTOR,
-      LATENCY_BUCKET_COUNT,
-    ),
-    registers: [this.registry],
-  });
+  private readonly requests: Counter<(typeof LABELS)[number]>;
+  private readonly latency: Histogram<(typeof LABELS)[number]>;
 
-  constructor() {
-    collectDefaultMetrics({ register: this.registry });
-  }
-
-  get contentType(): string {
-    return this.registry.contentType;
+  constructor(metrics: MetricsRegistry) {
+    this.requests = new Counter({
+      name: 'http_requests_total',
+      help: 'Total HTTP requests by method, route and status code',
+      labelNames: LABELS,
+      registers: [metrics.registry],
+    });
+    this.latency = new Histogram({
+      name: 'http_request_duration_seconds',
+      help: 'HTTP request latency in seconds by method, route and status code',
+      labelNames: LABELS,
+      buckets: exponentialBuckets(
+        LATENCY_BUCKET_START_SECONDS,
+        LATENCY_BUCKET_FACTOR,
+        LATENCY_BUCKET_COUNT,
+      ),
+      registers: [metrics.registry],
+    });
   }
 
   observe(observation: HttpObservation): void {
@@ -58,9 +49,5 @@ export class HttpMetrics {
     };
     this.requests.inc(labels);
     this.latency.observe(labels, observation.durationSeconds);
-  }
-
-  render(): Promise<string> {
-    return this.registry.metrics();
   }
 }

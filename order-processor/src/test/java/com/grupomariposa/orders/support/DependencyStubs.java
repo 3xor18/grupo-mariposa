@@ -17,6 +17,7 @@ public final class DependencyStubs {
 
     public static final String TOKEN = "integration-token";
     public static final String TOKEN_PATH = "/realms/mariposa/protocol/openid-connect/token";
+    private static final String ETAG = "ETag";
     private static final String CLIENTS_SPEC = "http/clients-api.openapi.yaml";
     private static final String PRODUCTS_SPEC = "http/products-api.openapi.yaml";
     private static final String AUTHORIZATION = "Authorization";
@@ -48,6 +49,25 @@ public final class DependencyStubs {
         server.stubFor(get(urlPathEqualTo("/clients/" + clientId))
                 .withHeader(AUTHORIZATION, equalTo(BEARER))
                 .willReturn(okJson(body.toString())));
+    }
+
+    public void versionedClient(final String clientId, final String market, final String status,
+                                final long version) {
+        final ObjectNode body = ((ObjectNode) Contracts.openApiExample(CLIENTS_SPEC,
+                "/clients/{clientId}")).deepCopy();
+        body.put("clientId", clientId).put("market", market).put("status", status);
+        server.stubFor(get(urlPathEqualTo("/clients/" + clientId))
+                .withHeader(AUTHORIZATION, equalTo(BEARER))
+                .willReturn(okJson(body.toString()).withHeader(ETAG, quoted(version))));
+    }
+
+    public void versionedProduct(final String productId, final String market,
+                                 final String status, final long version) {
+        final ObjectNode body = (ObjectNode) productBody(productId, status, STANDARD);
+        server.stubFor(get(urlPathEqualTo("/products/" + productId))
+                .withQueryParam("market", equalTo(market))
+                .withHeader(AUTHORIZATION, equalTo(BEARER))
+                .willReturn(okJson(body.put("version", version).toString())));
     }
 
     public void golden() {
@@ -104,6 +124,10 @@ public final class DependencyStubs {
                 .withQueryParam("market", equalTo(market))
                 .inScenario(scenario).whenScenarioStateIs(RECOVERED)
                 .willReturn(okJson(productBody(productId, "ACTIVE", "STANDARD").toString())));
+    }
+
+    private static String quoted(final long version) {
+        return "\"" + version + "\"";
     }
 
     private static JsonNode productBody(final String productId, final String status,

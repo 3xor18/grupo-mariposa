@@ -1,10 +1,10 @@
 package com.grupomariposa.orders.application.query;
 
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.OrderStatus;
 import java.util.Optional;
 
-public record OrderSearchCriteria(OrderStatus status, Market market, int page, int size) {
+public record OrderSearchCriteria(OrderStatus status, MarketCode market, int page, int size) {
 
     private static final String INVALID_PAGE = "Invalid page request";
 
@@ -18,7 +18,7 @@ public record OrderSearchCriteria(OrderStatus status, Market market, int page, i
         return Optional.ofNullable(status);
     }
 
-    public Optional<Market> marketFilter() {
+    public Optional<MarketCode> marketFilter() {
         return Optional.ofNullable(market);
     }
 }

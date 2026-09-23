@@ -94,6 +94,8 @@ func baseEnv(extra ...string) map[string]string {
 	env := map[string]string{
 		config.EnvAuthEnabled:          "false",
 		config.EnvShutdownDrainDelayMS: "0",
+		config.EnvStorageDriver:        config.StorageMemory,
+		config.EnvSeedEnabled:          "true",
 	}
 	for i := 0; i+1 < len(extra); i += 2 {
 		env[extra[i]] = extra[i+1]
@@ -177,6 +179,13 @@ func TestServesProductsAndReadiness(t *testing.T) {
 	}
 	if code := inst.stop(t); code != app.ExitOK {
 		t.Fatalf("want clean exit, got %d", code)
+	}
+}
+
+func TestSeedingIsOptIn(t *testing.T) {
+	inst := start(t, baseEnv(config.EnvSeedEnabled, "false"))
+	if code, _ := get(t, inst.url+"/products/PRD-001?market=MX"); code != http.StatusNotFound {
+		t.Fatalf("without seeding the catalog must be empty, got %d", code)
 	}
 }
 
@@ -322,6 +331,11 @@ func TestMainFailures(t *testing.T) {
 		"listen_error":       {env: baseEnv(), listen: failingListen},
 		"closed_listener":    {env: baseEnv(), listen: closedListen},
 		"invalid_remote_url": {env: baseEnv(remote.EnvURL, "nope")},
+		"mongo_uri_invalid": {env: baseEnv(config.EnvStorageDriver, config.StorageMongo,
+			config.EnvMongoURI, "not-a-uri", config.EnvKafkaBootstrap, "127.0.0.1:1")},
+		"mongo_unreachable": {env: baseEnv(config.EnvStorageDriver, config.StorageMongo,
+			config.EnvMongoURI, "mongodb://127.0.0.1:1/?directConnection=true",
+			config.EnvMongoTimeoutMS, "200", config.EnvKafkaBootstrap, "127.0.0.1:1")},
 		"config_server_down": {env: baseEnv(remote.EnvURL, "http://127.0.0.1:1",
 			remote.EnvRetries, "0", remote.EnvFailFast, "true")},
 	}

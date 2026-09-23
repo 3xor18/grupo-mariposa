@@ -53,9 +53,24 @@ Las propiedades son inmutables: un cambio en el config server se aplica con un r
 
 | Variable | Default | Uso |
 |---|---|---|
-| `PRICING_TAX_{MX,CO,PE}_{STANDARD,REDUCED,EXEMPT}` | MX 0.16/0.08/0.00, CO 0.19/0.05/0.00, PE 0.18/0.10/0.00 | tabla de impuestos (0..1, completa por mercado) |
+| `PLATFORM_MARKETS` | `MX:MXN:es-MX,CO:COP:es-CO,PE:PEN:es-PE,CL:CLP:es-CL,EC:USD:es-EC` | catálogo `mercado:moneda:locale` |
+| `PLATFORM_CURRENCIES` | `MXN:2,COP:2,PEN:2,CLP:0,USD:2` | decimales por moneda (ISO 4217) |
+| `PRICING_TAX_<MKT>_{STANDARD,REDUCED,EXEMPT}` | MX 0.16/0.08/0.00, CO 0.19/0.05/0.00, PE 0.18/0.10/0.00, CL 0.19/0.19/0.00, EC 0.15/0.05/0.00 | tabla de impuestos (0..1, completa por mercado del catálogo) |
 | `PRICING_WHOLESALE_DISCOUNT_RATE` / `PRICING_WHOLESALE_DISCOUNT_MIN_QUANTITY` | `0.03` / `20` | descuento mayorista |
-| `PRICING_CURRENCY_{MX,CO,PE}` | `MXN` / `COP` / `PEN` | moneda aceptada por mercado |
+
+### Mercados y monedas
+
+Gramática (igual en todos los servicios): entradas separadas por coma y campos por `:`, con espacios
+recortados; mercado `CODE:CURRENCY:LOCALE` con `^[A-Z]{2}$`, `^[A-Z]{3}$` y `^[a-z]{2}-[A-Z]{2}$`; moneda
+`CODE:DIGITS` con `DIGITS` entre 0 y 4; sin duplicados y con la moneda de cada mercado declarada.
+
+El mercado es un código ISO 3166 de dos letras (`MarketCode`) validado contra el catálogo de plataforma
+(ADR [0006](../docs/adr/0006-configurable-market-catalog.md)): cada mercado declara su moneda y locale, y cada
+moneda sus decimales. Un catálogo mal escrito, una moneda sin decimales o un mercado sin tasas detienen el
+arranque. Los importes se redondean `HALF_UP` a los decimales de la moneda (CLP sin decimales, USD compartido
+por EC). Un pedido de un mercado fuera del catálogo (p. ej. `AR`) o con otra moneda es un error de contrato y va
+a `orders.processing.dlt` con categoría `VALIDATION`. Agregar un país es sólo configuración: sumarlo a
+`PLATFORM_MARKETS` (y su moneda a `PLATFORM_CURRENCIES` si es nueva) y definir `PRICING_TAX_<MKT>_*`.
 
 ### Infraestructura y operación
 
@@ -81,13 +96,18 @@ Las propiedades son inmutables: un cambio en el config server se aplica con un r
 | `OAUTH_ENABLED`, `OAUTH_TOKEN_URI`, `OAUTH_CLIENT_ID`, `OAUTH_REGISTRATION_ID` | `true`, Keycloak local, `order-processor` | client credentials |
 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_TIMEOUT` / `REDIS_CONNECT_TIMEOUT` | `localhost` / `6379` / `250ms` / `250ms` | Redis |
 | `REDIS_POOL_ENABLED` / `REDIS_POOL_MAX_ACTIVE` / `REDIS_POOL_MAX_IDLE` / `REDIS_POOL_MIN_IDLE` / `REDIS_POOL_MAX_WAIT` | `false` / `16` / `8` / `0` / `250ms` | pool Lettuce (por defecto conexión multiplexada) |
-| `CACHE_ENABLED` / `CACHE_PRODUCTS_TTL` / `CACHE_PRODUCTS_KEY_PREFIX` | `true` / `5m` / `products` | caché de productos |
+| `CACHE_CLIENTS_ENABLED` / `CACHE_CLIENTS_TTL` / `CACHE_CLIENTS_KEY_PREFIX` | `true` / `60s` / `clients` | caché de clientes (`CACHE_ENABLED` es el default de ambas) |
+| `CACHE_PRODUCTS_ENABLED` / `CACHE_PRODUCTS_TTL` / `CACHE_PRODUCTS_KEY_PREFIX` | `true` / `10m` / `products` | caché de productos |
+| `KAFKA_MASTER_DATA_ENABLED` | `true` | arranca los listeners de cambios de datos maestros |
+| `KAFKA_TOPIC_CLIENTS_CHANGED` / `KAFKA_TOPIC_PRODUCTS_CHANGED` / `KAFKA_TOPIC_MASTER_DATA_PARTITIONS` | `clients.changed.v1` / `products.changed.v1` / `3` | tópicos compactados de cambios (particiones sólo si `KAFKA_CREATE_TOPICS=true`) |
+| `KAFKA_CACHE_CONSUMER_GROUP` / `KAFKA_MASTER_DATA_CONCURRENCY` | `order-processor-cache` / `1` | consumo de cambios |
+| `KAFKA_MASTER_DATA_RETRY_INITIAL_INTERVAL` / `_MULTIPLIER` / `_MAX_INTERVAL` / `_MAX_ATTEMPTS` | `500ms` / `2.0` / `10s` / `6` | reintento de un cambio cuando Redis no acepta la escritura |
 | `OUTBOX_RELAY_ENABLED` / `OUTBOX_RELAY_INTERVAL` / `OUTBOX_BATCH_SIZE` / `OUTBOX_LEASE` / `OUTBOX_SEND_TIMEOUT` | `true` / `250ms` / `100` / `30s` / `15s` | relay |
 | `OUTBOX_RETRY_INITIAL_BACKOFF` / `OUTBOX_RETRY_MAX_BACKOFF` | `1s` / `60s` | reintento de publicación |
 | `API_DEFAULT_PAGE_SIZE` / `API_MAX_PAGE_SIZE` / `API_MAX_OFFSET` | `20` / `100` / `10000` | paginación de `GET /orders` (`page * size` acotado) |
 | `API_DOCS_ENABLED` | `false` | publica Swagger UI y `/v3/api-docs` |
 | `VALIDATION_PRODUCT_ID_PATTERN` / `VALIDATION_CLIENT_ID_PATTERN` | `^PRD-[A-Z0-9]{1,20}$` / `^CLI-[A-Z0-9]{1,20}$` | identificadores del contrato |
-| `VALIDATION_PRICE_MAX_PRECISION` / `VALIDATION_PRICE_MAX_SCALE` / `VALIDATION_PRICE_MAX_VALUE` | `18` / `4` / `1000000000000` | límites de `unitPrice`; la API devuelve `unitPrice` tal como llegó (hasta 4 decimales), los importes siempre con 2 |
+| `VALIDATION_PRICE_MAX_PRECISION` / `VALIDATION_PRICE_MAX_SCALE` / `VALIDATION_PRICE_MAX_VALUE` | `18` / `4` / `1000000000000` | límites de `unitPrice`; la API devuelve `unitPrice` tal como llegó (hasta 4 decimales), los importes con los decimales de la moneda |
 | `AUTH_ENABLED`, `AUTH_REALM_URL`, `AUTH_ISSUER`, `AUTH_JWKS_URL`, `AUTH_AUDIENCE`, `AUTH_READER_ROLE`, `AUTH_ADMIN_ROLE` | `true`, realm `mariposa` local, derivados del realm, `${spring.application.name}`, `orders-reader`, `orders-admin` | JWT de Keycloak. `AUTH_ENABLED=false` sólo con el perfil `local`; con autenticación activa el servicio no arranca sin audiencia |
 | `ALLOWED_ORIGINS` | `http://localhost:8090` | CORS del order-tracker |
 | `PII_KEY_ID` / `PII_PREVIOUS_KEY_ID` | `k1` / vacío | identificador de llave (prefijo del texto cifrado) |
@@ -99,6 +119,34 @@ Las propiedades son inmutables: un cambio en el config server se aplica con un r
 Al arrancar se validan los presupuestos operativos y el servicio no inicia si no se cumplen:
 fan-out ≤ bulkhead; `max.poll.records × presupuesto por intento + backoff de registro <
 max.poll.interval.ms`; `delivery.timeout.ms ≤ OUTBOX_SEND_TIMEOUT < OUTBOX_LEASE`.
+
+## Caché de datos maestros
+
+Clientes y productos se cachean en Redis con la versión de la entidad (ADR
+[0007](../docs/adr/0007-master-data-change-events-and-cache.md)):
+
+- Claves `clients:{clientId}` y `products:{market}:{productId}`, un hash con `v` (versión) y `d` (perfil en
+  JSON; el nombre del cliente va cifrado con la misma llave PII). La versión viene del campo `version` de la API
+  o de su `ETag`; si no llega se usa `0`. Sólo se cachean resultados encontrados.
+- Toda escritura pasa por un script Lua atómico ("set if newer version"): la escribe el relleno tras un miss y
+  la aplica el listener de cambios. Una versión menor nunca pisa a una mayor; una lectura de la API más vieja que
+  la caché no la sobrescribe (se devuelve la entrada más nueva) y un evento viejo se descarta.
+- Listeners de `clients.changed.v1` y `products.changed.v1` (key `market:productId`) en el grupo
+  `order-processor-cache`, con su propia container factory y `CommonLoggingErrorHandler`. Un evento completo
+  sobrescribe la entrada; uno sin estado completo la borra dejando la versión como tope. Un evento mal formado
+  se registra, cuenta como `ignored` y se salta: nunca bloquea la partición ni afecta el procesamiento de pedidos.
+- `clients.changed.v1` no trae el nombre (PII): el estado del evento es completo para la elegibilidad y se
+  conserva el nombre cifrado que ya estaba en caché; si no hay entrada previa se deja sólo la versión y la
+  siguiente lectura trae el perfil completo de la API.
+- Si Redis rechaza la escritura de un evento, el listener lanza un error reintentable y el contenedor reintenta
+  con backoff exponencial acotado (las escrituras son idempotentes por versión). Agotados los intentos se
+  registra, cuenta como `error` y se sigue con el siguiente registro; el TTL cubre la ventana.
+- El TTL (`CACHE_CLIENTS_TTL` 60 s, `CACHE_PRODUCTS_TTL` 10 min) es la red de seguridad si se pierde un evento.
+  Si Redis falla, la lectura va directo a la API y el pedido sigue.
+- Métricas: `orders_cache_hits_total`, `orders_cache_misses_total`, `orders_cache_errors_total{cache,operation}`
+  y `orders_cache_invalidations_total{cache,outcome=applied|stale|ignored|error}` (`error` una vez por evento
+  descartado tras los reintentos; cada intento fallido suma en `orders_cache_errors_total{operation="event"}`).
+  Los TTL deben ser duraciones positivas.
 
 ## Seguridad y datos personales
 
@@ -129,15 +177,16 @@ ajustan por variable de entorno. `HOSTNAME` identifica al dueño del lease del o
 
 | Paquete | Contenido |
 |---|---|
-| `domain.model` | `Order`, `Money`, `Rate`, `Market` (tabla de impuestos), perfiles, `Decision`, `Violation` |
+| `domain.model` | `Order`, `Money`, `Rate`, `MarketCode`, `MarketCatalog`, `CurrencyCatalog`, `TaxRateTable`, perfiles, `Decision`, `Violation` |
 | `domain.policy` | `EligibilityPolicy`, `TaxPolicy`/`MarketTaxPolicy`, `DiscountPolicy`/`WholesaleVolumeDiscountPolicy`, `LinePricer` |
 | `domain.service` | `OrderEvaluator` |
 | `application.port.in` / `port.out` | casos de uso y puertos (`ClientDirectory`, `ProductCatalog`, `OrderStore`, `OutboxStore`, ...) |
 | `application.validation` | `OrderCommandValidator` (contrato de entrada, devuelve todos los errores) |
 | `application.service` | `ProcessOrderService`, `OrderEnricher` (fan-out en virtual threads), `VersionArbiter`, relay |
-| `infrastructure.kafka` | listener, lector JSON estricto, DLT (headers + bytes originales), publicador del outbox |
+| `infrastructure.kafka` | listener, lector JSON estricto, DLT (headers + bytes originales), publicador del outbox, listeners de cambios de datos maestros |
 | `infrastructure.http` | `RestClient` + Resilience4j, DTOs externos y mapeo de errores |
-| `infrastructure.cache` | decorador Redis de `ProductCatalog` |
+| `infrastructure.cache` | caché versionada en Redis (script Lua), decoradores de `ClientDirectory` y `ProductCatalog` |
+| `infrastructure.masterdata` | `Versioned` y fuentes versionadas de clientes y productos |
 | `infrastructure.persistence` | documentos Mongo, transacción inbox + orders + outbox, índices |
 | `infrastructure.crypto` | AES-256-GCM para el nombre del cliente |
 | `infrastructure.web` | API de lectura, ProblemDetail, seguridad JWT |

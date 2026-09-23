@@ -2,6 +2,7 @@ package com.grupomariposa.orders.domain.model;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 
 public sealed interface Lookup<T> permits Lookup.Found, Lookup.NotFound {
 
@@ -15,6 +16,8 @@ public sealed interface Lookup<T> permits Lookup.Found, Lookup.NotFound {
 
     Optional<T> value();
 
+    <R> Lookup<R> map(Function<? super T, ? extends R> mapper);
+
     record Found<T>(T resource) implements Lookup<T> {
 
         public Found {
@@ -25,6 +28,11 @@ public sealed interface Lookup<T> permits Lookup.Found, Lookup.NotFound {
         public Optional<T> value() {
             return Optional.of(resource);
         }
+
+        @Override
+        public <R> Lookup<R> map(final Function<? super T, ? extends R> mapper) {
+            return new Found<>(mapper.apply(resource));
+        }
     }
 
     record NotFound<T>() implements Lookup<T> {
@@ -32,6 +40,11 @@ public sealed interface Lookup<T> permits Lookup.Found, Lookup.NotFound {
         @Override
         public Optional<T> value() {
             return Optional.empty();
+        }
+
+        @Override
+        public <R> Lookup<R> map(final Function<? super T, ? extends R> mapper) {
+            return new NotFound<>();
         }
     }
 }

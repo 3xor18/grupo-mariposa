@@ -34,6 +34,9 @@ linters:
       tab-width: 1
     gocyclo:
       min-complexity: 10
+    misspell:
+      ignore-rules:
+        - producto
     goconst:
       min-len: 3
       min-occurrences: 3

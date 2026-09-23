@@ -24,7 +24,7 @@ class LookupExchangeTest {
                 new RetryAfterParser(Clock.systemUTC()));
 
         assertThatThrownBy(() -> exchange.fetch(failingAuth.get().uri("/clients/CLI-1"),
-                String.class, body -> body))
+                String.class, (body, headers) -> body))
                 .isInstanceOf(ExternalTransientException.class)
                 .hasMessage("clients-api token could not be obtained");
     }

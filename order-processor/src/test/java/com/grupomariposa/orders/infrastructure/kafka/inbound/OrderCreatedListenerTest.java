@@ -79,6 +79,20 @@ class OrderCreatedListenerTest {
     }
 
     @Test
+    void should_reject_markets_outside_the_catalog_as_validation_errors() {
+        final byte[] argentina = new String(GOLDEN, StandardCharsets.UTF_8)
+                .replace("\"MX\"", "\"AR\"").replace("\"MXN\"", "\"ARS\"")
+                .getBytes(StandardCharsets.UTF_8);
+
+        assertThatThrownBy(() -> listener.onMessage(consumerRecord(argentina)))
+                .isInstanceOfSatisfying(RecordProcessingFailure.class, failure -> {
+                    assertThat(failure.category()).isEqualTo(ErrorCategory.VALIDATION);
+                    assertThat(failure.getMessage()).contains("market");
+                });
+        verify(useCase, never()).process(any());
+    }
+
+    @Test
     void should_reject_astronomic_prices_as_validation_errors() {
         final byte[] huge = new String(GOLDEN, StandardCharsets.UTF_8)
                 .replace("35.5", "1e999999999").getBytes(StandardCharsets.UTF_8);

@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'package:order_tracker/features/orders/domain/entities/market.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
 
 abstract final class OrdersKeys {
@@ -29,7 +29,7 @@ abstract final class OrdersKeys {
 
   static Key statusFilter(OrderStatus status) => Key('statusFilter-${status.name}');
 
-  static Key marketFilter(Market market) => Key('marketFilter-${market.name}');
+  static Key marketFilter(MarketCode market) => Key('marketFilter-${market.value}');
 
   static Key summaryTile(String orderId) => Key('orderTile-$orderId');
 }

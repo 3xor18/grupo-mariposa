@@ -3,7 +3,7 @@ package com.grupomariposa.orders.domain.policy;
 import com.grupomariposa.orders.domain.model.ClientProfile;
 import com.grupomariposa.orders.domain.model.EvaluationInput;
 import com.grupomariposa.orders.domain.model.Lookup;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.ProductProfile;
 import com.grupomariposa.orders.domain.model.RejectionCode;
 import com.grupomariposa.orders.domain.model.ResolvedItem;
@@ -31,12 +31,12 @@ public final class EligibilityPolicy {
     }
 
     private static List<Violation> foundClientViolations(final ClientProfile client,
-                                                         final Market market) {
+                                                         final MarketCode market) {
         final List<Violation> violations = new ArrayList<>();
         if (!client.isActive()) {
             violations.add(Violation.of(RejectionCode.CLIENT_NOT_ACTIVE));
         }
-        if (client.market() != market) {
+        if (!client.market().equals(market)) {
             violations.add(Violation.of(RejectionCode.CLIENT_MARKET_MISMATCH));
         }
         return violations;

@@ -4,5 +4,7 @@
   "realm": "${KEYCLOAK_REALM}",
   "clientId": "${KEYCLOAK_CLIENT_ID}",
   "redirectUri": "${REDIRECT_URI}",
-  "enableSemantics": ${ENABLE_SEMANTICS}
+  "enableSemantics": ${ENABLE_SEMANTICS},
+  "markets": ${MARKETS_JSON},
+  "currencies": ${CURRENCIES_JSON}
 }

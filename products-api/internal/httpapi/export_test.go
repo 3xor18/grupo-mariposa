@@ -10,6 +10,7 @@ const (
 	CodeProductNotFound    = codeProductNotFound
 	CodeResourceNotFound   = codeResourceNotFound
 	CodeMethodNotAllowed   = codeMethodNotAllowed
+	CodePreconditionFailed = codePreconditionFailed
 	CodeUnauthorized       = codeUnauthorized
 	CodeForbidden          = codeForbidden
 	CodeRateLimited        = codeRateLimited

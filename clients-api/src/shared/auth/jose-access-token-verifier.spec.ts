@@ -1,5 +1,6 @@
 import { createRemoteJWKSet, errors, JWTVerifyGetKey, SignJWT } from 'jose';
 import {
+  TEST_ADMIN_ROLE,
   TEST_AUDIENCE,
   TEST_CLIENT,
   TEST_ISSUER,
@@ -7,6 +8,7 @@ import {
   TestIdentityProvider,
 } from '../../../test/support/identity-provider';
 import { EnabledAuthConfig } from '../../config/app-config';
+import { AccessRole } from './access-role';
 import { ErrorCode } from '../errors/error-code.enum';
 import { ProblemException } from '../errors/problem.exception';
 import { guardedKeySource, IdentityProviderUnavailableError } from './guarded-key-source';
@@ -56,6 +58,7 @@ describe('JoseAccessTokenVerifier', () => {
       issuer: TEST_ISSUER,
       jwksUrl: idp.jwksUrl,
       requiredRole: TEST_ROLE,
+      adminRole: TEST_ADMIN_ROLE,
       audience: TEST_AUDIENCE,
     };
     verifier = verifierWith();
@@ -148,6 +151,18 @@ describe('JoseAccessTokenVerifier', () => {
       .sign(new TextEncoder().encode(idp.publicKeyPem));
 
     await expectUnauthorized(token, AUTH_MESSAGES.invalidToken);
+  });
+
+  it('should_require_the_admin_role_when_admin_access_is_requested', async () => {
+    const reader = await idp.token();
+    const admin = await idp.token({ roles: [TEST_ADMIN_ROLE] });
+
+    const problem = await problemOf(verifier.authenticate(`Bearer ${reader}`, AccessRole.ADMIN));
+
+    expect(problem.code).toBe(ErrorCode.FORBIDDEN);
+    await expect(verifier.authenticate(`Bearer ${admin}`, AccessRole.ADMIN)).resolves.toEqual({
+      id: TEST_CLIENT,
+    });
   });
 
   it('should_reject_token_without_role_as_forbidden', async () => {

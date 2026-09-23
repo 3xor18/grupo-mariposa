@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:order_tracker/core/error/app_failure.dart';
 import 'package:order_tracker/core/result/result.dart';
-import 'package:order_tracker/features/orders/domain/entities/market.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_id.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
@@ -46,7 +46,7 @@ void main() {
 
   group('ListOrders', () {
     test('should request pages with the standard page size', () async {
-      const filter = OrdersFilter(market: Market.pe);
+      const filter = OrdersFilter(market: MarketCode('PE'));
       final page = orderPage(items: [summary('A')]);
       when(
         () => repository.list(
@@ -64,10 +64,10 @@ void main() {
 
   group('entities', () {
     test('should update filters immutably', () {
-      const filter = OrdersFilter(status: OrderStatus.approved, market: Market.mx);
-      expect(filter.withStatus(null), const OrdersFilter(market: Market.mx));
-      expect(filter.withMarket(Market.co).market, Market.co);
-      expect(filter.withMarket(Market.co).status, OrderStatus.approved);
+      const filter = OrdersFilter(status: OrderStatus.approved, market: MarketCode('MX'));
+      expect(filter.withStatus(null), const OrdersFilter(market: MarketCode('MX')));
+      expect(filter.withMarket(const MarketCode('CO')).market, const MarketCode('CO'));
+      expect(filter.withMarket(const MarketCode('CO')).status, OrderStatus.approved);
     });
 
     test('should expose derived order properties', () {

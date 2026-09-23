@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -14,5 +15,15 @@ func TestCheckHealthRejectsUnbuildableAndUnreachableTargets(t *testing.T) {
 		if err := checkHealth(context.Background(), url, settings); err == nil {
 			t.Fatalf("%s: want error", url)
 		}
+	}
+}
+
+func TestWrapCloseKeepsCause(t *testing.T) {
+	cause := errors.New("disconnect failed")
+	if err := wrapClose(cause); !errors.Is(err, cause) {
+		t.Fatalf("want wrapped cause, got %v", err)
+	}
+	if wrapClose(nil) != nil {
+		t.Fatal("nil must stay nil")
 	}
 }

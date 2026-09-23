@@ -13,7 +13,9 @@ function fn() {
     topics: {
       created: 'orders.created.v1',
       processed: 'orders.processed.v1',
-      dlt: 'orders.processing.dlt'
+      dlt: 'orders.processing.dlt',
+      clientsChanged: 'clients.changed.v1',
+      productsChanged: 'products.changed.v1'
     },
     waits: {
       eventMillis: 30000,

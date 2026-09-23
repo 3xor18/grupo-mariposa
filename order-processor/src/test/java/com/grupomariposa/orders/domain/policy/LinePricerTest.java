@@ -8,10 +8,11 @@ import static com.grupomariposa.orders.domain.DomainFixtures.retailClient;
 import static com.grupomariposa.orders.domain.DomainFixtures.wholesaleClient;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.grupomariposa.orders.domain.DomainFixtures;
+import com.grupomariposa.orders.domain.Markets;
 import com.grupomariposa.orders.domain.model.ClientSegment;
 import com.grupomariposa.orders.domain.model.ClientStatus;
 import com.grupomariposa.orders.domain.model.LineAmounts;
-import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.Money;
 import com.grupomariposa.orders.domain.model.OrderLine;
 import com.grupomariposa.orders.domain.model.Rate;
@@ -27,7 +28,8 @@ class LinePricerTest {
 
     @Test
     void should_price_discounted_wholesale_line_of_golden_example() {
-        final OrderLine line = pricer.price(Market.MX, wholesaleClient(Market.MX),
+        final OrderLine line = pricer.price(Markets.MX, DomainFixtures.digits(Markets.MX),
+                wholesaleClient(Markets.MX),
                 item("PRD-001", 24, "35.5"), product("PRD-001", TaxCategory.STANDARD));
 
         assertThat(line.amounts()).isEqualTo(new LineAmounts(Money.of("852.00"),
@@ -39,10 +41,11 @@ class LinePricerTest {
 
     @Test
     void should_price_undiscounted_line_of_golden_example() {
-        final OrderLine line = pricer.price(Market.MX, wholesaleClient(Market.MX),
+        final OrderLine line = pricer.price(Markets.MX, DomainFixtures.digits(Markets.MX),
+                wholesaleClient(Markets.MX),
                 item("PRD-008", 12, "82.0"), product("PRD-008", TaxCategory.STANDARD));
 
-        assertThat(line.amounts().discount()).isEqualTo(Money.ZERO);
+        assertThat(line.amounts().discount()).isEqualTo(Money.zero(2));
         assertThat(line.amounts().taxAmount()).isEqualTo(Money.of("157.44"));
         assertThat(line.amounts().lineTotal()).isEqualTo(Money.of("1141.44"));
     }
@@ -58,7 +61,8 @@ class LinePricerTest {
                                             final String gross, final String discount,
                                             final String net, final String tax,
                                             final String total) {
-        final LineAmounts amounts = pricer.price(Market.MX, wholesaleClient(Market.MX),
+        final LineAmounts amounts = pricer.price(Markets.MX, DomainFixtures.digits(Markets.MX),
+                wholesaleClient(Markets.MX),
                 item("PRD-X", quantity, unitPrice), product("PRD-X", TaxCategory.STANDARD))
                 .amounts();
 
@@ -71,7 +75,8 @@ class LinePricerTest {
 
     @Test
     void should_not_discount_retail_and_use_reduced_rate() {
-        final LineAmounts amounts = pricer.price(Market.PE, retailClient(Market.PE),
+        final LineAmounts amounts = pricer.price(Markets.PE, DomainFixtures.digits(Markets.PE),
+                retailClient(Markets.PE),
                 item("PRD-010", 30, "4.25"), product("PRD-010", TaxCategory.REDUCED)).amounts();
 
         assertThat(amounts.discountRate().value()).isZero();
@@ -82,8 +87,8 @@ class LinePricerTest {
 
     @Test
     void should_not_tax_exempt_client_even_with_standard_product() {
-        final LineAmounts amounts = pricer.price(Market.CO,
-                client(Market.CO, ClientSegment.WHOLESALE, TaxRegime.EXEMPT, ClientStatus.ACTIVE),
+        final LineAmounts amounts = pricer.price(Markets.CO, 2,
+                client(Markets.CO, ClientSegment.WHOLESALE, TaxRegime.EXEMPT, ClientStatus.ACTIVE),
                 item("PRD-006", 20, "10.00"), product("PRD-006", TaxCategory.STANDARD)).amounts();
 
         assertThat(amounts.taxRate().value()).isZero();

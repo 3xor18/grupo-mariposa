@@ -49,6 +49,11 @@ export const ERROR_CATALOG: Readonly<Record<ErrorCode, ErrorDefinition>> = Objec
     'Method not allowed',
     'The HTTP method is not supported by this resource',
   ),
+  [ErrorCode.PRECONDITION_FAILED]: definition(
+    HttpStatus.PRECONDITION_FAILED,
+    'Precondition failed',
+    'The resource version does not match If-Match',
+  ),
   [ErrorCode.RATE_LIMITED]: definition(
     HttpStatus.TOO_MANY_REQUESTS,
     'Too many requests',
@@ -77,6 +82,7 @@ export const HTTP_STATUS_ERROR_CODES: ReadonlyMap<number, ErrorCode> = new Map([
   [HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN],
   [HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND],
   [HttpStatus.METHOD_NOT_ALLOWED, ErrorCode.METHOD_NOT_ALLOWED],
+  [HttpStatus.PRECONDITION_FAILED, ErrorCode.PRECONDITION_FAILED],
   [HttpStatus.TOO_MANY_REQUESTS, ErrorCode.RATE_LIMITED],
   [HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR],
   [HttpStatus.BAD_GATEWAY, ErrorCode.BAD_GATEWAY],

@@ -1,6 +1,6 @@
 import 'package:order_tracker/core/money/money.dart';
 import 'package:order_tracker/core/money/unit_price.dart';
-import 'package:order_tracker/features/orders/domain/entities/market.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_line.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
@@ -110,11 +110,11 @@ Map<String, Object?> orderPageJson({int page = 0, int totalPages = 2}) => {
 
 final processedAt = DateTime.utc(2026, 9, 18, 15, 42, 12);
 
-Money mxn(String amount) => Money.parse(amount, currency: 'MXN');
+Money mxn(String amount) => Money.parse(amount, currency: 'MXN', fractionDigits: 2);
 
-Money cop(String amount) => Money.parse(amount, currency: 'COP');
+Money cop(String amount) => Money.parse(amount, currency: 'COP', fractionDigits: 2);
 
-Money pen(String amount) => Money.parse(amount, currency: 'PEN');
+Money pen(String amount) => Money.parse(amount, currency: 'PEN', fractionDigits: 2);
 
 final approvedTotals = OrderTotals(
   grossSubtotal: mxn('1836'),
@@ -130,7 +130,7 @@ final detailedLine = OrderLine(
   sku: 'BEB-600-PET',
   taxCategory: 'STANDARD',
   quantity: 24,
-  unitPrice: UnitPrice.parse('35.5', currency: 'MXN'),
+  unitPrice: UnitPrice.parse('35.5', currency: 'MXN', currencyDigits: 2),
   grossSubtotal: mxn('852'),
   discountRate: 0.03,
   discount: mxn('25.56'),
@@ -143,7 +143,7 @@ final detailedLine = OrderLine(
 final bareLine = OrderLine(
   productId: 'PRD-008',
   quantity: 12,
-  unitPrice: UnitPrice.parse('82', currency: 'MXN'),
+  unitPrice: UnitPrice.parse('82', currency: 'MXN', currencyDigits: 2),
 );
 
 OrderTotals zeroTotals(Money Function(String amount) money) => OrderTotals(
@@ -158,7 +158,7 @@ Order approvedOrder() => Order(
   orderId: approvedOrderId,
   eventVersion: 1,
   status: OrderStatus.approved,
-  market: Market.mx,
+  market: const MarketCode('MX'),
   currency: 'MXN',
   channel: 'C1',
   client: const OrderClient(
@@ -181,14 +181,14 @@ Order rejectedOrder() => Order(
   orderId: rejectedOrderId,
   eventVersion: 1,
   status: OrderStatus.rejected,
-  market: Market.co,
+  market: const MarketCode('CO'),
   currency: 'COP',
   client: const OrderClient(clientId: 'CLI-20002'),
   lines: [
     OrderLine(
       productId: 'PRD-007',
       quantity: 3,
-      unitPrice: UnitPrice.parse('4500', currency: 'COP'),
+      unitPrice: UnitPrice.parse('4500', currency: 'COP', currencyDigits: 2),
     ),
   ],
   totals: OrderTotals(
@@ -215,7 +215,7 @@ Order failedOrder() => Order(
   orderId: failedOrderId,
   eventVersion: 2,
   status: OrderStatus.technicalFailure,
-  market: Market.pe,
+  market: const MarketCode('PE'),
   currency: 'PEN',
   client: const OrderClient(clientId: 'CLI-40002'),
   lines: const [],
@@ -229,10 +229,14 @@ Order failedOrder() => Order(
   processedAt: DateTime.utc(2026, 9, 18, 17, 0, 30),
 );
 
-OrderSummary summary(String orderId, {OrderStatus status = OrderStatus.approved}) => OrderSummary(
+OrderSummary summary(
+  String orderId, {
+  OrderStatus status = OrderStatus.approved,
+  MarketCode market = const MarketCode('MX'),
+}) => OrderSummary(
   orderId: orderId,
   status: status,
-  market: Market.mx,
+  market: market,
   clientId: 'CLI-99821',
   eventVersion: 1,
   grandTotal: mxn('2100.11'),

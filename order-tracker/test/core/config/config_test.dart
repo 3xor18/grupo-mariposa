@@ -5,9 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:mocktail/mocktail.dart';
 import 'package:order_tracker/core/config/app_config.dart';
+import 'package:order_tracker/core/config/config_load_exception.dart';
 import 'package:order_tracker/core/config/config_loader.dart';
 import 'package:order_tracker/core/json/json_map.dart';
 
+import '../../fixtures/market_fixtures.dart';
 import '../../helpers/mocks.dart';
 
 void main() {
@@ -17,6 +19,7 @@ void main() {
     realm: 'mariposa',
     clientId: 'order-tracker',
     redirectUri: 'http://localhost:8090/',
+    catalog: testCatalog,
     enableSemantics: true,
   );
   final appUri = Uri.parse('http://localhost:8090/?code=abc');
@@ -26,12 +29,13 @@ void main() {
   group('AppConfig', () {
     test('should parse the runtime configuration', () {
       final parsed = AppConfig.fromJson(
-        const JsonMap({
+        JsonMap({
           'apiBaseUrl': '/api',
           'keycloakUrl': 'http://localhost:8180/',
           'realm': 'mariposa',
           'clientId': 'order-tracker',
           'redirectUri': 'http://localhost:8090/',
+          ...testCatalogJson(),
           'enableSemantics': true,
         }),
       );
@@ -40,12 +44,13 @@ void main() {
 
     test('should keep semantics disabled unless configured', () {
       final parsed = AppConfig.fromJson(
-        const JsonMap({
+        JsonMap({
           'apiBaseUrl': '/api',
           'keycloakUrl': 'http://localhost:8180',
           'realm': 'mariposa',
           'clientId': 'order-tracker',
           'redirectUri': 'http://localhost:8090/',
+          ...testCatalogJson(),
         }),
       );
       expect(parsed.enableSemantics, isFalse);
@@ -56,6 +61,18 @@ void main() {
       expect(config.issuerUri.toString(), 'http://localhost:8180/realms/mariposa');
       expect(config.apiBaseUri(appUri: appUri).toString(), 'http://localhost:8090/api');
     });
+  });
+
+  test('should describe load failures', () {
+    final error = const ConfigLoadException(
+      ConfigLoadFailure.invalidMarketCatalog,
+      detail: 'Duplicated market MX',
+    ).at(Uri.parse('http://localhost:8090/config.json'));
+    expect(
+      '$error',
+      'ConfigLoadException(invalidMarketCatalog, http://localhost:8090/config.json, '
+          'Duplicated market MX)',
+    );
   });
 
   group('ConfigLoader', () {
@@ -80,9 +97,11 @@ void main() {
             'realm': 'mariposa',
             'clientId': 'order-tracker',
             'redirectUri': 'http://localhost:8090/',
+            ...testCatalogJson(),
             'enableSemantics': true,
           }),
           200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
         ),
       );
       expect(await loader.load(appUri: appUri, cacheBuster: '42'), config);
@@ -90,11 +109,17 @@ void main() {
       expect(uri.toString(), 'http://localhost:8090/config.json?v=42');
     });
 
+    Matcher failsWith(ConfigLoadFailure failure) {
+      return throwsA(
+        isA<ConfigLoadException>().having((error) => error.failure, 'failure', failure),
+      );
+    }
+
     test('should fail when the file is missing', () async {
       respond(http.Response('', 404));
       await expectLater(
         loader.load(appUri: appUri, cacheBuster: '1'),
-        throwsA(isA<ConfigLoadException>()),
+        failsWith(ConfigLoadFailure.unavailable),
       );
     });
 
@@ -102,7 +127,35 @@ void main() {
       respond(http.Response('{"realm": 1}', 200));
       await expectLater(
         loader.load(appUri: appUri, cacheBuster: '1'),
-        throwsA(isA<ConfigLoadException>()),
+        failsWith(ConfigLoadFailure.malformed),
+      );
+    });
+
+    test('should reject a market catalog that breaks the shared grammar', () async {
+      final json = {
+        'apiBaseUrl': '/api',
+        'keycloakUrl': 'http://localhost:8180/',
+        'realm': 'mariposa',
+        'clientId': 'order-tracker',
+        'redirectUri': 'http://localhost:8090/',
+        ...testCatalogJson(),
+        'currencies': {'MXN': 2},
+      };
+      respond(
+        http.Response(
+          jsonEncode(json),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        ),
+      );
+      await expectLater(
+        loader.load(appUri: appUri, cacheBuster: '1'),
+        throwsA(
+          isA<ConfigLoadException>()
+              .having((error) => error.failure, 'failure', ConfigLoadFailure.invalidMarketCatalog)
+              .having((error) => error.uri?.path, 'path', '/config.json')
+              .having((error) => error.detail, 'detail', contains('COP')),
+        ),
       );
     });
 
@@ -111,7 +164,7 @@ void main() {
       when(() => httpClient.get(any())).thenAnswer((_) => Completer<http.Response>().future);
       await expectLater(
         slowLoader.load(appUri: appUri, cacheBuster: '1'),
-        throwsA(isA<ConfigLoadException>()),
+        failsWith(ConfigLoadFailure.unavailable),
       );
     });
 
@@ -121,7 +174,7 @@ void main() {
         loader.load(appUri: appUri, cacheBuster: '1'),
         throwsA(
           isA<ConfigLoadException>().having(
-            (error) => error.uri.path,
+            (error) => error.uri?.path,
             'path',
             '/config.json',
           ),

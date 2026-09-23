@@ -3,6 +3,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AddressInfo } from 'node:net';
 import { ErrorCode } from '../src/shared/errors/error-code.enum';
+import { DATABASE_HEALTH } from '../src/shared/mongo/mongo.tokens';
 import { SHUTTING_DOWN_DETAIL } from '../src/shared/fault-injection/fault-injection.interceptor';
 import { TestIdentityProvider } from './support/identity-provider';
 import { createTestApp, NO_AUTH, testConfig } from './support/test-app';
@@ -105,6 +106,22 @@ describe('api docs gate', () => {
     await request(server).get('/docs').expect(404);
 
     expect(json.body).toMatchObject({ code: ErrorCode.NOT_FOUND });
+    await app.close();
+  });
+});
+
+describe('readiness with an unavailable database', () => {
+  it('should_report_down_when_the_database_ping_fails', async () => {
+    const app = await createTestApp(
+      { ...testConfig('http://unused'), auth: NO_AUTH },
+      { token: DATABASE_HEALTH, value: { isHealthy: () => Promise.resolve(false) } },
+    );
+    const server = app.getHttpServer() as App;
+
+    const response = await request(server).get('/health/ready').expect(503);
+    await request(server).get('/health/live').expect(200);
+
+    expect(response.body).toEqual({ status: 'DOWN' });
     await app.close();
   });
 });

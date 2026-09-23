@@ -1,4 +1,5 @@
 import 'package:order_tracker/core/error/app_failure.dart';
+import 'package:order_tracker/core/markets/market_catalog.dart';
 import 'package:order_tracker/core/result/result.dart';
 import 'package:order_tracker/features/orders/data/datasources/orders_api.dart';
 import 'package:order_tracker/features/orders/data/mappers/order_codes.dart';
@@ -9,13 +10,14 @@ import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart
 import 'package:order_tracker/features/orders/domain/repositories/order_repository.dart';
 
 final class OrderRepositoryImpl implements OrderRepository {
-  const OrderRepositoryImpl(this._api);
+  const OrderRepositoryImpl(this._api, this._catalog);
 
   final OrdersApi _api;
+  final MarketCatalog _catalog;
 
   @override
   Future<Result<Order>> findById(String orderId) async {
-    return _toDomain(await _api.getOrder(orderId), (dto) => dto.toDomain());
+    return _toDomain(await _api.getOrder(orderId), (dto) => dto.toDomain(_catalog));
   }
 
   @override
@@ -31,12 +33,9 @@ final class OrderRepositoryImpl implements OrderRepository {
         final status? => OrderStatusCodes.toCode(status),
         null => null,
       },
-      market: switch (filter.market) {
-        final market? => MarketCodes.toCode(market),
-        null => null,
-      },
+      market: filter.market?.value,
     );
-    return _toDomain(result, (dto) => dto.toDomain());
+    return _toDomain(result, (dto) => dto.toDomain(_catalog));
   }
 
   Result<T> _toDomain<D, T>(Result<D> result, T Function(D dto) map) {

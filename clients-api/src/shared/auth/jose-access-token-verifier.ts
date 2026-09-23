@@ -2,6 +2,7 @@ import { JWTPayload, JWTVerifyGetKey, JWTVerifyOptions, jwtVerify } from 'jose';
 import { EnabledAuthConfig } from '../../config/app-config';
 import { ErrorCode } from '../errors/error-code.enum';
 import { ProblemException } from '../errors/problem.exception';
+import { AccessRole } from './access-role';
 import { AccessTokenVerifier } from './access-token-verifier';
 import { IdentityProviderUnavailableError, isTokenError } from './guarded-key-source';
 import { Principal } from './principal';
@@ -85,12 +86,19 @@ export class JoseAccessTokenVerifier implements AccessTokenVerifier {
     };
   }
 
-  async authenticate(authorizationHeader: string | undefined): Promise<Principal> {
+  async authenticate(
+    authorizationHeader: string | undefined,
+    requiredRole: AccessRole = AccessRole.READER,
+  ): Promise<Principal> {
     const payload = await this.verify(extractBearerToken(authorizationHeader));
-    if (!hasRealmRole(payload, this.settings.requiredRole)) {
+    if (!hasRealmRole(payload, this.roleNameOf(requiredRole))) {
       throw new ProblemException(ErrorCode.FORBIDDEN, AUTH_MESSAGES.missingRole);
     }
     return principalOf(payload);
+  }
+
+  private roleNameOf(role: AccessRole): string {
+    return role === AccessRole.ADMIN ? this.settings.adminRole : this.settings.requiredRole;
   }
 
   private async verify(token: string): Promise<JWTPayload> {

@@ -65,7 +65,7 @@ public final class MongoOrderQueryRepository implements OrderQueryRepository {
     private static Criteria filterOf(final OrderSearchCriteria criteria) {
         final Criteria filter = new Criteria();
         criteria.statusFilter().ifPresent(status -> filter.and(Fields.STATUS).is(status.name()));
-        criteria.marketFilter().ifPresent(market -> filter.and(Fields.MARKET).is(market.name()));
+        criteria.marketFilter().ifPresent(market -> filter.and(Fields.MARKET).is(market.value()));
         return filter;
     }
 }

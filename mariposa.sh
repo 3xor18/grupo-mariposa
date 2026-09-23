@@ -16,6 +16,11 @@ readonly CONSUME_TIMEOUT_MS=5000
 readonly KEYCLOAK_TOKEN_PATH=/realms/mariposa/protocol/openid-connect/token
 readonly TOKEN_CLIENT_ID=orders-cli
 readonly DEFAULT_USER=analyst
+readonly ADMIN_USER=admin
+readonly CLIENTS_API_URL=http://localhost:8082
+readonly CLIENT_ID_PATTERN='^CLI-[A-Z0-9]{1,20}$'
+readonly CLIENT_ACTIVE=ACTIVE
+readonly CLIENT_BLOCKED=BLOCKED
 readonly FLUTTER_VERSION=3.44.0
 readonly FLUTTER_IMAGE="ghcr.io/cirruslabs/flutter:${FLUTTER_VERSION}"
 readonly SHOW_SECRETS_FLAG=--show-secrets
@@ -23,7 +28,8 @@ readonly SECRET_LENGTH=32
 readonly SECRET_ENTROPY_BYTES=48
 readonly AES_KEY_BYTES=32
 readonly DEFAULT_MONGO_QUERY='db.orders.find().sort({processedAt:-1}).limit(5).toArray()'
-readonly SECRET_KEYS=(MONGO_ROOT_PASSWORD MONGO_APP_PASSWORD REDIS_PASSWORD
+readonly SECRET_KEYS=(MONGO_ROOT_PASSWORD MONGO_APP_PASSWORD MONGO_CLIENTS_PASSWORD
+  MONGO_PRODUCTS_PASSWORD REDIS_PASSWORD
   KEYCLOAK_ADMIN_PASSWORD ORDER_PROCESSOR_CLIENT_SECRET DEMO_USER_PASSWORD
   GRAFANA_ADMIN_PASSWORD CONFIG_SERVER_PASSWORD)
 
@@ -54,16 +60,38 @@ require_env_file() {
   fi
 }
 
+append_missing_keys() {
+  local line key added=0
+  while IFS= read -r line; do
+    [[ "${line}" =~ ^([A-Z0-9_]+)= ]] || continue
+    key="${BASH_REMATCH[1]}"
+    grep -q -E "^${key}=" "${ENV_FILE}" && continue
+    printf '%s\n' "${line}" >> "${ENV_FILE}"
+    added=$((added + 1))
+  done < "${ENV_TEMPLATE}"
+  echo "${added}"
+}
+
+fill_empty_secrets() {
+  local key
+  for key in "${SECRET_KEYS[@]}"; do
+    [[ -z "$(env_value "${key}")" ]] && set_env_value "${key}" "$(random_secret)"
+  done
+  [[ -z "$(env_value PII_ENCRYPTION_KEY)" ]] && set_env_value PII_ENCRYPTION_KEY "$(random_aes_key)"
+  return 0
+}
+
 cmd_init() {
+  umask 077
   if [[ -f "${ENV_FILE}" ]]; then
-    echo ".env ya existe; no se regenera."
+    local added
+    added="$(append_missing_keys)"
+    fill_empty_secrets
+    echo ".env ya existe; se agregaron ${added} variables nuevas de .env.example."
     return
   fi
-  umask 077
   cp "${ENV_TEMPLATE}" "${ENV_FILE}"
-  local key
-  for key in "${SECRET_KEYS[@]}"; do set_env_value "${key}" "$(random_secret)"; done
-  set_env_value PII_ENCRYPTION_KEY "$(random_aes_key)"
+  fill_empty_secrets
   echo ".env generado con secretos aleatorios."
 }
 
@@ -142,6 +170,32 @@ cmd_token() {
     | sed -E 's/.*"access_token":"([^"]+)".*/\1/'
 }
 
+client_etag() {
+  local token="$1" client_id="$2" response
+  response="$(curl -s -i -H "Authorization: Bearer ${token}" \
+    "${CLIENTS_API_URL}/clients/${client_id}")"
+  awk 'tolower($1) == "etag:" { print $2 }' <<< "${response}" | tr -d '\r'
+}
+
+cmd_client_status() {
+  local status="$1" client_id="${2:-}"
+  if [[ ! "${client_id}" =~ ${CLIENT_ID_PATTERN} ]]; then
+    echo "Uso: ./mariposa.sh block-client|unblock-client <CLI-...>" >&2
+    exit 1
+  fi
+  local token etag
+  token="$(cmd_token "${ADMIN_USER}")"
+  etag="$(client_etag "${token}" "${client_id}")"
+  if [[ -z "${etag}" ]]; then
+    echo "No se encontró ${client_id} o clients-api no respondió" >&2
+    exit 1
+  fi
+  curl -s --fail-with-body -X PATCH "${CLIENTS_API_URL}/clients/${client_id}" \
+    -H "Authorization: Bearer ${token}" -H "If-Match: ${etag}" \
+    -H 'Content-Type: application/json' -d "{\"status\":\"${status}\"}"
+  echo
+}
+
 cmd_mongo() {
   local query="${1:-${DEFAULT_MONGO_QUERY}}"
   local script="db.getSiblingDB('admin').auth(process.env.MONGO_INITDB_ROOT_USERNAME,
@@ -184,6 +238,8 @@ Uso: ./mariposa.sh <comando>
   scenarios            publica todos los escenarios de samples/events
   consume [tópico]     lee ${DEFAULT_CONSUME_TOPIC} (o el tópico indicado)
   token [usuario]      obtiene un access token (${DEFAULT_USER} por defecto)
+  block-client <id>    bloquea un cliente con PATCH + If-Match (demo de invalidación de caché)
+  unblock-client <id>  reactiva un cliente bloqueado
   mongo [expresión]    consulta la base orders
   test                 corre las pruebas de los componentes
   e2e                  corre Karate + Playwright contra la plataforma levantada
@@ -206,6 +262,8 @@ main() {
     scenarios) cmd_scenarios ;;
     consume) cmd_consume "$@" ;;
     token) cmd_token "$@" ;;
+    block-client) cmd_client_status "${CLIENT_BLOCKED}" "$@" ;;
+    unblock-client) cmd_client_status "${CLIENT_ACTIVE}" "$@" ;;
     mongo) cmd_mongo "$@" ;;
     test) cmd_test ;;
     e2e) cmd_e2e ;;

@@ -10,6 +10,8 @@ FAILED=0
 REQUIRED_ORDERS="ORDERS_API_URL=http://orders:8080"
 REQUIRED_KEYCLOAK="KEYCLOAK_URL=http://sso:8180"
 REQUIRED_REDIRECT="REDIRECT_URI=http://app:8090/"
+REQUIRED_MARKETS="PLATFORM_MARKETS=MX:MXN:es-MX,CL:CLP:es-CL"
+REQUIRED_CURRENCIES="PLATFORM_CURRENCIES=MXN:2,CLP:0"
 
 trap 'rm -rf "$WORK"' EXIT
 
@@ -48,6 +50,9 @@ keycloak.client-id : tracker-docker
 redirect-uri: https\://tracker.example.com\:8443/
 enable-semantics: true
 hsts-max-age: 31536000
+platform.markets: MX\:MXN\:es-MX,CO:COP:es-CO,PE:PEN:es-PE,CL:CLP:es-CL,EC:USD:es-EC
+platform.currencies: MXN:2,COP:2,PEN:2,CLP:0,USD:2
+market-names: MX:México,CO:Colombia,PE:Perú,CL:Chile,EC:Ecuador
 escaped\:key: ignored
 unknown.key: ignored
 no-separator-line
@@ -64,7 +69,8 @@ run_case() {
 }
 
 run_local() {
-  run_case "$REQUIRED_ORDERS" "$REQUIRED_KEYCLOAK" "$REQUIRED_REDIRECT" "$@"
+  run_case "$REQUIRED_ORDERS" "$REQUIRED_KEYCLOAK" "$REQUIRED_REDIRECT" \
+    "$REQUIRED_MARKETS" "$REQUIRED_CURRENCIES" "$@"
 }
 
 status_of() {
@@ -107,6 +113,56 @@ test_required_values_have_no_defaults() {
     "$(status_of run_case "$REQUIRED_KEYCLOAK" "$REQUIRED_REDIRECT")" "1"
   check "missing redirect" \
     "$(status_of run_case "$REQUIRED_ORDERS" "$REQUIRED_KEYCLOAK")" "1"
+  check "missing currencies" "$(status_of run_case "$REQUIRED_ORDERS" "$REQUIRED_KEYCLOAK" \
+    "$REQUIRED_REDIRECT" "$REQUIRED_MARKETS")" "1"
+  check "reports missing catalog" \
+    "$(grep -c 'PLATFORM_CURRENCIES is required' "$WORK/stderr")" "1"
+  check "missing markets" "$(status_of run_case "$REQUIRED_ORDERS" "$REQUIRED_KEYCLOAK" \
+    "$REQUIRED_REDIRECT" "$REQUIRED_CURRENCIES")" "1"
+}
+
+test_market_catalog_from_config_server() {
+  run_case CONFIG_SERVER_URL=http://config:8888 CONFIG_PROFILE=docker
+  expected_markets='"markets": [{"code":"MX","currency":"MXN","locale":"es-MX","name":"México"},'
+  check "catalog markets json" "$(grep -cF "$expected_markets" "$WORK/out/config.json")" "1"
+  check "catalog shared currency" \
+    "$(grep -cF '{"code":"EC","currency":"USD","locale":"es-EC","name":"Ecuador"}]' \
+      "$WORK/out/config.json")" "1"
+  check "catalog currencies json" \
+    "$(grep -cF '"currencies": {"MXN":2,"COP":2,"PEN":2,"CLP":0,"USD":2}' \
+      "$WORK/out/config.json")" "1"
+}
+
+test_market_names_are_optional() {
+  run_local
+  check "name falls back to code" \
+    "$(grep -cF '{"code":"CL","currency":"CLP","locale":"es-CL","name":"CL"}' \
+      "$WORK/out/config.json")" "1"
+  run_local MARKET_NAMES='CL: Chile ,BR:Brasil'
+  check "names trimmed and unknown ignored" \
+    "$(grep -cF '{"code":"CL","currency":"CLP","locale":"es-CL","name":"Chile"}' \
+      "$WORK/out/config.json")" "1"
+}
+
+test_invalid_catalogs_are_rejected() {
+  check "lowercase market" "$(status_of run_local PLATFORM_MARKETS=mx:MXN:es-MX)" "1"
+  check "missing locale" "$(status_of run_local PLATFORM_MARKETS=MX:MXN)" "1"
+  check "language only locale" "$(status_of run_local PLATFORM_MARKETS=MX:MXN:es)" "1"
+  check "underscore locale" "$(status_of run_local PLATFORM_MARKETS=MX:MXN:es_MX)" "1"
+  check "duplicated market" \
+    "$(status_of run_local PLATFORM_MARKETS=MX:MXN:es-MX,MX:MXN:es-MX)" "1"
+  check "reports duplicated market" \
+    "$(grep -c 'declares MX more than once' "$WORK/stderr")" "1"
+  check "digits out of range" "$(status_of run_local PLATFORM_CURRENCIES=MXN:2,CLP:9)" "1"
+  check "undeclared currency" \
+    "$(status_of run_local PLATFORM_MARKETS=MX:MXN:es-MX,EC:USD:es-EC)" "1"
+  check "reports undeclared currency" \
+    "$(grep -c 'uses USD, which is missing' "$WORK/stderr")" "1"
+  check "quote in name" "$(status_of run_local MARKET_NAMES='MX:Mé"xico')" "1"
+  check "semicolon in name" "$(status_of run_local MARKET_NAMES='MX:México;')" "1"
+  check "backslash in name" "$(status_of run_local MARKET_NAMES='MX:Mé\xico')" "1"
+  tab=$(printf '\t')
+  check "control character in name" "$(status_of run_local MARKET_NAMES="MX:Mé${tab}x")" "1"
 }
 
 test_values_from_config_server() {
@@ -193,6 +249,9 @@ write_properties
 test_defaults_without_config_server
 test_required_values_have_no_defaults
 test_values_from_config_server
+test_market_catalog_from_config_server
+test_market_names_are_optional
+test_invalid_catalogs_are_rejected
 test_absolute_api_base_joins_csp
 test_explicit_environment_wins
 test_retries_until_success

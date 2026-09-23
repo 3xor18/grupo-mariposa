@@ -4,8 +4,10 @@ import static com.grupomariposa.orders.domain.DomainFixtures.rates;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
+import com.grupomariposa.orders.domain.Markets;
 import java.math.BigDecimal;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -16,19 +18,19 @@ class PricingRulesTest {
 
     @Test
     void should_look_up_configured_rates() {
-        final TaxRateTable table = new TaxRateTable(Map.of(Market.CO, rates(19, 5, 0)));
+        final TaxRateTable table = new TaxRateTable(Map.of(Markets.CO, rates(19, 5, 0)));
 
-        assertThat(table.rateFor(Market.CO, TaxCategory.REDUCED)).isEqualTo(Rate.ofPercent(5));
-        assertThat(table.covers(List.of(Market.CO))).isTrue();
-        assertThat(table.covers(List.of(Market.CO, Market.PE))).isFalse();
+        assertThat(table.rateFor(Markets.CO, TaxCategory.REDUCED)).isEqualTo(Rate.ofPercent(5));
+        assertThat(table.covers(List.of(Markets.CO))).isTrue();
+        assertThat(table.covers(List.of(Markets.CO, Markets.PE))).isFalse();
     }
 
     @Test
     void should_reject_lookups_for_unconfigured_markets() {
-        final TaxRateTable table = new TaxRateTable(Map.of(Market.CO, rates(19, 5, 0)));
+        final TaxRateTable table = new TaxRateTable(Map.of(Markets.CO, rates(19, 5, 0)));
 
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> table.rateFor(Market.MX, TaxCategory.STANDARD))
+                .isThrownBy(() -> table.rateFor(Markets.MX, TaxCategory.STANDARD))
                 .withMessage("No tax rates configured for market MX");
     }
 
@@ -36,10 +38,10 @@ class PricingRulesTest {
     void should_reject_empty_or_incomplete_tables() {
         final Map<TaxCategory, Rate> partial = new EnumMap<>(TaxCategory.class);
         partial.put(TaxCategory.STANDARD, Rate.ofPercent(16));
-        final Map<Market, Map<TaxCategory, Rate>> missingCategories = new EnumMap<>(Market.class);
-        missingCategories.put(Market.MX, partial);
-        final Map<Market, Map<TaxCategory, Rate>> nullCategories = new EnumMap<>(Market.class);
-        nullCategories.put(Market.MX, null);
+        final Map<MarketCode, Map<TaxCategory, Rate>> missingCategories = new HashMap<>();
+        missingCategories.put(Markets.MX, partial);
+        final Map<MarketCode, Map<TaxCategory, Rate>> nullCategories = new HashMap<>();
+        nullCategories.put(Markets.MX, null);
 
         assertThatIllegalArgumentException().isThrownBy(() -> new TaxRateTable(Map.of()));
         assertThatIllegalArgumentException()
@@ -55,9 +57,9 @@ class PricingRulesTest {
         missing.put(TaxCategory.EXEMPT, null);
 
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> new TaxRateTable(Map.of(Market.MX, invalid)));
+                .isThrownBy(() -> new TaxRateTable(Map.of(Markets.MX, invalid)));
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> new TaxRateTable(Map.of(Market.MX, missing)));
+                .isThrownBy(() -> new TaxRateTable(Map.of(Markets.MX, missing)));
     }
 
     @ParameterizedTest

@@ -138,7 +138,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(outbox_pending)"
+          "expr": "sum(outbox_pending{service=\"order-processor\"})"
         }
       ]
     },
@@ -164,7 +164,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(outbox_oldest_age_seconds)"
+          "expr": "max(outbox_oldest_age_seconds{service=\"order-processor\"})"
         }
       ]
     },
@@ -475,6 +475,65 @@
           "refId": "B",
           "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "clients-api"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Invalidaciones de caché por evento de cambio",
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cache, outcome) (rate(orders_cache_invalidations_total[5m]))",
+          "legendFormat": "{{cache}} {{outcome}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Outbox de clients-api y products-api",
+      "gridPos": {
+        "x": 12,
+        "y": 44,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (service) (outbox_oldest_age_seconds{service=~\"clients-api|products-api\"})",
+          "legendFormat": "{{service}} antigüedad (s)"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (service) (outbox_pending{service=~\"clients-api|products-api\"})",
+          "legendFormat": "{{service}} pendientes"
         }
       ]
     }

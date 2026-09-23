@@ -3,3 +3,5 @@ fault:
   rules: CLI-40001:503:2,CLI-40002:503
 api-docs:
   enabled: true
+seed:
+  enabled: true

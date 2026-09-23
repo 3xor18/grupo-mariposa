@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:order_tracker/core/money/money.dart';
-import 'package:order_tracker/features/orders/domain/entities/market.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_line.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
 
@@ -27,7 +27,7 @@ final class Order extends Equatable {
   final String orderId;
   final int eventVersion;
   final OrderStatus status;
-  final Market market;
+  final MarketCode market;
   final String currency;
   final String? channel;
   final OrderClient client;

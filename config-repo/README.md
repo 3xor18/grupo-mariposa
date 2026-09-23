@@ -6,6 +6,7 @@ componentes: `order-processor` (cliente Spring nativo) y `products-api`, `client
 
 | Archivo | Se aplica a |
 |---|---|
+| `application.yml` | todos los servicios: catálogo de mercados y monedas (`platform.*`, ADR 0006) |
 | `application-docker.yml` | todos los clientes Spring con perfil `docker` |
 | `<servicio>.yml` | valores por defecto del servicio |
 | `<servicio>-docker.yml` | Compose local (inyección de fallos activa, tópicos de réplica 1, trazas al 100 %) |
@@ -21,7 +22,8 @@ Reglas:
 - Precedencia en todos los servicios: **variable de entorno > config server > valor por defecto**. Una variable
   definida en los values de Helm oculta el valor de este directorio.
 - Cambiar un parámetro de negocio (tasas de impuesto, descuento) o técnico (timeouts, reintentos, TTL de caché) es
-  un PR sobre este directorio, revisado y auditable, sin recompilar el servicio. Se aplica con un reinicio
+  un PR sobre este directorio, revisado y auditable, sin recompilar el servicio. Aplica a los mercados existentes:
+  agregar un país todavía requiere código (TODO-1 de `docs/roadmap.md`). Se aplica con un reinicio
   progresivo (`kubectl rollout restart`) porque la configuración es inmutable en tiempo de ejecución.
 - En EKS el servidor usa el backend `git` sobre este mismo repositorio (`CONFIG_GIT_URI`, rama `main`,
   `search-paths: config-repo`) con credenciales `CONFIG_GIT_USERNAME` / `CONFIG_GIT_PASSWORD` desde

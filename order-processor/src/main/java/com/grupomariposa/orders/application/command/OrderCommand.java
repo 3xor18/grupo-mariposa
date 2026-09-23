@@ -1,7 +1,7 @@
 package com.grupomariposa.orders.application.command;
 
-import com.grupomariposa.orders.domain.model.Currency;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.CurrencyCode;
+import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.RequestedItem;
 import java.time.Instant;
 import java.util.List;
@@ -11,8 +11,8 @@ public record OrderCommand(
         String eventId,
         int eventVersion,
         String orderId,
-        Market market,
-        Currency currency,
+        MarketCode market,
+        CurrencyCode currency,
         String clientId,
         String channel,
         Instant occurredAt,

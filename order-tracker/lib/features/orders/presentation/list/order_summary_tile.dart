@@ -39,7 +39,7 @@ class OrderSummaryTile extends StatelessWidget {
         subtitle: Text(
           AppStrings.joinDetails([
             summary.clientId,
-            summary.market.label,
+            context.marketName(summary.market),
             formatters.dateTime(summary.processedAt),
           ]),
         ),

@@ -6,3 +6,5 @@ rate-limit:
   burst: 1000
 app:
   env: production
+seed:
+  enabled: false

@@ -1,0 +1,10 @@
+{
+  "eventId": "7c1f2a4e-5b0d-4e39-9a51-0f6f1c2d3e4a",
+  "occurredAt": "2026-09-23T14:10:00Z",
+  "clientId": "CLI-70001",
+  "version": 2,
+  "status": "BLOCKED",
+  "segment": "WHOLESALE",
+  "taxRegime": "GENERAL",
+  "market": "MX"
+}
