@@ -215,6 +215,24 @@
       ]
     },
     {
+      "username": "auditor",
+      "firstName": "Aurelio",
+      "lastName": "Auditor",
+      "email": "auditor@grupomariposa.dev",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "orders-admin"
+      ]
+    },
+    {
       "username": "viewer",
       "firstName": "Sin",
       "lastName": "Permisos",
