@@ -12,6 +12,7 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule.forRoot(config), {
     bufferLogs: true,
     forceCloseConnections: true,
+    abortOnError: false,
   });
   configureApp(app);
   app.enableShutdownHooks();

@@ -145,6 +145,16 @@ spec:
       ports:
         - port: http
     {{- end }}
+    {{- with .Values.networkPolicy.allowedNamespaces }}
+    - from:
+        {{- range . }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
+      ports:
+        - port: http
+    {{- end }}
     {{- with .Values.networkPolicy.allowedCidrs }}
     - from:
         {{- range . }}

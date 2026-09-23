@@ -8,7 +8,7 @@ public record ClientProfile(
         ClientStatus status,
         ClientSegment segment,
         TaxRegime taxRegime,
-        Market market) {
+        MarketCode market) {
 
     public ClientProfile {
         Objects.requireNonNull(clientId, "clientId");

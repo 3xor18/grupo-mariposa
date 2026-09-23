@@ -29,8 +29,8 @@
     "orderId": { "type": "string", "minLength": 1 },
     "clientId": { "type": "string" },
     "status": { "type": "string", "enum": ["APPROVED", "REJECTED"] },
-    "market": { "type": "string", "enum": ["MX", "CO", "PE"] },
-    "currency": { "type": "string", "enum": ["MXN", "COP", "PEN"] },
+    "market": { "type": "string", "pattern": "^[A-Z]{2}$" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
     "totals": {
       "type": "object",
       "required": ["grossSubtotal", "discount", "netSubtotal", "tax", "grandTotal"],

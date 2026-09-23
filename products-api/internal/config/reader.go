@@ -12,8 +12,10 @@ import (
 )
 
 const (
-	floatBits = 64
-	MaxInt    = math.MaxInt32
+	floatBits  = 64
+	MaxInt     = math.MaxInt32
+	daySuffix  = "d"
+	hoursInDay = 24
 )
 
 var (
@@ -68,6 +70,23 @@ func (r *Reader) Millis(key string, fallback int) time.Duration {
 
 func (r *Reader) OptionalMillis(key string, fallback int) time.Duration {
 	return time.Duration(r.Int(key, fallback, 0, MaxInt)) * time.Millisecond
+}
+
+func (r *Reader) Duration(key, fallback string) time.Duration {
+	raw := r.String(key, fallback)
+	parsed, err := parseDuration(raw)
+	if err != nil || parsed <= 0 {
+		r.Fail(key, errOutOfRange)
+	}
+	return parsed
+}
+
+func parseDuration(raw string) (time.Duration, error) {
+	if days, ok := strings.CutSuffix(raw, daySuffix); ok {
+		count, err := strconv.Atoi(days)
+		return time.Duration(count) * hoursInDay * time.Hour, err
+	}
+	return time.ParseDuration(raw)
 }
 
 func (r *Reader) PositiveFloat(key string, fallback float64) float64 {

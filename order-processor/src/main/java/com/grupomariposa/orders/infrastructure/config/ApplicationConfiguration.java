@@ -18,8 +18,9 @@ import com.grupomariposa.orders.application.service.RecordTechnicalFailureServic
 import com.grupomariposa.orders.application.service.RelaySettings;
 import com.grupomariposa.orders.application.service.VersionArbiter;
 import com.grupomariposa.orders.application.validation.OrderCommandValidator;
+import com.grupomariposa.orders.domain.model.CurrencyCatalog;
 import com.grupomariposa.orders.domain.model.DiscountRule;
-import com.grupomariposa.orders.domain.model.MarketCurrencies;
+import com.grupomariposa.orders.domain.model.MarketCatalog;
 import com.grupomariposa.orders.domain.model.TaxRateTable;
 import com.grupomariposa.orders.domain.policy.EligibilityPolicy;
 import com.grupomariposa.orders.domain.policy.LinePricer;
@@ -60,18 +61,24 @@ public class ApplicationConfiguration {
     }
 
     @Bean
-    public TaxRateTable taxRateTable(final PricingProperties pricing) {
-        return pricing.taxRateTable();
+    public MarketCatalog marketCatalog(final PlatformProperties platform) {
+        return PlatformCatalogParser.parse(platform);
+    }
+
+    @Bean
+    public CurrencyCatalog currencyCatalog(final MarketCatalog markets) {
+        return markets.currencies();
+    }
+
+    @Bean
+    public TaxRateTable taxRateTable(final PricingProperties pricing,
+                                     final MarketCatalog markets) {
+        return pricing.taxRateTable(markets);
     }
 
     @Bean
     public DiscountRule wholesaleDiscountRule(final PricingProperties pricing) {
         return pricing.discountRule();
-    }
-
-    @Bean
-    public MarketCurrencies marketCurrencies(final PricingProperties pricing) {
-        return pricing.markets();
     }
 
     @Bean
@@ -83,14 +90,15 @@ public class ApplicationConfiguration {
     }
 
     @Bean
-    public OrderCommandValidator orderCommandValidator(final MarketCurrencies markets,
+    public OrderCommandValidator orderCommandValidator(final MarketCatalog markets,
                                                        final ValidationProperties validation) {
         return new OrderCommandValidator(markets, validation.rules());
     }
 
     @Bean
-    public OrderAssembler orderAssembler(final TimeProvider timeProvider) {
-        return new OrderAssembler(timeProvider);
+    public OrderAssembler orderAssembler(final TimeProvider timeProvider,
+                                         final CurrencyCatalog currencies) {
+        return new OrderAssembler(timeProvider, currencies);
     }
 
     @Bean(destroyMethod = "close")
@@ -102,9 +110,10 @@ public class ApplicationConfiguration {
     public OrderEnricher orderEnricher(final ClientDirectory clientDirectory,
                                        final ProductCatalog productCatalog,
                                        final ManagedVirtualThreadExecutor lookupExecutor,
-                                       final ProcessingProperties properties) {
+                                       final ProcessingProperties properties,
+                                       final CurrencyCatalog currencies) {
         return new OrderEnricher(clientDirectory, productCatalog, lookupExecutor.executor(),
-                properties.maxConcurrentLookups());
+                properties.maxConcurrentLookups(), currencies);
     }
 
     @Bean

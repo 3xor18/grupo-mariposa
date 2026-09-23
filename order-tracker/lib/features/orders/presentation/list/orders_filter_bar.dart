@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:order_tracker/core/l10n/app_strings.dart';
+import 'package:order_tracker/core/markets/market_catalog.dart';
 import 'package:order_tracker/core/theme/app_tokens.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart';
 import 'package:order_tracker/features/orders/presentation/list/orders_list_bloc.dart';
 import 'package:order_tracker/features/orders/presentation/list/orders_list_event.dart';
@@ -36,10 +38,10 @@ class OrdersFilterBar extends StatelessWidget {
           _ChipGroup(
             label: AppStrings.market,
             chips: [
-              for (final market in MarketPresentation.filterable)
+              for (final market in context.read<MarketCatalog>().markets.map(_codeOf))
                 FilterChip(
                   key: OrdersKeys.marketFilter(market),
-                  label: Text(market.label),
+                  label: Text(context.marketName(market)),
                   selected: filter.market == market,
                   onSelected: (_) => bloc.add(OrdersListMarketToggled(market)),
                 ),
@@ -50,6 +52,8 @@ class OrdersFilterBar extends StatelessWidget {
     );
   }
 }
+
+MarketCode _codeOf(MarketDefinition market) => MarketCode(market.code);
 
 class _ChipGroup extends StatelessWidget {
   const _ChipGroup({required this.label, required this.chips});

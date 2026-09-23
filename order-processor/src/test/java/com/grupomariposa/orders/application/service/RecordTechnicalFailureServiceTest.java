@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.grupomariposa.orders.application.outcome.ProcessingOutcome;
 import com.grupomariposa.orders.application.port.out.OrderStore;
 import com.grupomariposa.orders.application.port.out.ProcessingObserver;
+import com.grupomariposa.orders.domain.DomainFixtures;
 import com.grupomariposa.orders.domain.model.FailureDetails;
 import com.grupomariposa.orders.domain.model.Order;
 import com.grupomariposa.orders.domain.model.OrderStatus;
@@ -26,7 +27,7 @@ class RecordTechnicalFailureServiceTest {
     private final OrderStore store = mock(OrderStore.class);
     private final ProcessingObserver observer = mock(ProcessingObserver.class);
     private final RecordTechnicalFailureService service = new RecordTechnicalFailureService(
-            new OrderAssembler(() -> Instant.EPOCH), store, observer);
+            new OrderAssembler(() -> Instant.EPOCH, DomainFixtures.CURRENCIES), store, observer);
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
@@ -42,7 +43,7 @@ class RecordTechnicalFailureServiceTest {
         final ArgumentCaptor<Order> stored = ArgumentCaptor.forClass(Order.class);
         verify(store).saveTechnicalFailure(stored.capture());
         assertThat(stored.getValue().status()).isEqualTo(OrderStatus.TECHNICAL_FAILURE);
-        assertThat(stored.getValue().totals()).isEqualTo(Totals.ZERO);
+        assertThat(stored.getValue().totals()).isEqualTo(Totals.zero(2));
         assertThat(stored.getValue().failure()).isEqualTo(failure);
         assertThat(stored.getValue().lines()).allSatisfy(line ->
                 assertThat(line.amounts()).isNull());

@@ -36,6 +36,7 @@ class _OrderTrackerAppState extends State<OrderTrackerApp> {
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider.value(value: dependencies.formatters),
+        RepositoryProvider.value(value: dependencies.catalog),
         RepositoryProvider.value(value: dependencies.searchOrder),
         RepositoryProvider.value(value: dependencies.listOrders),
       ],

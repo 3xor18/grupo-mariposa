@@ -6,15 +6,16 @@ import 'package:order_tracker/features/orders/data/dto/order_dto.dart';
 import 'package:order_tracker/features/orders/data/dto/order_page_dto.dart';
 import 'package:order_tracker/features/orders/data/mappers/order_codes.dart';
 import 'package:order_tracker/features/orders/data/mappers/order_mapper.dart';
-import 'package:order_tracker/features/orders/domain/entities/market.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
 
+import '../../../fixtures/market_fixtures.dart';
 import '../../../fixtures/order_fixtures.dart';
 
 void main() {
   group('OrderDto', () {
     test('should parse and map a complete approved order', () {
-      final order = OrderDto.fromJson(JsonMap(approvedOrderJson())).toDomain();
+      final order = OrderDto.fromJson(JsonMap(approvedOrderJson())).toDomain(testCatalog);
       expect(order, approvedOrder());
     });
 
@@ -26,14 +27,14 @@ void main() {
       expect(dto.occurredAt, isNull);
       expect(dto.client.name, isNull);
       expect(dto.lines.single.lineTotal, isNull);
-      expect(dto.toDomain(), rejectedOrder());
+      expect(dto.toDomain(testCatalog), rejectedOrder());
     });
 
     test('should parse and map technical failure details', () {
       final json = minimalOrderJson()
         ..['status'] = 'TECHNICAL_FAILURE'
         ..['failure'] = {'category': 'DEPENDENCY_UNAVAILABLE', 'cause': 'timeout', 'attempts': 5};
-      final order = OrderDto.fromJson(JsonMap(json)).toDomain();
+      final order = OrderDto.fromJson(JsonMap(json)).toDomain(testCatalog);
       expect(order.isTechnicalFailure, isTrue);
       expect(order.failure?.attempts, 5);
       expect(order.failure?.category, 'DEPENDENCY_UNAVAILABLE');
@@ -41,35 +42,41 @@ void main() {
 
     test('should map statuses unknown to this client version to unknown', () {
       final json = approvedOrderJson()..['status'] = 'ON_HOLD';
-      expect(OrderDto.fromJson(JsonMap(json)).toDomain().status, OrderStatus.unknown);
+      expect(OrderDto.fromJson(JsonMap(json)).toDomain(testCatalog).status, OrderStatus.unknown);
     });
 
     test('should parse amounts into money of the order currency', () {
-      final order = OrderDto.fromJson(JsonMap(approvedOrderJson())).toDomain();
-      expect(order.totals.grandTotal, const Money(minorUnits: 210011, currency: 'MXN'));
+      final order = OrderDto.fromJson(JsonMap(approvedOrderJson())).toDomain(testCatalog);
+      expect(
+        order.totals.grandTotal,
+        const Money(minorUnits: 210011, currency: 'MXN', fractionDigits: 2),
+      );
       expect(order.lines.last.unitPrice.tenThousandths, 820000);
       expect(order.eventVersion, 1);
-      expect(order.market, Market.mx);
+      expect(order.market, const MarketCode('MX'));
     });
 
     test('should accept unit prices with four decimals', () {
       final json = approvedOrderJson();
       ((json['lines']! as List<Object?>).first! as Map<String, Object?>)['unitPrice'] = 12.3456;
-      final order = OrderDto.fromJson(JsonMap(json)).toDomain();
-      expect(order.lines.first.unitPrice, UnitPrice.parse('12.3456', currency: 'MXN'));
+      final order = OrderDto.fromJson(JsonMap(json)).toDomain(testCatalog);
+      expect(
+        order.lines.first.unitPrice,
+        UnitPrice.parse('12.3456', currency: 'MXN', currencyDigits: 2),
+      );
     });
 
     test('should reject unit prices with more than four decimals', () {
       final json = approvedOrderJson();
       ((json['lines']! as List<Object?>).first! as Map<String, Object?>)['unitPrice'] = 1.23456;
-      expect(OrderDto.fromJson(JsonMap(json)).toDomain, throwsFormatException);
+      expect(() => OrderDto.fromJson(JsonMap(json)).toDomain(testCatalog), throwsFormatException);
     });
 
     test('should reject amounts with more than two decimals when mapping', () {
       final json = approvedOrderJson();
       (json['totals']! as Map<String, Object?>)['grandTotal'] = 2100.111;
       final dto = OrderDto.fromJson(JsonMap(json));
-      expect(dto.toDomain, throwsFormatException);
+      expect(() => dto.toDomain(testCatalog), throwsFormatException);
     });
 
     test('should reject documents missing required members', () {
@@ -84,7 +91,7 @@ void main() {
 
   group('OrderPageDto', () {
     test('should parse and map a page of summaries', () {
-      final page = OrderPageDto.fromJson(JsonMap(orderPageJson())).toDomain();
+      final page = OrderPageDto.fromJson(JsonMap(orderPageJson())).toDomain(testCatalog);
       expect(page, orderPage(items: [summary(approvedOrderId)], totalPages: 2, totalElements: 21));
       expect(page.hasMore, isTrue);
     });
@@ -97,7 +104,7 @@ void main() {
         ..remove('reason');
       final dto = OrderPageDto.fromJson(JsonMap(json));
       expect(dto.items.single.eventVersion, isNull);
-      expect(dto.toDomain().hasMore, isFalse);
+      expect(dto.toDomain(testCatalog).hasMore, isFalse);
     });
   });
 
@@ -107,9 +114,6 @@ void main() {
       expect(OrderStatusCodes.toCode(OrderStatus.rejected), 'REJECTED');
       expect(OrderStatusCodes.toCode(OrderStatus.technicalFailure), 'TECHNICAL_FAILURE');
       expect(OrderStatusCodes.toCode(OrderStatus.unknown), isNull);
-      expect(Market.values.map(MarketCodes.toCode), ['MX', 'CO', 'PE', null]);
-      expect(MarketCodes.toDomain('BR'), Market.unknown);
-      expect(MarketCodes.toDomain('PE'), Market.pe);
     });
   });
 }

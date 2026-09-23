@@ -18,10 +18,17 @@ func lookupFrom(env map[string]string) config.LookupFunc {
 	}
 }
 
+const (
+	testMongoURI = "mongodb://products:secret@mongo:27017/products?replicaSet=rs0"
+	testBrokers  = "kafka:9092, kafka-2:9092"
+)
+
 func authEnv() map[string]string {
 	return map[string]string{
-		config.EnvAuthIssuer:  "http://localhost:8180/realms/mariposa",
-		config.EnvAuthJWKSURL: "http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs",
+		config.EnvAuthIssuer:     "http://localhost:8180/realms/mariposa",
+		config.EnvAuthJWKSURL:    "http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs",
+		config.EnvMongoURI:       testMongoURI,
+		config.EnvKafkaBootstrap: testBrokers,
 	}
 }
 
@@ -42,14 +49,22 @@ func TestLoadDefaults(t *testing.T) {
 		Auth: config.Auth{
 			Enabled: true, Issuer: authEnv()[config.EnvAuthIssuer], Audience: "products-api",
 			JWKSURL: authEnv()[config.EnvAuthJWKSURL], RequiredRole: "products-reader",
+			AdminRole:   "products-admin",
 			ClockLeeway: 30 * time.Second, JWKSTimeout: 2 * time.Second,
 			JWKSRefresh: time.Hour, JWKSMinimumRefresh: 10 * time.Second,
 		},
-		Faults:          config.Faults{Timeout: 5 * time.Second},
+		Faults: config.Faults{Timeout: 5 * time.Second},
+		Storage: config.Storage{Driver: "mongo", MongoURI: testMongoURI, Database: "products",
+			Timeout: 5 * time.Second},
+		Kafka: config.Kafka{Brokers: []string{"kafka:9092", "kafka-2:9092"},
+			Topic: "products.changed.v1"},
+		Outbox: config.Outbox{Interval: 250 * time.Millisecond, BatchSize: 100,
+			Lease: 30 * time.Second, RetryDelay: time.Second, Retention: 7 * 24 * time.Hour},
 		ProblemTypeBase: "https://contracts.grupomariposa.dev/problems/",
 		LogLevel:        slog.LevelInfo,
 	}
 	assertConfig(t, cfg, want)
+	assertMarkets(t, cfg, "MX,CO,PE,CL,EC")
 }
 
 func TestLoadOverrides(t *testing.T) {
@@ -67,7 +82,7 @@ func TestLoadOverrides(t *testing.T) {
 		},
 		RateLimit: config.RateLimit{RPS: 0.5, Burst: 2, MaxKeys: 3},
 		Auth: config.Auth{
-			Audience: "products-api", RequiredRole: "products-reader",
+			Audience: "products-api", RequiredRole: "products-reader", AdminRole: "catalog-admin",
 			JWKSTimeout: 2 * time.Second, JWKSRefresh: time.Hour,
 			JWKSMinimumRefresh: 10 * time.Second,
 		},
@@ -76,10 +91,28 @@ func TestLoadOverrides(t *testing.T) {
 			Rules:   []fault.Rule{{ID: "PRD-012", Kind: fault.KindServiceUnavailable, Times: 2}},
 			Timeout: 10 * time.Millisecond,
 		},
+		Storage: config.Storage{Driver: "memory", Seed: true, Database: "catalog",
+			Timeout: 7 * time.Millisecond},
+		Kafka: config.Kafka{Topic: "catalog.changed", TLS: true},
+		Outbox: config.Outbox{Interval: time.Millisecond, BatchSize: 5,
+			Lease: 2 * time.Millisecond, RetryDelay: 3 * time.Millisecond,
+			Retention: 90 * time.Minute},
 		ProblemTypeBase: "https://errors.example/",
 		LogLevel:        slog.LevelDebug,
 	}
 	assertConfig(t, cfg, want)
+	assertMarkets(t, cfg, "BR")
+}
+
+func assertMarkets(t *testing.T, cfg config.Config, want string) {
+	t.Helper()
+	codes := make([]string, 0)
+	for _, code := range cfg.Markets.Codes() {
+		codes = append(codes, string(code))
+	}
+	if strings.Join(codes, ",") != want {
+		t.Fatalf("want markets %s, got %v", want, codes)
+	}
 }
 
 func overrideEnv() map[string]string {
@@ -94,6 +127,13 @@ func overrideEnv() map[string]string {
 		config.EnvAuthClockLeewayMS: "0", config.EnvFaultInjectionEnabled: "true",
 		config.EnvFaultRules: "PRD-012:503:2", config.EnvFaultTimeoutMS: "10",
 		config.EnvProblemTypeBaseURL: "https://errors.example/", config.EnvLogLevel: "debug",
+		config.EnvAuthAdminRole: "catalog-admin", config.EnvPlatformMarkets: "BR:BRL:pt-BR",
+		config.EnvStorageDriver: "memory", config.EnvMongoDatabase: "catalog",
+		config.EnvMongoTimeoutMS: "7", config.EnvKafkaTopic: "catalog.changed",
+		config.EnvOutboxIntervalMS: "1", config.EnvOutboxBatchSize: "5",
+		config.EnvOutboxLeaseMS: "2", config.EnvOutboxRetryDelayMS: "3",
+		config.EnvSeedEnabled: "true", config.EnvKafkaTLSEnabled: "true",
+		config.EnvOutboxRetention: "90m", config.EnvPlatformCurrencies: "BRL:2",
 	}
 }
 
@@ -105,9 +145,11 @@ func assertConfig(t *testing.T, got, want config.Config) {
 		t.Fatalf("want %+v %+v, got %+v %+v", want.Auth, want.Faults, got.Auth, got.Faults)
 	}
 	gotScalars := []any{got.Port, got.RequestTimeout, got.Shutdown, got.HTTP, got.RateLimit,
-		got.ProblemTypeBase, got.LogLevel}
+		got.ProblemTypeBase, got.LogLevel, got.Storage, got.Outbox, got.Kafka.Topic,
+		strings.Join(got.Kafka.Brokers, ",")}
 	wantScalars := []any{want.Port, want.RequestTimeout, want.Shutdown, want.HTTP,
-		want.RateLimit, want.ProblemTypeBase, want.LogLevel}
+		want.RateLimit, want.ProblemTypeBase, want.LogLevel, want.Storage, want.Outbox,
+		want.Kafka.Topic, strings.Join(want.Kafka.Brokers, ",")}
 	for i := range wantScalars {
 		if gotScalars[i] != wantScalars[i] {
 			t.Fatalf("field %d: want %+v, got %+v", i, wantScalars[i], gotScalars[i])
@@ -149,6 +191,19 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		{name: "log_level_unknown", key: config.EnvLogLevel, raw: "loud"},
 		{name: "jwks_relative", key: config.EnvAuthJWKSURL, raw: "/relative"},
 		{name: "problem_base_relative", key: config.EnvProblemTypeBaseURL, raw: "problems"},
+		{name: "markets_invalid", key: config.EnvPlatformMarkets, raw: "MX:MXN"},
+		{name: "currencies_invalid", key: config.EnvPlatformCurrencies, raw: "MXN:9"},
+		{name: "currency_undeclared", key: config.EnvPlatformCurrencies, raw: "MXN:2"},
+		{name: "retention_invalid", key: config.EnvOutboxRetention, raw: "soon"},
+		{name: "retention_zero", key: config.EnvOutboxRetention, raw: "0d"},
+		{name: "retention_bad_days", key: config.EnvOutboxRetention, raw: "xd"},
+		{name: "seed_not_boolean", key: config.EnvSeedEnabled, raw: "maybe"},
+		{name: "tls_not_boolean", key: config.EnvKafkaTLSEnabled, raw: "maybe"},
+		{name: "driver_unknown", key: config.EnvStorageDriver, raw: "postgres"},
+		{name: "batch_size_too_big", key: config.EnvOutboxBatchSize, raw: "1001"},
+		{name: "lease_zero", key: config.EnvOutboxLeaseMS, raw: "0"},
+		{name: "mongo_uri_blank", key: config.EnvMongoURI, raw: " "},
+		{name: "kafka_blank", key: config.EnvKafkaBootstrap, raw: " , "},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -170,6 +225,14 @@ func TestLoadGuards(t *testing.T) {
 	}{
 		{name: "should_reject_blank_audience", wantKey: config.EnvAuthAudience,
 			extra: map[string]string{config.EnvAuthAudience: " "}},
+		{name: "should_refuse_seed_in_production", wantKey: config.EnvSeedEnabled,
+			extra: map[string]string{config.EnvAppEnvironment: "production",
+				config.EnvSeedEnabled: "true", config.EnvKafkaTLSEnabled: "true"}},
+		{name: "should_require_kafka_tls_in_production", wantKey: config.EnvKafkaTLSEnabled,
+			extra: map[string]string{config.EnvAppEnvironment: "production"}},
+		{name: "should_refuse_memory_in_production", wantKey: config.EnvStorageDriver,
+			extra: map[string]string{config.EnvAppEnvironment: "production",
+				config.EnvStorageDriver: "memory"}},
 		{name: "should_refuse_faults_in_production", wantKey: config.EnvFaultInjectionEnabled,
 			extra: map[string]string{config.EnvAppEnvironment: "Production",
 				config.EnvFaultInjectionEnabled: "true"}},
@@ -190,7 +253,8 @@ func TestLoadGuards(t *testing.T) {
 
 func TestLoadAllowsGuardedSettingsOutsideRestrictions(t *testing.T) {
 	cases := []map[string]string{
-		{config.EnvAppEnvironment: "production"},
+		{config.EnvAppEnvironment: "production", config.EnvKafkaTLSEnabled: "true"},
+		{config.EnvAppEnvironment: "staging", config.EnvSeedEnabled: "true"},
 		{config.EnvAppEnvironment: "staging", config.EnvFaultInjectionEnabled: "true"},
 		{config.EnvAuthEnabled: "false", config.EnvAuthAudience: ""},
 	}

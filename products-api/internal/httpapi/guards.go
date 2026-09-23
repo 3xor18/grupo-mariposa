@@ -24,7 +24,7 @@ const (
 )
 
 type TokenVerifier interface {
-	Verify(ctx context.Context, token string) (auth.Principal, error)
+	Verify(ctx context.Context, token, requiredRole string) (auth.Principal, error)
 }
 
 type KeyedLimiter interface {
@@ -33,10 +33,10 @@ type KeyedLimiter interface {
 
 type principalKey struct{}
 
-func (rs responder) authenticate(verifier TokenVerifier) middleware {
+func (rs responder) authenticate(verifier TokenVerifier, role string) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			principal, err := verifier.Verify(r.Context(), bearerToken(r))
+			principal, err := verifier.Verify(r.Context(), bearerToken(r), role)
 			if err != nil {
 				rs.rejectAuth(w, r, err)
 				return

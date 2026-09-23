@@ -204,3 +204,55 @@ func TestContractDetectsViolations(t *testing.T) {
 		t.Fatal("openapi validation must reject an invalid product body")
 	}
 }
+
+func contractPatch(t *testing.T, target, body string, headers ...string) *http.Request {
+	t.Helper()
+	return patchRequest(t, contractHost+target, body, headers...)
+}
+
+func TestContractPatchResponses(t *testing.T) {
+	c := loadContract(t)
+	h := newHarness(t)
+	cases := []struct {
+		name string
+		req  *http.Request
+		want int
+	}{
+		{"updated", contractPatch(t, patchPath, `{"status":"DISCONTINUED"}`, "If-Match", `"1"`),
+			http.StatusOK},
+		{"stale", contractPatch(t, patchPath, `{"status":"ACTIVE"}`, "If-Match", `"1"`),
+			http.StatusPreconditionFailed},
+		{"invalid", contractPatch(t, patchPath, `{"sku":"X"}`), http.StatusBadRequest},
+		{"missing", contractPatch(t, "/products/PRD-999?market=EC", `{"name":"x"}`),
+			http.StatusNotFound},
+	}
+	for _, tc := range cases {
+		if got := c.validate(t, h.handler, tc.req); got != tc.want {
+			t.Fatalf("%s: want %d, got %d", tc.name, tc.want, got)
+		}
+	}
+	secured := newHarness(t, func(d *httpapi.Dependencies) { d.Verifier = roleVerifier(adminRole) })
+	if got := c.validate(t, secured.handler, contractPatch(t, patchPath, `{"name":"x"}`)); got !=
+		http.StatusUnauthorized {
+		t.Fatalf("want 401, got %d", got)
+	}
+	reader := newHarness(t, func(d *httpapi.Dependencies) { d.Verifier = roleVerifier(readerRole) })
+	if got := c.validate(t, reader.handler, contractPatch(t, patchPath, `{"name":"x"}`,
+		"Authorization", "Bearer t")); got != http.StatusForbidden {
+		t.Fatalf("want 403, got %d", got)
+	}
+}
+
+func TestContractGetIncludesVersionForNewMarkets(t *testing.T) {
+	c := loadContract(t)
+	h := newHarness(t)
+	for _, target := range []string{"/products/PRD-001?market=CL", "/products/PRD-018?market=EC"} {
+		rec := httptest.NewRecorder()
+		req := contractRequest(t, target)
+		h.handler.ServeHTTP(rec, req)
+		c.validateAgainstOpenAPI(t, req, rec)
+		if rec.Code != http.StatusOK || rec.Header().Get("ETag") != `"1"` {
+			t.Fatalf("%s: want 200 with ETag, got %d", target, rec.Code)
+		}
+	}
+}

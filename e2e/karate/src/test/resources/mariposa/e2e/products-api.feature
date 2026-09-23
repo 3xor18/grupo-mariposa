@@ -17,7 +17,8 @@ Feature: products-api contract, validation, errors and security
         name: 'Bebida 600 ml',
         sku: 'BEB-600-PET',
         status: 'ACTIVE',
-        taxCategory: 'STANDARD'
+        taxCategory: 'STANDARD',
+        version: '#number'
       }
       """
 

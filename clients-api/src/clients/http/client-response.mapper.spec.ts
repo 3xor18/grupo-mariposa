@@ -1,7 +1,6 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { ClientStatus } from '../domain/client-status.enum';
-import { Market } from '../domain/market.enum';
 import { Segment } from '../domain/segment.enum';
 import { TaxRegime } from '../domain/tax-regime.enum';
 import { ClientResponse } from './client.response';
@@ -16,17 +15,19 @@ describe('toClientResponse', () => {
       status: ClientStatus.BLOCKED,
       segment: Segment.WHOLESALE,
       taxRegime: TaxRegime.SIMPLIFIED,
-      market: Market.MX,
+      market: 'MX',
+      version: 4,
     });
 
     expect(response).toBeInstanceOf(ClientResponse);
     expect(response).toEqual({
+      version: 4,
       clientId: 'CLI-1',
       name: 'Client one',
       status: ClientStatus.BLOCKED,
       segment: Segment.WHOLESALE,
       taxRegime: TaxRegime.SIMPLIFIED,
-      market: Market.MX,
+      market: 'MX',
     });
   });
 });

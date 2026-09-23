@@ -28,7 +28,7 @@ public final class OutboxPayloadFactory {
     private OrderProcessedPayload payload(final Order order, final String eventId) {
         return new OrderProcessedPayload(eventId, order.eventVersion(), order.processedAt(),
                 order.sourceEventId(), order.orderId(), order.client().clientId(),
-                order.status().name(), order.market().name(), order.currency().name(),
+                order.status().name(), order.market().value(), order.currency().value(),
                 totals(order.totals()), order.reason().map(RejectionCode::name).orElse(null),
                 order.violations().stream()
                         .map(violation -> new OrderProcessedPayload.ViolationPayload(

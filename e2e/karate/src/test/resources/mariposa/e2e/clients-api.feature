@@ -17,7 +17,8 @@ Feature: clients-api contract, validation, errors and security
         status: 'ACTIVE',
         segment: 'WHOLESALE',
         taxRegime: 'GENERAL',
-        market: 'MX'
+        market: 'MX',
+        version: '#number'
       }
       """
 

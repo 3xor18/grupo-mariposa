@@ -4,10 +4,11 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-public record TaxRateTable(Map<Market, Map<TaxCategory, Rate>> rates) {
+public record TaxRateTable(Map<MarketCode, Map<TaxCategory, Rate>> rates) {
 
     private static final String EMPTY = "The tax rate table needs at least one market";
     private static final String INCOMPLETE = "Market %s needs a tax rate for every category";
@@ -19,12 +20,12 @@ public record TaxRateTable(Map<Market, Map<TaxCategory, Rate>> rates) {
         if (rates.isEmpty()) {
             throw new IllegalArgumentException(EMPTY);
         }
-        final Map<Market, Map<TaxCategory, Rate>> copy = new EnumMap<>(Market.class);
+        final Map<MarketCode, Map<TaxCategory, Rate>> copy = new LinkedHashMap<>();
         rates.forEach((market, categories) -> copy.put(market, validated(market, categories)));
         rates = Collections.unmodifiableMap(copy);
     }
 
-    public Rate rateFor(final Market market, final TaxCategory category) {
+    public Rate rateFor(final MarketCode market, final TaxCategory category) {
         final Map<TaxCategory, Rate> categories = rates.get(market);
         if (categories == null) {
             throw new IllegalArgumentException(UNKNOWN_MARKET.formatted(market));
@@ -32,11 +33,11 @@ public record TaxRateTable(Map<Market, Map<TaxCategory, Rate>> rates) {
         return categories.get(category);
     }
 
-    public boolean covers(final Collection<Market> markets) {
+    public boolean covers(final Collection<MarketCode> markets) {
         return rates.keySet().containsAll(markets);
     }
 
-    private static Map<TaxCategory, Rate> validated(final Market market,
+    private static Map<TaxCategory, Rate> validated(final MarketCode market,
                                                     final Map<TaxCategory, Rate> categories) {
         if (categories == null || !categories.keySet().containsAll(
                 EnumSet.allOf(TaxCategory.class))) {

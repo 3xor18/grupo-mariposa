@@ -7,8 +7,8 @@ import static org.mockito.Mockito.when;
 
 import com.grupomariposa.orders.application.query.OrderSummary;
 import com.grupomariposa.orders.application.query.PageResult;
-import com.grupomariposa.orders.domain.model.Currency;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.Currencies;
+import com.grupomariposa.orders.domain.Markets;
 import com.grupomariposa.orders.domain.model.Money;
 import com.grupomariposa.orders.domain.model.OrderStatus;
 import com.grupomariposa.orders.domain.model.RejectionCode;
@@ -46,8 +46,8 @@ class WebSupportTest {
     @Test
     void should_map_pages_with_reasons() {
         final OrderPageResponse page = new OrderResponseMapper().toPage(new PageResult<>(List.of(
-                new OrderSummary("ORD-1", OrderStatus.REJECTED, Market.MX, Currency.MXN, "C",
-                        1, Money.ZERO, RejectionCode.PRODUCT_NOT_FOUND, Instant.EPOCH)),
+                new OrderSummary("ORD-1", OrderStatus.REJECTED, Markets.MX, Currencies.MXN, "C",
+                        1, Money.zero(2), RejectionCode.PRODUCT_NOT_FOUND, Instant.EPOCH)),
                 0, 20, 1));
 
         assertThat(page.items().getFirst().reason()).isEqualTo("PRODUCT_NOT_FOUND");

@@ -6,6 +6,7 @@ componentes: `order-processor` (cliente Spring nativo) y `products-api`, `client
 
 | Archivo | Se aplica a |
 |---|---|
+| `application.yml` | todos los servicios: catálogo de mercados y monedas (`platform.*`, ADR 0006) |
 | `application-docker.yml` | todos los clientes Spring con perfil `docker` |
 | `<servicio>.yml` | valores por defecto del servicio |
 | `<servicio>-docker.yml` | Compose local (inyección de fallos activa, tópicos de réplica 1, trazas al 100 %) |

@@ -2,7 +2,7 @@ package com.grupomariposa.orders.application.validation;
 
 import com.grupomariposa.orders.application.command.OrderCommand;
 import com.grupomariposa.orders.application.command.Reception;
-import com.grupomariposa.orders.domain.model.MarketCurrencies;
+import com.grupomariposa.orders.domain.model.MarketCatalog;
 import com.grupomariposa.orders.domain.model.RequestedItem;
 import java.util.List;
 
@@ -16,7 +16,7 @@ public final class OrderCommandValidator {
     private final HeaderValidator headerValidator;
     private final ItemValidator itemValidator;
 
-    public OrderCommandValidator(final MarketCurrencies markets, final ContractRules rules) {
+    public OrderCommandValidator(final MarketCatalog markets, final ContractRules rules) {
         this.headerValidator = new HeaderValidator(markets, rules);
         this.itemValidator = new ItemValidator(rules);
     }

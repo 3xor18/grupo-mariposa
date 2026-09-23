@@ -3,34 +3,27 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/grupomariposa/platform/products-api/internal/product"
 )
 
-type listing struct {
-	Product product.Product
-	Markets []product.Market
+type key struct {
+	id     product.ID
+	market product.Market
 }
 
 type Repository struct {
-	listings map[product.ID]entry
+	mu       sync.RWMutex
+	products map[key]product.Product
 }
 
-type entry struct {
-	product product.Product
-	markets map[product.Market]struct{}
-}
-
-func newRepository(listings []listing) *Repository {
-	indexed := make(map[product.ID]entry, len(listings))
-	for _, l := range listings {
-		indexed[l.Product.ID] = entry{product: l.Product, markets: toSet(l.Markets)}
+func NewRepository(products []product.Product) *Repository {
+	indexed := make(map[key]product.Product, len(products))
+	for _, p := range products {
+		indexed[key{id: p.ID, market: p.Market}] = p
 	}
-	return &Repository{listings: indexed}
-}
-
-func NewSeededRepository() *Repository {
-	return newRepository(seed())
+	return &Repository{products: indexed}
 }
 
 func (r *Repository) FindByIDInMarket(
@@ -39,20 +32,37 @@ func (r *Repository) FindByIDInMarket(
 	if err := ctx.Err(); err != nil {
 		return product.Product{}, fmt.Errorf("find product %s: %w", id, err)
 	}
-	found, ok := r.listings[id]
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	found, ok := r.products[key{id: id, market: market}]
 	if !ok {
 		return product.Product{}, product.ErrNotFound
 	}
-	if _, available := found.markets[market]; !available {
-		return product.Product{}, product.ErrNotFound
-	}
-	return found.product, nil
+	return found, nil
 }
 
-func toSet(markets []product.Market) map[product.Market]struct{} {
-	set := make(map[product.Market]struct{}, len(markets))
-	for _, m := range markets {
-		set[m] = struct{}{}
+func (r *Repository) Update(ctx context.Context, request product.UpdateRequest,
+) (product.Product, error) {
+	if err := ctx.Err(); err != nil {
+		return product.Product{}, fmt.Errorf("update product %s: %w", request.ID, err)
 	}
-	return set
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	k := key{id: request.ID, market: request.Market}
+	current, ok := r.products[k]
+	if !ok {
+		return product.Product{}, product.ErrNotFound
+	}
+	if !request.Matches(current) {
+		return product.Product{}, product.ErrVersionConflict
+	}
+	updated, changed := current.Apply(request.Patch)
+	if !changed {
+		return current, nil
+	}
+	if _, err := request.NewEvent(updated); err != nil {
+		return product.Product{}, fmt.Errorf("build change event: %w", err)
+	}
+	r.products[k] = updated
+	return updated, nil
 }

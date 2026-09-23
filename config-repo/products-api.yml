@@ -11,3 +11,5 @@ auth:
 fault:
   rules: ""
   timeout-ms: 5000
+outbox:
+  retry-delay-ms: 1000

@@ -5,6 +5,7 @@ import com.grupomariposa.orders.application.error.UnexpectedProcessingException;
 import com.grupomariposa.orders.application.port.out.ClientDirectory;
 import com.grupomariposa.orders.application.port.out.ProductCatalog;
 import com.grupomariposa.orders.domain.model.ClientProfile;
+import com.grupomariposa.orders.domain.model.CurrencyCatalog;
 import com.grupomariposa.orders.domain.model.EvaluationInput;
 import com.grupomariposa.orders.domain.model.Lookup;
 import com.grupomariposa.orders.domain.model.ResolvedItem;
@@ -25,13 +26,16 @@ public final class OrderEnricher {
     private final ProductCatalog productCatalog;
     private final Executor executor;
     private final Semaphore permits;
+    private final CurrencyCatalog currencies;
 
     public OrderEnricher(final ClientDirectory clientDirectory,
                          final ProductCatalog productCatalog,
-                         final Executor executor, final int maxConcurrentLookups) {
+                         final Executor executor, final int maxConcurrentLookups,
+                         final CurrencyCatalog currencies) {
         this.clientDirectory = Objects.requireNonNull(clientDirectory, "clientDirectory");
         this.productCatalog = Objects.requireNonNull(productCatalog, "productCatalog");
         this.executor = Objects.requireNonNull(executor, "executor");
+        this.currencies = Objects.requireNonNull(currencies, "currencies");
         this.permits = new Semaphore(maxConcurrentLookups, true);
     }
 
@@ -46,7 +50,9 @@ public final class OrderEnricher {
             final Lookup<ClientProfile> resolvedClient = await(client);
             final List<ResolvedItem> resolvedItems =
                     items.stream().map(OrderEnricher::await).toList();
-            return new EvaluationInput(command.market(), resolvedClient, resolvedItems);
+            return new EvaluationInput(command.market(),
+                    currencies.fractionDigitsOf(command.currency()), resolvedClient,
+                    resolvedItems);
         } catch (RuntimeException failure) {
             client.cancel(true);
             items.forEach(item -> item.cancel(true));

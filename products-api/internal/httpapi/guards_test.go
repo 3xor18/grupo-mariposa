@@ -16,14 +16,16 @@ import (
 	"github.com/grupomariposa/platform/products-api/internal/ratelimit"
 )
 
-type verifierFunc func(ctx context.Context, token string) (auth.Principal, error)
+type verifierFunc func(ctx context.Context, token, role string) (auth.Principal, error)
 
-func (f verifierFunc) Verify(ctx context.Context, token string) (auth.Principal, error) {
-	return f(ctx, token)
+func (f verifierFunc) Verify(ctx context.Context, token, role string) (auth.Principal, error) {
+	return f(ctx, token, role)
 }
 
 func failingVerifier(err error) verifierFunc {
-	return func(context.Context, string) (auth.Principal, error) { return auth.Principal{}, err }
+	return func(context.Context, string, string) (auth.Principal, error) {
+		return auth.Principal{}, err
+	}
 }
 
 func authHarness(t *testing.T, customize ...func(*httpapi.Dependencies)) (harness,
@@ -33,7 +35,7 @@ func authHarness(t *testing.T, customize ...func(*httpapi.Dependencies)) (harnes
 	issuer := authtest.NewIssuer(t)
 	verifier := auth.NewVerifier(auth.Settings{
 		Issuer: authtest.IssuerURL, Audience: authtest.Audience, JWKSURL: issuer.JWKSURL,
-		RequiredRole: authtest.RequiredRole, JWKSTimeout: time.Second, Refresh: time.Hour,
+		JWKSTimeout: time.Second, Refresh: time.Hour,
 		MinimumRefresh: time.Millisecond,
 	}, slog.New(slog.DiscardHandler))
 	options := append([]func(*httpapi.Dependencies){

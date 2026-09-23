@@ -27,7 +27,7 @@ final class Decimals {
     }
 
     static Money toMoney(final Decimal128 value) {
-        return Money.of(value.bigDecimalValue());
+        return new Money(value.bigDecimalValue());
     }
 
     static Rate toRate(final Decimal128 value) {

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.grupomariposa.dev/events/products.changed.v1.schema.json",
+  "title": "ProductChanged v1",
+  "description": "Topic products.changed.v1, key = market:productId. Owner: products.",
+  "$comment": "Full entity state; compacted topic. Consumers keep the highest version per key.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "occurredAt",
+    "productId",
+    "market",
+    "version",
+    "status",
+    "taxCategory"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "productId": {
+      "type": "string",
+      "pattern": "^PRD-[A-Z0-9]{1,20}$"
+    },
+    "market": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "DISCONTINUED"
+      ]
+    },
+    "taxCategory": {
+      "type": "string",
+      "enum": [
+        "STANDARD",
+        "REDUCED",
+        "EXEMPT"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "sku": {
+      "type": "string"
+    }
+  }
+}

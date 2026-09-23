@@ -1,11 +1,14 @@
 package com.grupomariposa.orders.infrastructure.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.grupomariposa.orders.application.port.in.ProcessOrderUseCase;
 import com.grupomariposa.orders.application.port.in.PublishPendingEventsUseCase;
 import com.grupomariposa.orders.application.port.in.RecordTechnicalFailureUseCase;
 import com.grupomariposa.orders.application.port.out.ProcessingObserver;
 import com.grupomariposa.orders.application.port.out.TimeProvider;
 import com.grupomariposa.orders.application.validation.OrderCommandValidator;
+import com.grupomariposa.orders.infrastructure.cache.MasterDataCacheUpdater;
+import com.grupomariposa.orders.infrastructure.kafka.MasterDataProperties;
 import com.grupomariposa.orders.infrastructure.kafka.MessagingProperties;
 import com.grupomariposa.orders.infrastructure.kafka.OutboxRelayProperties;
 import com.grupomariposa.orders.infrastructure.kafka.dlt.DeadLetterProducer;
@@ -17,6 +20,11 @@ import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderCreatedListene
 import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderMessageMapper;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderMessageReader;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.RetryableRecordFailure;
+import com.grupomariposa.orders.infrastructure.kafka.masterdata.MasterDataChangeListener;
+import com.grupomariposa.orders.infrastructure.kafka.masterdata.MasterDataChangeRecoverer;
+import com.grupomariposa.orders.infrastructure.kafka.masterdata.MasterDataErrorHandlers;
+import com.grupomariposa.orders.infrastructure.kafka.masterdata.MasterDataEventReader;
+import com.grupomariposa.orders.infrastructure.kafka.masterdata.MasterDataListenerSettings;
 import com.grupomariposa.orders.infrastructure.kafka.outbound.KafkaEventPublisher;
 import com.grupomariposa.orders.infrastructure.kafka.outbound.OutboxRelayScheduler;
 import com.grupomariposa.orders.infrastructure.kafka.outbound.RelaySchedule;
@@ -55,8 +63,17 @@ public class KafkaConfiguration {
         return new RelaySchedule(relay.fixedDelay());
     }
 
+    @Bean(MasterDataListenerSettings.BEAN_NAME)
+    public MasterDataListenerSettings masterDataListenerSettings(
+            final MasterDataProperties properties) {
+        return new MasterDataListenerSettings(properties.clientsChangedTopic(),
+                properties.productsChangedTopic(), properties.consumerGroup(),
+                properties.concurrency(), properties.enabled());
+    }
+
     @Bean
-    public KafkaAdmin.NewTopics orderTopics(final MessagingProperties properties) {
+    public KafkaAdmin.NewTopics orderTopics(final MessagingProperties properties,
+                                            final MasterDataProperties masterData) {
         if (!properties.createTopics()) {
             return new KafkaAdmin.NewTopics();
         }
@@ -69,7 +86,13 @@ public class KafkaConfiguration {
                         .partitions(topics.ordersProcessedPartitions()).replicas(replicas)
                         .build(),
                 TopicBuilder.name(topics.deadLetter())
-                        .partitions(topics.deadLetterPartitions()).replicas(replicas).build());
+                        .partitions(topics.deadLetterPartitions()).replicas(replicas).build(),
+                TopicBuilder.name(masterData.clientsChangedTopic())
+                        .partitions(masterData.topicPartitions()).replicas(replicas).compact()
+                        .build(),
+                TopicBuilder.name(masterData.productsChangedTopic())
+                        .partitions(masterData.topicPartitions()).replicas(replicas).compact()
+                        .build());
     }
 
     @Bean
@@ -81,6 +104,27 @@ public class KafkaConfiguration {
         configurer.configure(factory, consumerFactory);
         factory.getContainerProperties().setDeliveryAttemptHeader(true);
         return factory;
+    }
+
+    @Bean(MasterDataListenerSettings.CONTAINER_FACTORY)
+    public ConcurrentKafkaListenerContainerFactory<Object, Object>
+            masterDataListenerContainerFactory(
+            final ConcurrentKafkaListenerContainerFactoryConfigurer configurer,
+            final ConsumerFactory<Object, Object> consumerFactory,
+            final MasterDataProperties properties, final MasterDataCacheUpdater updater) {
+        final ConcurrentKafkaListenerContainerFactory<Object, Object> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        configurer.configure(factory, consumerFactory);
+        factory.setCommonErrorHandler(
+                MasterDataErrorHandlers.create(properties.retry(),
+                        new MasterDataChangeRecoverer(updater, properties.clientsChangedTopic())));
+        return factory;
+    }
+
+    @Bean
+    public MasterDataChangeListener masterDataChangeListener(
+            final ObjectMapper objectMapper, final MasterDataCacheUpdater updater) {
+        return new MasterDataChangeListener(new MasterDataEventReader(objectMapper), updater);
     }
 
     @Bean(destroyMethod = "close")

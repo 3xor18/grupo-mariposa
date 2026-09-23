@@ -7,6 +7,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
+import com.grupomariposa.orders.domain.Currencies;
+import com.grupomariposa.orders.domain.Markets;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -33,6 +35,12 @@ class ModelInvariantsTest {
     }
 
     @Test
+    void should_map_found_lookups_and_keep_not_found() {
+        assertThat(Lookup.found("abc").map(String::length)).isEqualTo(Lookup.found(3));
+        assertThat(Lookup.<String>notFound().map(String::length)).isEqualTo(Lookup.notFound());
+    }
+
+    @Test
     void should_build_violations_with_catalog_messages() {
         assertThat(Violation.of(RejectionCode.CLIENT_NOT_FOUND))
                 .isEqualTo(new Violation(RejectionCode.CLIENT_NOT_FOUND,
@@ -43,10 +51,10 @@ class ModelInvariantsTest {
 
     @Test
     void should_snapshot_resolved_and_unresolved_clients() {
-        final ClientProfile profile = wholesaleClient(Market.MX);
+        final ClientProfile profile = wholesaleClient(Markets.MX);
 
         assertThat(ClientSnapshot.of("CLI-1", Lookup.found(profile)).market())
-                .isEqualTo(Market.MX);
+                .isEqualTo(Markets.MX);
         assertThat(ClientSnapshot.of("CLI-1", Lookup.notFound()))
                 .isEqualTo(ClientSnapshot.unresolved("CLI-1"));
     }
@@ -66,7 +74,9 @@ class ModelInvariantsTest {
         assertThatIllegalArgumentException().isThrownBy(() -> new FailureDetails("X", "y", 0));
         assertThatIllegalArgumentException().isThrownBy(() -> new OrderIdentity("o", "e", 0));
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> new Decision.Rejected(List.of(), List.of()));
+                .isThrownBy(() -> new Decision.Rejected(List.of(), List.of(), Totals.zero(2)));
+        assertThatIllegalArgumentException().isThrownBy(() -> new EvaluationInput(
+                new MarketCode("MX"), -1, Lookup.notFound(), List.of()));
     }
 
     @Test
@@ -89,14 +99,14 @@ class ModelInvariantsTest {
         final ProductProfile product = product("PRD-1", TaxCategory.EXEMPT);
 
         assertThat(product.isActive()).isTrue();
-        assertThat(wholesaleClient(Market.PE).isTaxExempt()).isFalse();
+        assertThat(wholesaleClient(Markets.PE).isTaxExempt()).isFalse();
     }
 
     private static Order order(final List<Violation> violations) {
         return new Order(new OrderIdentity("ORD-1", "EVT-1", 2),
                 violations.isEmpty() ? OrderStatus.APPROVED : OrderStatus.REJECTED,
-                Market.MX, Currency.MXN, null, ClientSnapshot.unresolved("CLI-1"),
-                List.of(), Totals.ZERO, violations, null, new OrderTimeline(null, NOW, NOW),
+                Markets.MX, Currencies.MXN, null, ClientSnapshot.unresolved("CLI-1"),
+                List.of(), Totals.zero(2), violations, null, new OrderTimeline(null, NOW, NOW),
                 null);
     }
 }

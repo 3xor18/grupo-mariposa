@@ -7,9 +7,9 @@ import com.grupomariposa.orders.application.query.OrderSummary;
 import com.grupomariposa.orders.domain.model.ClientSegment;
 import com.grupomariposa.orders.domain.model.ClientSnapshot;
 import com.grupomariposa.orders.domain.model.ClientStatus;
-import com.grupomariposa.orders.domain.model.Currency;
+import com.grupomariposa.orders.domain.model.CurrencyCode;
 import com.grupomariposa.orders.domain.model.FailureDetails;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.Order;
 import com.grupomariposa.orders.domain.model.OrderIdentity;
 import com.grupomariposa.orders.domain.model.OrderStatus;
@@ -42,7 +42,7 @@ public final class OrderDocumentMapper {
 
     public OrderDocument toDocument(final Order order) {
         return new OrderDocument(order.orderId(), order.sourceEventId(), order.eventVersion(),
-                order.status().name(), order.market().name(), order.currency().name(),
+                order.status().name(), order.market().value(), order.currency().value(),
                 order.channel(), clientDocument(order.client()),
                 order.lines().stream().map(lineMapper::toDocument).toList(),
                 totalsDocument(order.totals()),
@@ -57,8 +57,8 @@ public final class OrderDocumentMapper {
         return new Order(
                 new OrderIdentity(document.id(), document.sourceEventId(),
                         document.eventVersion()),
-                OrderStatus.valueOf(document.status()), Market.valueOf(document.market()),
-                Currency.valueOf(document.currency()), document.channel(),
+                OrderStatus.valueOf(document.status()), new MarketCode(document.market()),
+                new CurrencyCode(document.currency()), document.channel(),
                 clientSnapshot(required(document.client(), CLIENT, document.id())),
                 orEmpty(document.lines()).stream().map(lineMapper::toDomain).toList(),
                 totals(required(document.totals(), TOTALS, document.id())),
@@ -72,7 +72,7 @@ public final class OrderDocumentMapper {
 
     public OrderSummary toSummary(final OrderDocument document) {
         return new OrderSummary(document.id(), OrderStatus.valueOf(document.status()),
-                Market.valueOf(document.market()), Currency.valueOf(document.currency()),
+                new MarketCode(document.market()), new CurrencyCode(document.currency()),
                 document.client().clientId(), document.eventVersion(),
                 Decimals.toMoney(document.totals().grandTotal()),
                 parseNullable(document.reason(), RejectionCode::valueOf), document.processedAt());
@@ -92,7 +92,7 @@ public final class OrderDocumentMapper {
     private ClientDocument clientDocument(final ClientSnapshot client) {
         return new ClientDocument(client.clientId(), cipher.encrypt(client.name()),
                 nameOf(client.status()), nameOf(client.segment()), nameOf(client.taxRegime()),
-                nameOf(client.market()));
+                client.market() == null ? null : client.market().value());
     }
 
     private ClientSnapshot clientSnapshot(final ClientDocument client) {
@@ -100,7 +100,7 @@ public final class OrderDocumentMapper {
                 parseNullable(client.status(), ClientStatus::valueOf),
                 parseNullable(client.segment(), ClientSegment::valueOf),
                 parseNullable(client.taxRegime(), TaxRegime::valueOf),
-                parseNullable(client.market(), Market::valueOf));
+                parseNullable(client.market(), MarketCode::new));
     }
 
     private static TotalsDocument totalsDocument(final Totals totals) {

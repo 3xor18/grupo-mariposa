@@ -18,10 +18,11 @@ import com.grupomariposa.orders.application.error.ExternalTransientException;
 import com.grupomariposa.orders.application.error.UnexpectedProcessingException;
 import com.grupomariposa.orders.application.port.out.ClientDirectory;
 import com.grupomariposa.orders.application.port.out.ProductCatalog;
+import com.grupomariposa.orders.domain.DomainFixtures;
+import com.grupomariposa.orders.domain.Markets;
 import com.grupomariposa.orders.domain.model.ClientProfile;
 import com.grupomariposa.orders.domain.model.EvaluationInput;
 import com.grupomariposa.orders.domain.model.Lookup;
-import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.ProductProfile;
 import com.grupomariposa.orders.domain.model.RequestedItem;
 import com.grupomariposa.orders.domain.model.ResolvedItem;
@@ -56,16 +57,16 @@ class OrderEnricherTest {
 
     @Test
     void should_resolve_client_and_every_product_in_item_order() {
-        final Lookup<ClientProfile> client = Lookup.found(wholesaleClient(Market.MX));
+        final Lookup<ClientProfile> client = Lookup.found(wholesaleClient(Markets.MX));
         when(clients.findClient(CLIENT_ID)).thenReturn(client);
-        when(products.findProduct("PRD-001", Market.MX))
+        when(products.findProduct("PRD-001", Markets.MX))
                 .thenReturn(Lookup.found(product("PRD-001", TaxCategory.STANDARD)));
-        when(products.findProduct("PRD-008", Market.MX)).thenReturn(Lookup.notFound());
+        when(products.findProduct("PRD-008", Markets.MX)).thenReturn(Lookup.notFound());
 
         final EvaluationInput input = enricher(4).enrich(goldenCommand());
 
         assertThat(input.client()).isEqualTo(client);
-        assertThat(input.market()).isEqualTo(Market.MX);
+        assertThat(input.market()).isEqualTo(Markets.MX);
         assertThat(input.items()).extracting(ResolvedItem::product).containsExactly(
                 Lookup.found(product("PRD-001", TaxCategory.STANDARD)), Lookup.notFound());
     }
@@ -73,7 +74,7 @@ class OrderEnricherTest {
     @Test
     void should_propagate_typed_lookup_failures() {
         when(clients.findClient(CLIENT_ID)).thenReturn(Lookup.notFound());
-        when(products.findProduct(anyString(), eq(Market.MX)))
+        when(products.findProduct(anyString(), eq(Markets.MX)))
                 .thenThrow(new ExternalTransientException("products-api", "503", null));
 
         assertThatThrownBy(() -> enricher(4).enrich(goldenCommand()))
@@ -86,7 +87,7 @@ class OrderEnricherTest {
         when(clients.findClient(CLIENT_ID)).thenAnswer(invocation -> {
             throw checked;
         });
-        when(products.findProduct(anyString(), eq(Market.MX))).thenReturn(Lookup.notFound());
+        when(products.findProduct(anyString(), eq(Markets.MX))).thenReturn(Lookup.notFound());
 
         assertThatThrownBy(() -> enricher(4).enrich(goldenCommand()))
                 .isInstanceOfSatisfying(UnexpectedProcessingException.class, unexpected -> {
@@ -97,7 +98,8 @@ class OrderEnricherTest {
 
     @Test
     void should_fail_as_unexpected_when_interrupted_waiting_for_permit() {
-        final OrderEnricher direct = new OrderEnricher(clients, products, Runnable::run, 1);
+        final OrderEnricher direct = new OrderEnricher(clients, products, Runnable::run, 1,
+                DomainFixtures.CURRENCIES);
         Thread.currentThread().interrupt();
 
         assertThatThrownBy(() -> direct.enrich(goldenCommand()))
@@ -112,7 +114,7 @@ class OrderEnricherTest {
         final CountDownLatch saturated = new CountDownLatch(2);
         final CountDownLatch release = new CountDownLatch(1);
         when(clients.findClient(CLIENT_ID)).thenReturn(Lookup.notFound());
-        when(products.findProduct(anyString(), eq(Market.MX))).thenAnswer(invocation -> {
+        when(products.findProduct(anyString(), eq(Markets.MX))).thenAnswer(invocation -> {
             peak.accumulateAndGet(inFlight.incrementAndGet(), Math::max);
             saturated.countDown();
             release.await(5, TimeUnit.SECONDS);
@@ -143,7 +145,8 @@ class OrderEnricherTest {
         when(clients.findClient(CLIENT_ID))
                 .thenThrow(new ExternalTransientException("clients-api", "503", null));
 
-        assertThatThrownBy(() -> new OrderEnricher(clients, products, clientFirst, 4)
+        assertThatThrownBy(() -> new OrderEnricher(clients, products, clientFirst, 4,
+                DomainFixtures.CURRENCIES)
                 .enrich(goldenCommand())).isInstanceOf(ExternalTransientException.class);
         deferred.forEach(Runnable::run);
 
@@ -151,13 +154,13 @@ class OrderEnricherTest {
     }
 
     private OrderEnricher enricher(final int permits) {
-        return new OrderEnricher(clients, products, executor, permits);
+        return new OrderEnricher(clients, products, executor, permits, DomainFixtures.CURRENCIES);
     }
 
     private static OrderCommand commandWithItems(final int count) {
         final OrderCommand golden = goldenCommand();
         return new OrderCommand(golden.eventId(),
-                1, golden.orderId(), Market.MX, golden.currency(), CLIENT_ID, null, null,
+                1, golden.orderId(), Markets.MX, golden.currency(), CLIENT_ID, null, null,
                 IntStream.range(0, count)
                         .mapToObj(index -> new RequestedItem("PRD-" + index, 1, BigDecimal.ONE))
                         .toList(), golden.reception());

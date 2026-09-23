@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.grupomariposa.dev/events/clients.changed.v1.schema.json",
+  "title": "ClientChanged v1",
+  "description": "Topic clients.changed.v1, key = clientId. Owner: clients.",
+  "$comment": "Full state without PII (no name); compacted topic; highest version per key wins.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "occurredAt",
+    "clientId",
+    "version",
+    "status",
+    "segment",
+    "taxRegime",
+    "market"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "clientId": {
+      "type": "string",
+      "pattern": "^CLI-[A-Z0-9]{1,20}$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "BLOCKED"
+      ]
+    },
+    "segment": {
+      "type": "string",
+      "enum": [
+        "WHOLESALE",
+        "RETAIL"
+      ]
+    },
+    "taxRegime": {
+      "type": "string",
+      "enum": [
+        "GENERAL",
+        "SIMPLIFIED",
+        "EXEMPT"
+      ]
+    },
+    "market": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    }
+  }
+}

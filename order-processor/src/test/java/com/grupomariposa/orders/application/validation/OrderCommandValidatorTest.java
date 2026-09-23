@@ -7,15 +7,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 import com.grupomariposa.orders.application.ApplicationFixtures;
+import com.grupomariposa.orders.domain.Currencies;
 import com.grupomariposa.orders.domain.DomainFixtures;
-import com.grupomariposa.orders.domain.model.Currency;
-import com.grupomariposa.orders.domain.model.Market;
-import com.grupomariposa.orders.domain.model.MarketCurrencies;
+import com.grupomariposa.orders.domain.Markets;
+import com.grupomariposa.orders.domain.model.MarketCatalog;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
@@ -109,9 +108,13 @@ class OrderCommandValidatorTest {
 
     @Test
     void should_reject_unsupported_market_and_currency() {
+        assertThat(errors(validator.validate(marketAndCurrency("AR", "ars"), RECEPTION)))
+                .containsExactly(
+                        new ValidationError("market", "must be one of [MX, CO, PE, CL, EC]"),
+                        new ValidationError("currency", "must be a three-letter ISO 4217 code"));
         assertThat(errors(validator.validate(marketAndCurrency("AR", "ARS"), RECEPTION)))
-                .containsExactly(new ValidationError("market", "must be one of [MX, CO, PE]"),
-                        new ValidationError("currency", "must be one of [MXN, COP, PEN]"));
+                .containsExactly(
+                        new ValidationError("market", "must be one of [MX, CO, PE, CL, EC]"));
     }
 
     @Test
@@ -124,7 +127,8 @@ class OrderCommandValidatorTest {
     @Test
     void should_only_accept_configured_markets_and_currencies() {
         final OrderCommandValidator mexicoOnly = new OrderCommandValidator(
-                new MarketCurrencies(Map.of(Market.MX, Currency.MXN)),
+                new MarketCatalog(List.of(DomainFixtures.market(Markets.MX, Currencies.MXN,
+                        "es-MX")), DomainFixtures.CURRENCIES),
                 ApplicationFixtures.CONTRACT_RULES);
 
         assertThat(errors(mexicoOnly.validate(marketAndCurrency("CO", "COP"), RECEPTION)))

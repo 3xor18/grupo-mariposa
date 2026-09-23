@@ -1,24 +1,23 @@
 abstract final class ScaledDecimal {
   static const _radix = 10;
   static const _minus = '-';
+  static const _zero = '0';
   static const _signGroup = 1;
   static const _wholeGroup = 2;
   static const _fractionGroup = 3;
   static const _invalidAmount = 'Invalid decimal amount';
+  static final _decimalPattern = RegExp(r'^(-?)(\d+)(?:\.(\d+))?$');
+  static final _trailingZeros = RegExp(r'0+$');
 
   static int parse(String decimal, {required int fractionDigits}) {
-    final pattern = RegExp(
-      r'^(-?)(\d+)(?:\.(\d{1,'
-      '$fractionDigits'
-      r'}))?$',
-    );
-    final match = pattern.firstMatch(decimal.trim());
-    if (match == null) {
+    final match = _decimalPattern.firstMatch(decimal.trim());
+    final fraction = (match?.group(_fractionGroup) ?? '').replaceFirst(_trailingZeros, '');
+    if (match == null || fraction.length > fractionDigits) {
       throw FormatException(_invalidAmount, decimal);
     }
     final whole = int.parse(match.group(_wholeGroup) ?? '');
-    final fraction = (match.group(_fractionGroup) ?? '').padRight(fractionDigits, '0');
-    final magnitude = whole * scaleOf(fractionDigits) + int.parse(fraction);
+    final scaledFraction = int.parse(fraction.padRight(fractionDigits, _zero).padLeft(1, _zero));
+    final magnitude = whole * scaleOf(fractionDigits) + scaledFraction;
     return match.group(_signGroup) == _minus ? -magnitude : magnitude;
   }
 

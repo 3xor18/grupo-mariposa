@@ -27,7 +27,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [MX, CO, PE]
+            pattern: '^[A-Z]{2}$'
           example: MX
       responses:
         '200':
@@ -55,6 +55,77 @@ paths:
         '500':
           $ref: '#/components/responses/Problem'
         '502':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: updateProduct
+      summary: Update a product in a market (admin); publishes products.changed.v1
+      description: |
+        Partial update with optimistic concurrency. Send the current version in If-Match
+        (the ETag of the last read);
+        a stale version returns 412. Requires the realm role products-admin.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: market
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z]{2}$'
+        - name: If-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Expected current version, e.g. "3". When omitted the update is unconditional.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              properties:
+                status:
+                  type: string
+                  enum: [ACTIVE, DISCONTINUED]
+                taxCategory:
+                  type: string
+                  enum: [STANDARD, REDUCED, EXEMPT]
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+      responses:
+        '200':
+          description: Updated; ETag carries the new version
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '500':
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
@@ -104,6 +175,10 @@ components:
       type: object
       required: [productId, name, sku, status, taxCategory]
       properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Optimistic concurrency version (also sent as ETag)
         productId:
           type: string
         name:

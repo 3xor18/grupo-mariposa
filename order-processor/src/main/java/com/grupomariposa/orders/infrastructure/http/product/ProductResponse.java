@@ -8,5 +8,6 @@ public record ProductResponse(
         String name,
         String sku,
         String status,
-        String taxCategory) {
+        String taxCategory,
+        Long version) {
 }

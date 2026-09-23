@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { HttpMetrics, UNMATCHED_ROUTE } from './http-metrics';
+import { MetricsRegistry } from './metrics-registry';
 import {
   CLIENT_CLOSED_REQUEST_STATUS,
   createHttpMetricsMiddleware,
@@ -9,12 +10,14 @@ import {
 
 describe('HttpMetrics', () => {
   it('should_count_and_time_requests_by_method_route_and_status', async () => {
-    const metrics = new HttpMetrics();
+    const registry = new MetricsRegistry();
+    const metrics = new HttpMetrics(registry);
 
     metrics.observe({ method: 'GET', route: '/x', statusCode: 200, durationSeconds: 0.01 });
-    const output = await metrics.render();
+    const output = await registry.render();
 
-    expect(metrics.contentType).toContain('text/plain');
+    expect(registry.contentType).toContain('text/plain');
+    expect(output).toContain('process_cpu_user_seconds_total');
     expect(output).toContain('http_requests_total{method="GET",route="/x",status_code="200"} 1');
     expect(output).toContain(
       'http_request_duration_seconds_count{method="GET",route="/x",status_code="200"} 1',
