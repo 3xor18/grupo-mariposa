@@ -127,7 +127,8 @@ hace timeout, `PRD-014` responde 400, `CLI-40001` falla 2 veces y `CLI-40002` si
 Precedencia en todos los servicios: **variable de entorno > config server > valor por defecto**.
 
 - Parámetros (timeouts, reintentos, circuit breaker, TTL de caché, relay, tasas de impuesto, descuento, reglas de
-  fallo, rate limit): `config-repo/<servicio>.yml` y `config-repo/<servicio>-docker.yml`.
+  fallo, rate limit): `config-repo/<servicio>.yml` y `config-repo/<servicio>-docker.yml`. Las tasas se cambian
+  aquí para los mercados existentes; un mercado nuevo requiere código hasta completar TODO-1 del roadmap.
 - Secretos: sólo por variables de entorno. En local vienen del `.env` generado; en CI de GitHub Secrets; en EKS de
   AWS Secrets Manager mediante External Secrets.
 
@@ -163,7 +164,8 @@ El detalle de cada variable por servicio está en el README de cada componente.
 Documentos: [propuesta](docs/architecture-proposal.md) · [ADRs](docs/adr) ·
 [notas de implementación](docs/implementation-notes.md) · [liderazgo técnico](docs/technical-leadership.md) ·
 [convenciones](docs/platform-conventions.md) · [estándares](docs/engineering-standards.md) ·
-[runbook](docs/runbooks/missing-order.md) · [carga](docs/load-test-results.md).
+[runbook](docs/runbooks/missing-order.md) · [carga](docs/load-test-results.md) ·
+[roadmap / TODO](docs/roadmap.md).
 
 ## Despliegue (preparado, no aplicado)
 
@@ -192,6 +194,12 @@ Documentos: [propuesta](docs/architecture-proposal.md) · [ADRs](docs/adr) ·
 - Sin Schema Registry: los contratos son JSON Schema versionados y validados en tests y CI.
 - El reproceso de la DLT es manual (re-publicar el mensaje original, que es seguro por diseño).
 - Con `CONFIG_SERVER_FAIL_FAST=true`, si el config server está caído no arrancan nuevas instancias.
+- **Mercados fijos**: MX, CO y PE son un `enum` en los cuatro servicios y en los contratos. Las tasas y monedas se
+  configuran en `config-repo`, pero agregar un país hoy requiere cambiar código (TODO-1 del
+  [roadmap](docs/roadmap.md)). Un mercado no soportado se rechaza como `VALIDATION` y va a la DLT.
+- **Tasas sin vigencia**: se aplica la tasa configurada al procesar y cambiarla requiere reinicio (TODO-2).
+- **Clientes sin caché**: para no aprobar pedidos de un cliente recién bloqueado; la caché con invalidación por
+  eventos está diseñada en TODO-3.
 - Más detalle en [implementation-notes](docs/implementation-notes.md).
 
 ## Uso de herramientas de inteligencia artificial

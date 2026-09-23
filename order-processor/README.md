@@ -57,6 +57,11 @@ Las propiedades son inmutables: un cambio en el config server se aplica con un r
 | `PRICING_WHOLESALE_DISCOUNT_RATE` / `PRICING_WHOLESALE_DISCOUNT_MIN_QUANTITY` | `0.03` / `20` | descuento mayorista |
 | `PRICING_CURRENCY_{MX,CO,PE}` | `MXN` / `COP` / `PEN` | moneda aceptada por mercado |
 
+Las tasas de los mercados existentes se cambian sólo con configuración. El conjunto de mercados es el enum
+`Market`, así que un país nuevo todavía requiere código (TODO-1 de `docs/roadmap.md`). Las tasas no tienen fecha de
+vigencia (TODO-2) y los perfiles de cliente no se cachean para no aprobar pedidos de un cliente recién bloqueado;
+la caché con invalidación por eventos está diseñada en TODO-3.
+
 ### Infraestructura y operación
 
 | Variable | Default local | Uso |
