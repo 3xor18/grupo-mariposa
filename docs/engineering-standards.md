@@ -18,6 +18,8 @@ Quality gates que el CI hace cumplir y que el code review verifica. Aplican a lo
 
 ## Pruebas
 - **100 % de líneas** en dominio y aplicación; ≥ 90 % global por servicio. El build falla bajo el umbral.
+- Flutter: la VM de Dart no siempre reporta las declaraciones de constructores `const` (se evalúan en
+  compilación), así que el gate de CI no las cuenta como faltantes; cualquier otra línea sin cubrir lo rompe.
 - Las pruebas documentan comportamiento: nombres `should_<resultado>_when_<condición>` o equivalente idiomático.
 - Además del happy path, siempre: bordes, errores, duplicados y concurrencia donde aplique.
 
