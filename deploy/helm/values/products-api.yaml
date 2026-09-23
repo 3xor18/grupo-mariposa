@@ -34,3 +34,6 @@ networkPolicy:
   enabled: true
   allowedFrom:
     - order-processor
+    - admin-tools
+  allowedNamespaces:
+    - operations

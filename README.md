@@ -123,7 +123,9 @@ los cuatro servicios.
   usuario propio sin acceso a `orders`. La semilla se carga al arrancar sólo si falta.
 - Endpoints de administración con concurrencia optimista (`ETag` / `If-Match`, `412` si la versión no coincide):
   `PATCH /clients/{clientId}` (rol `clients-admin`) y `PATCH /products/{productId}?market=` (rol
-  `products-admin`). El usuario demo `admin` tiene ambos roles.
+  `products-admin`). El usuario demo `admin` tiene ambos roles. En EKS no se exponen por Ingress: la NetworkPolicy
+  sólo admite los `PATCH` desde pods con `app.kubernetes.io/name: admin-tools` o desde el namespace `operations`
+  (además de `order-processor` para las lecturas).
 - Cada cambio publica `clients.changed.v1` / `products.changed.v1` (tópicos compactados) con Transactional Outbox.
   `order-processor` cachea clientes y productos en Redis con su versión y los actualiza al recibir el evento; el TTL
   (clientes 60 s, productos 10 min) queda sólo como red de seguridad.

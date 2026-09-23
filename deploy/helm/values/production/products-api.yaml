@@ -1,4 +1,6 @@
 env:
+  SEED_ENABLED: "false"
+  KAFKA_TLS_ENABLED: "true"
   KAFKA_BOOTSTRAP_SERVERS: "b-1.msk.production.example.com:9094,\
     b-2.msk.production.example.com:9094,\
     b-3.msk.production.example.com:9094"

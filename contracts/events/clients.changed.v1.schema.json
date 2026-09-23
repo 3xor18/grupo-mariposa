@@ -3,7 +3,7 @@
   "$id": "https://contracts.grupomariposa.dev/events/clients.changed.v1.schema.json",
   "title": "ClientChanged v1",
   "description": "Topic clients.changed.v1, key = clientId. Owner: clients.",
-  "$comment": "Full entity state; compacted topic. Consumers keep the highest version per key.",
+  "$comment": "Full state without PII (no name); compacted topic; highest version per key wins.",
   "type": "object",
   "required": [
     "eventId",
@@ -57,9 +57,6 @@
     "market": {
       "type": "string",
       "pattern": "^[A-Z]{2}$"
-    },
-    "name": {
-      "type": "string"
     }
   }
 }

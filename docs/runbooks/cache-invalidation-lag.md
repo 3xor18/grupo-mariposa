@@ -17,6 +17,8 @@ curl -s -H "Authorization: Bearer $(./mariposa.sh token admin)" localhost:8082/c
 ```
 - El `ETag` debe ser la versión nueva y `status` el valor esperado. Si no, el `PATCH` falló (`412` por un
   `If-Match` viejo, `403` sin rol `clients-admin` / `products-admin`): no es un problema de caché.
+- En EKS el `PATCH` sólo llega desde pods `admin-tools` o el namespace `operations` (NetworkPolicy); un timeout
+  desde otro origen es la política, no la API.
 
 ## 2. ¿El outbox de la API está publicando?
 - Panel **"Outbox de clients-api y products-api"**: antigüedad y pendientes por servicio. Una antigüedad creciente
@@ -32,16 +34,19 @@ Kafka UI → `clients.changed.v1` (key `clientId`) o `products.changed.v1` (key 
 ## 4. ¿order-processor lo aplicó?
 - Panel **"Invalidaciones de caché por evento de cambio"**: `outcome="applied"` sube con cada cambio;
   `outcome="stale"` significa que la caché ya tenía una versión igual o mayor (normal si el evento llegó dos veces);
-  `outcome="error"` es la alerta `CacheInvalidationFailures` (Redis inaccesible).
+  `outcome="ignored"` es un evento que no aplica a la caché; `outcome="failed"` / `"error"` disparan la alerta
+  `CacheInvalidationFailures` (Redis inaccesible o script de versión fallido).
 - Lag del grupo `order-processor-cache` en Kafka UI. Lag creciente = listener detenido o en error.
 - En local, la entrada de Redis:
   ```bash
-  docker compose exec redis redis-cli --no-auth-warning GET clients:CLI-70001
+  docker compose exec redis redis-cli --no-auth-warning HGETALL clients:CLI-70001
+  docker compose exec redis redis-cli --no-auth-warning HGETALL products:MX:PRD-020
   ```
-  (la contraseña llega por `REDISCLI_AUTH` en el contenedor). Debe tener la versión nueva o no existir.
+  Las entradas son hashes con la entidad y su `version` (la contraseña llega por `REDISCLI_AUTH` en el
+  contenedor). Deben tener la versión nueva o no existir.
 
 ## 5. Mitigación
-- Borrar la entrada (`redis-cli DEL clients:<id>` o `products:<market>:<id>`): el siguiente pedido lee la API.
+- Borrar la entrada (`redis-cli DEL clients:<id>` o `DEL products:<market>:<id>`): el siguiente pedido lee la API.
 - Si Redis está caído, `order-processor` ya consulta la API directo; no hace falta intervenir la caché.
 - Los pedidos aprobados de más dentro de la ventana se revisan con negocio; no se reprocesan automáticamente.
 

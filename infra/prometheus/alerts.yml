@@ -62,7 +62,7 @@ groups:
           description: order-processor keeps serving the cached state until the TTL expires
           runbook: docs/runbooks/cache-invalidation-lag.md
       - alert: CacheInvalidationFailures
-        expr: sum(rate(orders_cache_invalidations_total{outcome="error"}[5m])) > 0
+        expr: sum(rate(orders_cache_invalidations_total{outcome=~"error|failed"}[5m])) > 0
         for: 5m
         labels:
           severity: warning

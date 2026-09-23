@@ -41,7 +41,7 @@ consciente y los riesgos que quedan.
 | Límites del contrato (largo de ids, 500 ítems, 256 caracteres de causa) son constantes | reflejan el JSON Schema, no son *tunables* | generarlos desde el esquema en build |
 | El build de la imagen de `order-processor` no corre los tests | Testcontainers no puede correr dentro del build | se corren en CI antes del build |
 | Configuración inmutable (records) | simplicidad y seguridad | un cambio en `config-repo` requiere reinicio progresivo; `@RefreshScope` sólo si se necesitara en caliente |
-| Catálogo de mercados en `config-repo` | cambio auditado por PR, validado al arrancar en los cuatro servicios | servicio de *pricing* con persistencia si negocio necesita editarlo sin PR (ADR 0006) |
+| Catálogo de mercados en `config-repo` | cambio auditado por PR; desde la revisión del cambio los cuatro servicios lo validan al arrancar con las mismas reglas (formato de mercado y moneda, y cada moneda declarada en `platform.currencies`) y no arrancan con un catálogo inválido | servicio de *pricing* con persistencia si negocio necesita editarlo sin PR (ADR 0006) |
 | Dos outbox y dos relays más (APIs) además del de `order-processor` | mismo patrón probado, sin CDC que operar | Debezium si aparecen muchos consumidores de cambios (ADR 0007) |
 | Tasas de impuesto en `config-repo` sin fecha de vigencia | cambio auditado por PR, validación completa al arrancar y tasa guardada en cada línea | colección `tax_rates` con `validFrom`/`validTo` y tasa elegida por `occurredAt` (TODO-2) |
 | Ventana entre un cambio de datos maestros y la caché | la latencia del evento es de milisegundos y el TTL la acota si se pierde | consulta en línea del estado del cliente si negocio exige ventana cero (ADR 0007) |
@@ -100,3 +100,21 @@ consciente y los riesgos que quedan.
 - **Keycloak**: el realm de `infra/keycloak` es sólo para local. Los usuarios demo y el cliente `orders-cli` no se
   despliegan; la rotación de refresh tokens (`revokeRefreshToken`) y las URIs exactas del `order-tracker` sí son
   las mismas que se esperan en el realm de cada ambiente.
+
+## 8. Cambios de la revisión de mercados y caché
+
+- **Sin datos personales en eventos**: `clients.changed.v1` ya no incluye `name`; un tópico compactado lo retendría
+  indefinidamente. Los consumidores leen el nombre por HTTP (ADR 0007).
+- **Validación uniforme del catálogo**: los cuatro servicios validan `platform.markets` y `platform.currencies` con
+  las mismas reglas y no arrancan si el catálogo es inválido; antes sólo `order-processor` lo hacía de forma completa.
+- **Kafka con TLS en EKS**: `KAFKA_TLS_ENABLED=true` en los overlays de staging y producción de las dos APIs
+  (`false` en Compose).
+- **Semilla sólo en local**: `seed.enabled` es `true` únicamente en el perfil `docker`; staging y producción lo fijan
+  en `false` (y el overlay de producción, además, `SEED_ENABLED=false`).
+- **Outbox de las APIs**: `OUTBOX_RETRY_DELAY_MS` (1000) y `OUTBOX_RETENTION` documentados; las dos APIs exponen
+  `outbox_pending` y `outbox_oldest_age_seconds`, los mismos nombres que usan el dashboard y las alertas.
+- **Alertas**: `CacheInvalidationFailures` cuenta los resultados `failed` y `error`.
+- **Acceso de administración**: la NetworkPolicy de las APIs admite pods `admin-tools` y el namespace `operations`,
+  los únicos orígenes previstos para los `PATCH`.
+- **E2E**: el escenario de Chile verifica en el texto de la respuesta que los totales en CLP se serializan como
+  enteros; el runbook usa `HGETALL` porque las entradas de caché son hashes.
