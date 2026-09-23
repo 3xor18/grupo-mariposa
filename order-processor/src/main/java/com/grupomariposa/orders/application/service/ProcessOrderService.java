@@ -58,7 +58,7 @@ public final class ProcessOrderService implements ProcessOrderUseCase {
         observer.stage(ProcessingStage.ENRICHED, command.orderId(), command.eventId());
         final Decision decision = evaluator.evaluate(input);
         observer.stage(ProcessingStage.EVALUATED, command.orderId(), command.eventId());
-        return persist(command, assembler.decided(command, input.client(), decision));
+        return persist(command, assembler.decided(command, input, decision));
     }
 
     private Optional<ProcessingOutcome> alreadyHandled(final OrderCommand command) {

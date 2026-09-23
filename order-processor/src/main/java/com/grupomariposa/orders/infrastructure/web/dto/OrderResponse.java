@@ -20,5 +20,6 @@ public record OrderResponse(
         Instant occurredAt,
         Instant receivedAt,
         Instant processedAt,
-        String traceId) {
+        String traceId,
+        Instant taxRateEffectiveFrom) {
 }

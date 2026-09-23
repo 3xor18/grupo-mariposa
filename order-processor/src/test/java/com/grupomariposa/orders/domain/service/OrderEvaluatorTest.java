@@ -71,7 +71,8 @@ class OrderEvaluatorTest {
         final EvaluationInput input = new EvaluationInput(market, DomainFixtures.digits(market),
                 Lookup.found(retailClient(market)), List.of(new ResolvedItem(
                         item("PRD-001", 20, "10"),
-                        Lookup.found(product("PRD-001", TaxCategory.STANDARD)))));
+                        Lookup.found(product("PRD-001", TaxCategory.STANDARD)))),
+                DomainFixtures.APPLIED_RATES);
 
         assertThat(evaluator.evaluate(input).totals().grandTotal()).isEqualTo(Money.of(total));
     }
@@ -81,7 +82,8 @@ class OrderEvaluatorTest {
         final EvaluationInput input = new EvaluationInput(Markets.MX,
                 DomainFixtures.digits(Markets.MX), Lookup.notFound(), List.of(
                 new ResolvedItem(item("PRD-001", 24, "35.5"),
-                        Lookup.found(product("PRD-001", TaxCategory.STANDARD)))));
+                        Lookup.found(product("PRD-001", TaxCategory.STANDARD)))),
+                DomainFixtures.APPLIED_RATES);
 
         final Decision decision = evaluator.evaluate(input);
 

@@ -5,22 +5,15 @@ import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.Rate;
 import com.grupomariposa.orders.domain.model.TaxCategory;
 import com.grupomariposa.orders.domain.model.TaxRateTable;
-import java.util.Objects;
 
 public final class MarketTaxPolicy implements TaxPolicy {
 
-    private final TaxRateTable table;
-
-    public MarketTaxPolicy(final TaxRateTable table) {
-        this.table = Objects.requireNonNull(table, "table");
-    }
-
     @Override
-    public Rate rateFor(final MarketCode market, final ClientProfile client,
-                        final TaxCategory category) {
+    public Rate rateFor(final TaxRateTable rates, final MarketCode market,
+                        final ClientProfile client, final TaxCategory category) {
         if (client.isTaxExempt()) {
             return Rate.ZERO;
         }
-        return table.rateFor(market, category);
+        return rates.rateFor(market, category);
     }
 }
