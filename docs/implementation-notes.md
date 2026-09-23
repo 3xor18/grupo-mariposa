@@ -38,6 +38,9 @@ consciente y los riesgos que quedan.
 | El build de la imagen de `order-processor` no corre los tests | Testcontainers no puede correr dentro del build | se corren en CI antes del build |
 | Configuración inmutable (records) | simplicidad y seguridad | un cambio en `config-repo` requiere reinicio progresivo; `@RefreshScope` sólo si se necesitara en caliente |
 | Datos semilla en memoria en las APIs | lo permite el enunciado | implementar el puerto de repositorio con una base de datos; ni el dominio ni los consumidores cambian |
+| Mercado como `enum` en los cuatro servicios y en los contratos | el enunciado fija MX, CO y PE *inicialmente*; el compilador impide procesar un mercado desconocido | catálogo de mercados configurable (TODO-1 de `roadmap.md`) antes del cuarto país |
+| Tasas de impuesto en `config-repo` sin fecha de vigencia | cambio auditado por PR, validación completa al arrancar y tasa guardada en cada línea | colección `tax_rates` con `validFrom`/`validTo` y tasa elegida por `occurredAt` (TODO-2) |
+| Clientes sin caché | una caché sólo por TTL podría aprobar pedidos de un cliente recién bloqueado | caché con invalidación por `clients.changed.v1` y TTL corto de respaldo (TODO-3) |
 
 ## 4. Funcionalidades no terminadas
 
@@ -61,6 +64,8 @@ consciente y los riesgos que quedan.
 2. Tests de contrato *consumer-driven* (Pact) entre `order-processor` y las dos APIs, publicados en un broker.
 3. Autoescalado del worker por **lag de consumo** (KEDA) en lugar de CPU.
 4. Endpoint de reproceso de la DLT con auditoría.
+5. Mercados configurables, tasas con vigencia y caché de clientes invalidada por eventos: diseñados como TODO-1,
+   TODO-2 y TODO-3 en [`roadmap.md`](roadmap.md), pensando en sumar más países de Latinoamérica.
 
 ## 7. Despliegue en EKS
 

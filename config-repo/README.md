@@ -21,7 +21,8 @@ Reglas:
 - Precedencia en todos los servicios: **variable de entorno > config server > valor por defecto**. Una variable
   definida en los values de Helm oculta el valor de este directorio.
 - Cambiar un parámetro de negocio (tasas de impuesto, descuento) o técnico (timeouts, reintentos, TTL de caché) es
-  un PR sobre este directorio, revisado y auditable, sin recompilar el servicio. Se aplica con un reinicio
+  un PR sobre este directorio, revisado y auditable, sin recompilar el servicio. Aplica a los mercados existentes:
+  agregar un país todavía requiere código (TODO-1 de `docs/roadmap.md`). Se aplica con un reinicio
   progresivo (`kubectl rollout restart`) porque la configuración es inmutable en tiempo de ejecución.
 - En EKS el servidor usa el backend `git` sobre este mismo repositorio (`CONFIG_GIT_URI`, rama `main`,
   `search-paths: config-repo`) con credenciales `CONFIG_GIT_USERNAME` / `CONFIG_GIT_PASSWORD` desde
