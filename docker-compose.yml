@@ -282,7 +282,7 @@ services:
     logging: *default-logging
 
   grafana:
-    image: grafana/grafana:12.1.0
+    image: grafana/grafana:13.2.2
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USERNAME:?run ./mariposa.sh init}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?run ./mariposa.sh init}
