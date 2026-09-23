@@ -3,10 +3,10 @@ package config
 import (
 	"errors"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/grupomariposa/platform/products-api/internal/fault"
+	"github.com/grupomariposa/platform/products-api/internal/market"
 )
 
 const (
@@ -27,6 +27,7 @@ const (
 	EnvAuthAudience           = "AUTH_AUDIENCE"
 	EnvAuthJWKSURL            = "AUTH_JWKS_URL"
 	EnvAuthRequiredRole       = "AUTH_REQUIRED_ROLE"
+	EnvAuthAdminRole          = "AUTH_ADMIN_ROLE"
 	EnvAuthClockLeewayMS      = "AUTH_CLOCK_LEEWAY_MS"
 	EnvAuthJWKSTimeoutMS      = "AUTH_JWKS_TIMEOUT_MS"
 	EnvAuthJWKSRefreshMS      = "AUTH_JWKS_REFRESH_INTERVAL_MS"
@@ -54,6 +55,7 @@ const (
 	defaultRateLimitBurst     = 400
 	defaultRateLimitMaxKeys   = 10000
 	defaultRequiredRole       = "products-reader"
+	defaultAdminRole          = "products-admin"
 	defaultClockLeewayMS      = 30000
 	defaultJWKSTimeoutMS      = 2000
 	defaultJWKSRefreshMS      = 3600000
@@ -82,6 +84,10 @@ type Config struct {
 	RateLimit       RateLimit
 	Auth            Auth
 	Faults          Faults
+	Markets         market.Catalog
+	Storage         Storage
+	Kafka           Kafka
+	Outbox          Outbox
 	ProblemTypeBase string
 	LogLevel        slog.Level
 }
@@ -111,6 +117,7 @@ type Auth struct {
 	Audience           string
 	JWKSURL            string
 	RequiredRole       string
+	AdminRole          string
 	ClockLeeway        time.Duration
 	JWKSTimeout        time.Duration
 	JWKSRefresh        time.Duration
@@ -142,9 +149,13 @@ func Load(lookup LookupFunc) (Config, error) {
 		RateLimit:       loadRateLimit(r),
 		Auth:            loadAuth(r),
 		Faults:          loadFaults(r),
+		Markets:         loadMarkets(r),
+		Storage:         loadStorage(r),
+		Outbox:          loadOutbox(r),
 		ProblemTypeBase: r.AbsoluteURL(EnvProblemTypeBaseURL, defaultProblemTypeBaseURL),
 		LogLevel:        r.LogLevel(EnvLogLevel, defaultLogLevel),
 	}
+	cfg.Kafka = loadKafka(r, cfg.Storage)
 	if cfg.HTTP.WriteTimeout <= cfg.RequestTimeout {
 		r.Fail(EnvHTTPWriteTimeoutMS, errWriteTimeoutTooLow)
 	}
@@ -196,6 +207,7 @@ func loadAuth(r *Reader) Auth {
 		Audience:           r.String(EnvAuthAudience, defaultAudience),
 		JWKSURL:            r.AbsoluteURL(EnvAuthJWKSURL, ""),
 		RequiredRole:       r.String(EnvAuthRequiredRole, defaultRequiredRole),
+		AdminRole:          r.String(EnvAuthAdminRole, defaultAdminRole),
 		ClockLeeway:        r.OptionalMillis(EnvAuthClockLeewayMS, defaultClockLeewayMS),
 		JWKSTimeout:        r.Millis(EnvAuthJWKSTimeoutMS, defaultJWKSTimeoutMS),
 		JWKSRefresh:        r.Millis(EnvAuthJWKSRefreshMS, defaultJWKSRefreshMS),
@@ -215,7 +227,7 @@ func loadFaults(r *Reader) Faults {
 		r.Fail(EnvFaultRules, err)
 	}
 	enabled := r.Bool(EnvFaultInjectionEnabled, false)
-	if enabled && strings.EqualFold(r.String(EnvAppEnvironment, ""), productionEnvironment) {
+	if enabled && production(r) {
 		r.Fail(EnvFaultInjectionEnabled, errFaultsInProduction)
 	}
 	return Faults{

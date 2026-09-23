@@ -73,11 +73,12 @@ func envOf(values map[string]string) config.LookupFunc {
 
 func serverEnv(url string, extra ...string) map[string]string {
 	env := map[string]string{
-		EnvURL:       url + "/",
-		EnvProfile:   "docker",
-		EnvUsername:  testUser,
-		EnvPassword:  testPassword,
-		EnvBackoffMS: fastBackoff,
+		EnvURL:                  url + "/",
+		EnvProfile:              "docker",
+		EnvUsername:             testUser,
+		EnvPassword:             testPassword,
+		EnvBackoffMS:            fastBackoff,
+		config.EnvStorageDriver: config.StorageMemory,
 	}
 	for i := 0; i+1 < len(extra); i += 2 {
 		env[extra[i]] = extra[i+1]
