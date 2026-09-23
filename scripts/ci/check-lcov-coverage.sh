@@ -5,7 +5,7 @@ readonly LCOV_FILE="${1:?usage: check-lcov-coverage.sh <lcov.info> <min-percent>
 readonly MIN_PERCENT="${2:?minimum line coverage percent is required}"
 readonly EXCLUDE_REGEX="${3:-^$}"
 readonly SOURCE_ROOT="${LCOV_SOURCE_ROOT:-.}"
-readonly CONST_CONSTRUCTOR_REGEX='^[ 	]*const [A-Z][A-Za-z0-9_]*(.[A-Za-z0-9_]+)?(.*);[ 	]*$'
+readonly CONST_CONSTRUCTOR_REGEX='^ *const [A-Z][A-Za-z0-9_]*([.][A-Za-z0-9_]+)?[(].*[)]; *$'
 export EXCLUDE_REGEX SOURCE_ROOT CONST_CONSTRUCTOR_REGEX
 
 if [[ ! "${MIN_PERCENT}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
