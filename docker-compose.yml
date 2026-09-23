@@ -114,7 +114,7 @@ services:
     logging: *default-logging
 
   redis:
-    image: redis:7.4.7-alpine
+    image: redis:8.10.0-alpine
     entrypoint: ["sh", "/opt/mariposa/redis-entrypoint.sh"]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?run ./mariposa.sh init}
