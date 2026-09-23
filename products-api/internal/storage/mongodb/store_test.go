@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,8 +23,9 @@ import (
 )
 
 const (
-	testTopic   = "products.changed.v1"
-	testTimeout = 10 * time.Second
+	testTopic     = "products.changed.v1"
+	testTimeout   = 10 * time.Second
+	testRetention = 7 * 24 * time.Hour
 )
 
 var (
@@ -53,9 +56,13 @@ func openStore(t *testing.T) *Store {
 	if mongoURI == "" {
 		t.Skip("integration tests disabled")
 	}
-	name := fmt.Sprintf("products_test_%d", databases.Add(1))
+	return openNamed(t, fmt.Sprintf("products_test_%d", databases.Add(1)), testRetention)
+}
+
+func openNamed(t *testing.T, name string, retention time.Duration) *Store {
+	t.Helper()
 	store, err := Open(Settings{URI: mongoURI, Database: name, Topic: testTopic,
-		Timeout: testTimeout})
+		Timeout: testTimeout, Retention: retention})
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -146,7 +153,7 @@ func TestUpdateCommitsProductAndOutboxTogether(t *testing.T) {
 	setUp(t, store)
 	status := product.StatusDiscontinued
 	updated, err := store.Update(t.Context(), product.UpdateRequest{ID: "PRD-020", Market: "MX",
-		Patch: product.Patch{Status: &status}, ExpectedVersion: ptr(1),
+		Patch: product.Patch{Status: &status}, Precondition: at(1),
 		NewEvent: eventFor("0190a0b0-0000-7000-8000-000000000001")})
 	if err != nil || updated.Status != status || updated.Version != 2 {
 		t.Fatalf("unexpected update %+v err=%v", updated, err)
@@ -193,7 +200,7 @@ func TestUpdateRejections(t *testing.T) {
 		want    error
 	}{
 		{name: "should_reject_stale_version", want: product.ErrVersionConflict,
-			request: product.UpdateRequest{ID: "PRD-001", Market: "MX", ExpectedVersion: ptr(5),
+			request: product.UpdateRequest{ID: "PRD-001", Market: "MX", Precondition: at(5),
 				NewEvent: eventFor("e1")}},
 		{name: "should_reject_missing_product", want: product.ErrNotFound,
 			request: product.UpdateRequest{ID: "PRD-999", Market: "MX", NewEvent: eventFor("e2")}},
@@ -205,8 +212,9 @@ func TestUpdateRejections(t *testing.T) {
 			}
 		})
 	}
+	name := "renamed"
 	_, err := store.Update(t.Context(), product.UpdateRequest{ID: "PRD-001", Market: "MX",
-		NewEvent: failing})
+		Patch: product.Patch{Name: &name}, NewEvent: failing})
 	assertNothingCommitted(t, store, err)
 }
 
@@ -254,7 +262,7 @@ func TestConcurrentUpdatesWithSameVersionHaveOneWinner(t *testing.T) {
 			defer wg.Done()
 			name := fmt.Sprintf("writer-%d", i)
 			_, err := store.Update(context.Background(), product.UpdateRequest{ID: "PRD-005",
-				Market: "CO", Patch: product.Patch{Name: &name}, ExpectedVersion: ptr(1),
+				Market: "CO", Patch: product.Patch{Name: &name}, Precondition: at(1),
 				NewEvent: eventFor(fmt.Sprintf("evt-%d", i))})
 			if err == nil {
 				wins.Add(1)
@@ -336,12 +344,88 @@ func TestIndexesCoverClaimQueries(t *testing.T) {
 	}
 	var indexes []bson.M
 	_ = cursor.All(t.Context(), &indexes)
-	const outboxIndexes = 4
+	const outboxIndexes = 5
 	if len(indexes) != outboxIndexes {
 		t.Fatalf("want %d outbox indexes including _id, got %d", outboxIndexes, len(indexes))
 	}
 }
 
-func ptr(v int64) *int64 {
-	return &v
+func at(version int64) *product.Precondition {
+	return &product.Precondition{StrongTags: []string{strconv.FormatInt(version, 10)}}
+}
+
+func TestNoOpUpdateWritesNothing(t *testing.T) {
+	store := openStore(t)
+	setUp(t, store)
+	current, _ := store.FindByIDInMarket(t.Context(), "PRD-009", "PE")
+	status := current.Status
+	got, err := store.Update(t.Context(), product.UpdateRequest{ID: "PRD-009", Market: "PE",
+		Patch: product.Patch{Status: &status}, Precondition: at(1), NewEvent: eventFor("noop")})
+	count, _ := store.outbox.CountDocuments(t.Context(), bson.M{})
+	if err != nil || got != current || count != 0 {
+		t.Fatalf("no-op must not bump or publish, got %+v err=%v events=%d", got, err, count)
+	}
+}
+
+func TestSetupWithoutSeedOnlyCreatesIndexes(t *testing.T) {
+	store := openStore(t)
+	if err := store.Setup(t.Context(), nil); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	count, _ := store.products.CountDocuments(t.Context(), bson.M{})
+	if count != 0 {
+		t.Fatalf("seeding disabled must not insert products, got %d", count)
+	}
+}
+
+func TestRetentionIndexIsCreatedAndUpdated(t *testing.T) {
+	first := openStore(t)
+	setUp(t, first)
+	if got := ttlSeconds(t, first); got != int32(testRetention.Seconds()) {
+		t.Fatalf("want ttl %v, got %d", testRetention, got)
+	}
+	second := openNamed(t, first.products.Database().Name(), time.Hour)
+	setUp(t, second)
+	if got := ttlSeconds(t, second); got != int32(time.Hour.Seconds()) {
+		t.Fatalf("retention change must update the ttl, got %d", got)
+	}
+}
+
+func ttlSeconds(t *testing.T, store *Store) int32 {
+	t.Helper()
+	cursor, err := store.outbox.Indexes().List(t.Context())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	var indexes []bson.M
+	_ = cursor.All(t.Context(), &indexes)
+	for _, index := range indexes {
+		if index["name"] == ttlIndexName {
+			return index["expireAfterSeconds"].(int32)
+		}
+	}
+	t.Fatal("ttl index missing")
+	return 0
+}
+
+func TestRetentionSecondsIsBounded(t *testing.T) {
+	const hundredYears = 100 * 365 * 24 * time.Hour
+	if retentionSeconds(hundredYears) != math.MaxInt32 || retentionSeconds(time.Minute) != 60 {
+		t.Fatal("retention must be clamped to int32 seconds")
+	}
+	if isIndexClash(errors.New("x")) || isIndexClash(nil) {
+		t.Fatal("only command conflicts are index clashes")
+	}
+}
+
+func TestSetupFailsWhenRetentionIndexCannotBeReconciled(t *testing.T) {
+	store := openStore(t)
+	_, err := store.outbox.Indexes().CreateOne(t.Context(), mongo.IndexModel{
+		Keys: bson.D{{Key: fieldPublishedAt, Value: ascending}}})
+	if err != nil {
+		t.Fatalf("create conflicting index: %v", err)
+	}
+	if err := store.Setup(t.Context(), nil); err == nil {
+		t.Fatal("want retention reconciliation error")
+	}
 }

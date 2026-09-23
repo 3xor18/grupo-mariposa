@@ -89,7 +89,10 @@ func (s *Store) updateInTransaction(ctx context.Context, request product.UpdateR
 	if !request.Matches(current) {
 		return product.Product{}, product.ErrVersionConflict
 	}
-	updated := current.Apply(request.Patch)
+	updated, changed := current.Apply(request.Patch)
+	if !changed {
+		return current, nil
+	}
 	event, err := request.NewEvent(updated)
 	if err != nil {
 		return product.Product{}, fmt.Errorf("build change event: %w", err)

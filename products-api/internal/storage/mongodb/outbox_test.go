@@ -83,8 +83,8 @@ func TestLeaseFencingAndLifecycle(t *testing.T) {
 	if ok, err := store.MarkPublished(t.Context(), "evt-1", ownerB, later); !ok || err != nil {
 		t.Fatalf("mark published: %v %v", ok, err)
 	}
-	if count, err := store.CountUnpublished(t.Context()); count != 0 || err != nil {
-		t.Fatalf("want nothing pending, got %d %v", count, err)
+	if backlog, err := store.Backlog(t.Context()); backlog.Pending != 0 || err != nil {
+		t.Fatalf("want nothing pending, got %+v %v", backlog, err)
 	}
 }
 
@@ -134,8 +134,8 @@ func TestOutboxFailures(t *testing.T) {
 	if _, err := store.Release(cancelled, "x", ownerA, 1, now); err == nil {
 		t.Fatal("want release error")
 	}
-	if _, err := store.CountUnpublished(cancelled); err == nil {
-		t.Fatal("want count error")
+	if _, err := store.Backlog(cancelled); err == nil {
+		t.Fatal("want backlog error")
 	}
 }
 
@@ -180,5 +180,32 @@ func TestLeaseOfVanishedCandidateIsSkipped(t *testing.T) {
 		claimAt(time.Now(), ownerA, 1))
 	if err != nil || len(leased) != 0 {
 		t.Fatalf("want nothing leased, got %+v err=%v", leased, err)
+	}
+}
+
+func TestBacklogReportsPendingAndOldest(t *testing.T) {
+	store := openStore(t)
+	base := time.Now().UTC().Truncate(time.Millisecond)
+	insertEvents(t, store,
+		pendingEvent("new", "MX:PRD-001", 3, base),
+		pendingEvent("old", "CL:PRD-001", 2, base.Add(-time.Hour)))
+	published := pendingEvent("done", "EC:PRD-001", 2, base.Add(-2*time.Hour))
+	published.Status = statusPublished
+	insertEvents(t, store, published)
+	backlog, err := store.Backlog(t.Context())
+	if err != nil || backlog.Pending != 2 || !backlog.Oldest.Equal(base.Add(-time.Hour)) {
+		t.Fatalf("unexpected backlog %+v err=%v", backlog, err)
+	}
+}
+
+func TestBacklogDecodeFailure(t *testing.T) {
+	store := openStore(t)
+	_, err := store.outbox.InsertOne(t.Context(), bson.M{"_id": "bad",
+		"status": statusPending, "createdAt": "yesterday"})
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	if _, err := store.Backlog(t.Context()); err == nil {
+		t.Fatal("want decode error")
 	}
 }

@@ -2,7 +2,9 @@ package mongodb
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -40,20 +42,29 @@ const (
 	opLessOrEqual      = "$lte"
 	opOr               = "$or"
 	ascending          = 1
+	ttlIndexName       = "publishedAt_ttl"
+	commandCollMod     = "collMod"
+	commandIndex       = "index"
+	optionName         = "name"
+	optionExpireAfter  = "expireAfterSeconds"
+	codeOptionsClash   = 85
+	codeKeySpecsClash  = 86
 )
 
 type Settings struct {
-	URI      string
-	Database string
-	Topic    string
-	Timeout  time.Duration
+	URI       string
+	Database  string
+	Topic     string
+	Timeout   time.Duration
+	Retention time.Duration
 }
 
 type Store struct {
-	client   *mongo.Client
-	products *mongo.Collection
-	outbox   *mongo.Collection
-	topic    string
+	client    *mongo.Client
+	products  *mongo.Collection
+	outbox    *mongo.Collection
+	topic     string
+	retention time.Duration
 }
 
 type index struct {
@@ -71,10 +82,11 @@ func Open(settings Settings) (*Store, error) {
 	}
 	db := client.Database(settings.Database)
 	return &Store{
-		client:   client,
-		products: db.Collection(productsCollection),
-		outbox:   db.Collection(outboxCollection),
-		topic:    settings.Topic,
+		client:    client,
+		products:  db.Collection(productsCollection),
+		outbox:    db.Collection(outboxCollection),
+		topic:     settings.Topic,
+		retention: settings.Retention,
 	}, nil
 }
 
@@ -92,7 +104,35 @@ func (s *Store) Setup(ctx context.Context, seed []product.Product) error {
 			return fmt.Errorf("create index on %s: %w", ix.collection.Name(), err)
 		}
 	}
+	if err := s.ensureRetention(ctx); err != nil {
+		return err
+	}
 	return s.seed(ctx, seed)
+}
+
+func (s *Store) ensureRetention(ctx context.Context) error {
+	seconds := retentionSeconds(s.retention)
+	_, err := s.outbox.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: fieldPublishedAt, Value: ascending}},
+		Options: options.Index().SetName(ttlIndexName).SetExpireAfterSeconds(seconds),
+	})
+	if !isIndexClash(err) {
+		return wrap("create outbox retention index", err)
+	}
+	command := bson.D{{Key: commandCollMod, Value: outboxCollection}, {Key: commandIndex,
+		Value: bson.D{{Key: optionName, Value: ttlIndexName}, {Key: optionExpireAfter,
+			Value: seconds}}}}
+	return wrap("update outbox retention", s.outbox.Database().RunCommand(ctx, command).Err())
+}
+
+func retentionSeconds(retention time.Duration) int32 {
+	return int32(min(retention.Seconds(), math.MaxInt32))
+}
+
+func isIndexClash(err error) bool {
+	var command mongo.CommandError
+	return errors.As(err, &command) &&
+		(command.Code == codeOptionsClash || command.Code == codeKeySpecsClash)
 }
 
 func (s *Store) indexes() []index {
@@ -111,6 +151,9 @@ func (s *Store) indexes() []index {
 }
 
 func (s *Store) seed(ctx context.Context, seed []product.Product) error {
+	if len(seed) == 0 {
+		return nil
+	}
 	models := make([]mongo.WriteModel, 0, len(seed))
 	for _, p := range seed {
 		models = append(models, mongo.NewUpdateOneModel().
