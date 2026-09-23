@@ -23,7 +23,8 @@ readonly SECRET_LENGTH=32
 readonly SECRET_ENTROPY_BYTES=48
 readonly AES_KEY_BYTES=32
 readonly DEFAULT_MONGO_QUERY='db.orders.find().sort({processedAt:-1}).limit(5).toArray()'
-readonly SECRET_KEYS=(MONGO_ROOT_PASSWORD MONGO_APP_PASSWORD REDIS_PASSWORD
+readonly SECRET_KEYS=(MONGO_ROOT_PASSWORD MONGO_APP_PASSWORD MONGO_CLIENTS_PASSWORD
+  MONGO_PRODUCTS_PASSWORD REDIS_PASSWORD
   KEYCLOAK_ADMIN_PASSWORD ORDER_PROCESSOR_CLIENT_SECRET DEMO_USER_PASSWORD
   GRAFANA_ADMIN_PASSWORD CONFIG_SERVER_PASSWORD)
 
@@ -54,16 +55,38 @@ require_env_file() {
   fi
 }
 
+append_missing_keys() {
+  local line key added=0
+  while IFS= read -r line; do
+    [[ "${line}" =~ ^([A-Z0-9_]+)= ]] || continue
+    key="${BASH_REMATCH[1]}"
+    grep -q -E "^${key}=" "${ENV_FILE}" && continue
+    printf '%s\n' "${line}" >> "${ENV_FILE}"
+    added=$((added + 1))
+  done < "${ENV_TEMPLATE}"
+  echo "${added}"
+}
+
+fill_empty_secrets() {
+  local key
+  for key in "${SECRET_KEYS[@]}"; do
+    [[ -z "$(env_value "${key}")" ]] && set_env_value "${key}" "$(random_secret)"
+  done
+  [[ -z "$(env_value PII_ENCRYPTION_KEY)" ]] && set_env_value PII_ENCRYPTION_KEY "$(random_aes_key)"
+  return 0
+}
+
 cmd_init() {
+  umask 077
   if [[ -f "${ENV_FILE}" ]]; then
-    echo ".env ya existe; no se regenera."
+    local added
+    added="$(append_missing_keys)"
+    fill_empty_secrets
+    echo ".env ya existe; se agregaron ${added} variables nuevas de .env.example."
     return
   fi
-  umask 077
   cp "${ENV_TEMPLATE}" "${ENV_FILE}"
-  local key
-  for key in "${SECRET_KEYS[@]}"; do set_env_value "${key}" "$(random_secret)"; done
-  set_env_value PII_ENCRYPTION_KEY "$(random_aes_key)"
+  fill_empty_secrets
   echo ".env generado con secretos aleatorios."
 }
 
