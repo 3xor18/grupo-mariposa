@@ -13,8 +13,8 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.grupomariposa.orders.application.port.out.ProductCatalog;
+import com.grupomariposa.orders.domain.Markets;
 import com.grupomariposa.orders.domain.model.Lookup;
-import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.ProductProfile;
 import com.grupomariposa.orders.domain.model.ProductStatus;
 import com.grupomariposa.orders.domain.model.TaxCategory;
@@ -53,7 +53,7 @@ class CachingProductCatalogTest {
         when(values.get(KEY)).thenReturn(objectMapper.writeValueAsString(
                 CachedProduct.from(PRODUCT)));
 
-        assertThat(catalog.findProduct("PRD-001", Market.MX)).isEqualTo(Lookup.found(PRODUCT));
+        assertThat(catalog.findProduct("PRD-001", Markets.MX)).isEqualTo(Lookup.found(PRODUCT));
         verifyNoInteractions(delegate);
         assertThat(registry.counter(CachingProductCatalog.HITS_METRIC, "cache", "products")
                 .count()).isOne();
@@ -61,17 +61,17 @@ class CachingProductCatalogTest {
 
     @Test
     void should_cache_found_products_with_ttl_on_miss() {
-        when(delegate.findProduct("PRD-001", Market.MX)).thenReturn(Lookup.found(PRODUCT));
+        when(delegate.findProduct("PRD-001", Markets.MX)).thenReturn(Lookup.found(PRODUCT));
 
-        assertThat(catalog.findProduct("PRD-001", Market.MX)).isEqualTo(Lookup.found(PRODUCT));
+        assertThat(catalog.findProduct("PRD-001", Markets.MX)).isEqualTo(Lookup.found(PRODUCT));
         verify(values).set(eq(KEY), anyString(), eq(TTL));
     }
 
     @Test
     void should_not_cache_not_found_results() {
-        when(delegate.findProduct("PRD-404", Market.CO)).thenReturn(Lookup.notFound());
+        when(delegate.findProduct("PRD-404", Markets.CO)).thenReturn(Lookup.notFound());
 
-        assertThat(catalog.findProduct("PRD-404", Market.CO)).isEqualTo(Lookup.notFound());
+        assertThat(catalog.findProduct("PRD-404", Markets.CO)).isEqualTo(Lookup.notFound());
         verify(values, never()).set(anyString(), anyString(), any(Duration.class));
     }
 
@@ -80,9 +80,9 @@ class CachingProductCatalogTest {
         when(values.get(KEY)).thenThrow(new RedisConnectionFailureException("down"));
         doThrow(new RedisConnectionFailureException("down"))
                 .when(values).set(anyString(), anyString(), any(Duration.class));
-        when(delegate.findProduct("PRD-001", Market.MX)).thenReturn(Lookup.found(PRODUCT));
+        when(delegate.findProduct("PRD-001", Markets.MX)).thenReturn(Lookup.found(PRODUCT));
 
-        assertThat(catalog.findProduct("PRD-001", Market.MX)).isEqualTo(Lookup.found(PRODUCT));
+        assertThat(catalog.findProduct("PRD-001", Markets.MX)).isEqualTo(Lookup.found(PRODUCT));
         assertThat(registry.counter(CachingProductCatalog.ERRORS_METRIC, "cache", "products",
                 "operation", "read").count()).isOne();
         assertThat(registry.counter(CachingProductCatalog.ERRORS_METRIC, "cache", "products",
@@ -92,17 +92,17 @@ class CachingProductCatalogTest {
     @Test
     void should_ignore_incomplete_entries() {
         when(values.get(KEY)).thenReturn("{\"productId\":\"PRD-001\"}");
-        when(delegate.findProduct("PRD-001", Market.MX)).thenReturn(Lookup.found(PRODUCT));
+        when(delegate.findProduct("PRD-001", Markets.MX)).thenReturn(Lookup.found(PRODUCT));
 
-        assertThat(catalog.findProduct("PRD-001", Market.MX)).isEqualTo(Lookup.found(PRODUCT));
+        assertThat(catalog.findProduct("PRD-001", Markets.MX)).isEqualTo(Lookup.found(PRODUCT));
     }
 
     @Test
     void should_ignore_corrupted_entries() {
         when(values.get(KEY)).thenReturn("{corrupted");
-        when(delegate.findProduct("PRD-001", Market.MX)).thenReturn(Lookup.found(PRODUCT));
+        when(delegate.findProduct("PRD-001", Markets.MX)).thenReturn(Lookup.found(PRODUCT));
 
-        assertThat(catalog.findProduct("PRD-001", Market.MX)).isEqualTo(Lookup.found(PRODUCT));
+        assertThat(catalog.findProduct("PRD-001", Markets.MX)).isEqualTo(Lookup.found(PRODUCT));
         assertThat(registry.counter(CachingProductCatalog.MISSES_METRIC, "cache", "products")
                 .count()).isOne();
     }

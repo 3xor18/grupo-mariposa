@@ -8,8 +8,8 @@ import java.util.Optional;
 public record Order(
         OrderIdentity identity,
         OrderStatus status,
-        Market market,
-        Currency currency,
+        MarketCode market,
+        CurrencyCode currency,
         String channel,
         ClientSnapshot client,
         List<OrderLine> lines,

@@ -2,7 +2,7 @@ package com.grupomariposa.orders.infrastructure.http.product;
 
 import com.grupomariposa.orders.application.port.out.ProductCatalog;
 import com.grupomariposa.orders.domain.model.Lookup;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.ProductProfile;
 import com.grupomariposa.orders.infrastructure.http.LookupExchange;
 import com.grupomariposa.orders.infrastructure.http.ResilientExecutor;
@@ -29,9 +29,9 @@ public final class HttpProductCatalog implements ProductCatalog {
     }
 
     @Override
-    public Lookup<ProductProfile> findProduct(final String productId, final Market market) {
+    public Lookup<ProductProfile> findProduct(final String productId, final MarketCode market) {
         return resilience.execute(() -> exchange.fetch(
-                restClient.get().uri(PRODUCT_PATH, productId, market.name())
+                restClient.get().uri(PRODUCT_PATH, productId, market.value())
                         .accept(MediaType.APPLICATION_JSON),
                 ProductResponse.class, mapper::toProfile));
     }

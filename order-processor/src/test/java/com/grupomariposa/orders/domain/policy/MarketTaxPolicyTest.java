@@ -5,15 +5,17 @@ import static com.grupomariposa.orders.domain.DomainFixtures.wholesaleClient;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.grupomariposa.orders.domain.DomainFixtures;
+import com.grupomariposa.orders.domain.Markets;
 import com.grupomariposa.orders.domain.model.ClientSegment;
 import com.grupomariposa.orders.domain.model.ClientStatus;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.Rate;
 import com.grupomariposa.orders.domain.model.TaxCategory;
 import com.grupomariposa.orders.domain.model.TaxRegime;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class MarketTaxPolicyTest {
 
@@ -25,15 +27,15 @@ class MarketTaxPolicyTest {
         "CO, STANDARD, 19", "CO, REDUCED, 5", "CO, EXEMPT, 0",
         "PE, STANDARD, 18", "PE, REDUCED, 10", "PE, EXEMPT, 0"
     })
-    void should_apply_market_rate_for_category(final Market market, final TaxCategory category,
+    void should_apply_market_rate_for_category(final MarketCode market, final TaxCategory category,
                                                final int percent) {
         assertThat(policy.rateFor(market, wholesaleClient(market), category))
                 .isEqualTo(Rate.ofPercent(percent));
     }
 
     @ParameterizedTest
-    @EnumSource(Market.class)
-    void should_not_tax_exempt_regime_clients(final Market market) {
+    @ValueSource(strings = {"MX", "CO", "PE", "CL", "EC"})
+    void should_not_tax_exempt_regime_clients(final MarketCode market) {
         final var exempt = client(market, ClientSegment.RETAIL, TaxRegime.EXEMPT,
                 ClientStatus.ACTIVE);
 
@@ -45,9 +47,9 @@ class MarketTaxPolicyTest {
     @ParameterizedTest
     @EnumSource(value = TaxRegime.class, names = {"GENERAL", "SIMPLIFIED"})
     void should_tax_non_exempt_regimes(final TaxRegime regime) {
-        final var taxed = client(Market.MX, ClientSegment.RETAIL, regime, ClientStatus.ACTIVE);
+        final var taxed = client(Markets.MX, ClientSegment.RETAIL, regime, ClientStatus.ACTIVE);
 
-        assertThat(policy.rateFor(Market.MX, taxed, TaxCategory.STANDARD))
+        assertThat(policy.rateFor(Markets.MX, taxed, TaxCategory.STANDARD))
                 .isEqualTo(Rate.ofPercent(16));
     }
 }

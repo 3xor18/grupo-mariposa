@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.grupomariposa.orders.application.port.out.ProductCatalog;
 import com.grupomariposa.orders.domain.model.Lookup;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.ProductProfile;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -52,7 +52,7 @@ public final class CachingProductCatalog implements ProductCatalog {
     }
 
     @Override
-    public Lookup<ProductProfile> findProduct(final String productId, final Market market) {
+    public Lookup<ProductProfile> findProduct(final String productId, final MarketCode market) {
         final String key = keyOf(productId, market);
         final Optional<ProductProfile> cached = read(key);
         if (cached.isPresent()) {
@@ -102,8 +102,8 @@ public final class CachingProductCatalog implements ProductCatalog {
         }
     }
 
-    private String keyOf(final String productId, final Market market) {
-        return properties.keyPrefix() + KEY_SEPARATOR + market.name() + KEY_SEPARATOR + productId;
+    private String keyOf(final String productId, final MarketCode market) {
+        return properties.keyPrefix() + KEY_SEPARATOR + market.value() + KEY_SEPARATOR + productId;
     }
 
     private static Counter counter(final MeterRegistry registry, final String name,

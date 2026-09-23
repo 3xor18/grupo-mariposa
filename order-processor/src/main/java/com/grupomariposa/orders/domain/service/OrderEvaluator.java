@@ -27,19 +27,21 @@ public final class OrderEvaluator {
     public Decision evaluate(final EvaluationInput input) {
         final List<Violation> violations = eligibilityPolicy.violations(input);
         if (!violations.isEmpty()) {
-            return new Decision.Rejected(unpricedLines(input), violations);
+            return new Decision.Rejected(unpricedLines(input), violations,
+                    Totals.zero(input.fractionDigits()));
         }
         final ClientProfile client = input.client().value().orElseThrow();
         final List<OrderLine> lines = input.items().stream()
                 .map(resolved -> priceLine(input, client, resolved))
                 .toList();
-        return new Decision.Approved(lines, totalsOf(lines));
+        return new Decision.Approved(lines, totalsOf(lines, input.fractionDigits()));
     }
 
     private OrderLine priceLine(final EvaluationInput input, final ClientProfile client,
                                 final ResolvedItem resolved) {
         final ProductProfile product = resolved.product().value().orElseThrow();
-        return linePricer.price(input.market(), client, resolved.item(), product);
+        return linePricer.price(input.market(), input.fractionDigits(), client,
+                resolved.item(), product);
     }
 
     private static List<OrderLine> unpricedLines(final EvaluationInput input) {
@@ -48,10 +50,10 @@ public final class OrderEvaluator {
                 .toList();
     }
 
-    private static Totals totalsOf(final List<OrderLine> lines) {
+    private static Totals totalsOf(final List<OrderLine> lines, final int fractionDigits) {
         final List<LineAmounts> amounts = lines.stream()
                 .map(OrderLine::amounts)
                 .toList();
-        return Totals.sumOf(amounts);
+        return Totals.sumOf(amounts, fractionDigits);
     }
 }

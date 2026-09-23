@@ -1,6 +1,7 @@
 package com.grupomariposa.orders.domain.model;
 
 import java.util.List;
+import java.util.Objects;
 
 public sealed interface Decision permits Decision.Approved, Decision.Rejected {
 
@@ -29,13 +30,15 @@ public sealed interface Decision permits Decision.Approved, Decision.Rejected {
         }
     }
 
-    record Rejected(List<OrderLine> lines, List<Violation> violations) implements Decision {
+    record Rejected(List<OrderLine> lines, List<Violation> violations, Totals totals)
+            implements Decision {
 
         private static final String NO_VIOLATIONS = "A rejection needs at least one violation";
 
         public Rejected {
             lines = List.copyOf(lines);
             violations = List.copyOf(violations);
+            Objects.requireNonNull(totals, "totals");
             if (violations.isEmpty()) {
                 throw new IllegalArgumentException(NO_VIOLATIONS);
             }
@@ -44,11 +47,6 @@ public sealed interface Decision permits Decision.Approved, Decision.Rejected {
         @Override
         public OrderStatus status() {
             return OrderStatus.REJECTED;
-        }
-
-        @Override
-        public Totals totals() {
-            return Totals.ZERO;
         }
 
         public RejectionCode reason() {

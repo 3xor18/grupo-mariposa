@@ -16,10 +16,10 @@ import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.grupomariposa.orders.application.error.ExternalPermanentException;
 import com.grupomariposa.orders.application.error.ExternalTransientException;
+import com.grupomariposa.orders.domain.Markets;
 import com.grupomariposa.orders.domain.model.ClientProfile;
 import com.grupomariposa.orders.domain.model.ClientSegment;
 import com.grupomariposa.orders.domain.model.Lookup;
-import com.grupomariposa.orders.domain.model.Market;
 import com.grupomariposa.orders.domain.model.ProductProfile;
 import com.grupomariposa.orders.domain.model.ProductStatus;
 import com.grupomariposa.orders.domain.model.TaxCategory;
@@ -85,7 +85,7 @@ class HttpAdaptersTest {
 
         assertThat(client.value()).hasValueSatisfying(profile -> {
             assertThat(profile.segment()).isEqualTo(ClientSegment.WHOLESALE);
-            assertThat(profile.market()).isEqualTo(Market.MX);
+            assertThat(profile.market()).isEqualTo(Markets.MX);
         });
     }
 
@@ -95,7 +95,7 @@ class HttpAdaptersTest {
                 equalTo("MX"))
                 .willReturn(okJson(PRODUCT_BODY)));
 
-        final Lookup<ProductProfile> product = products.findProduct("PRD-001", Market.MX);
+        final Lookup<ProductProfile> product = products.findProduct("PRD-001", Markets.MX);
 
         assertThat(product.value()).hasValueSatisfying(profile -> {
             assertThat(profile.status()).isEqualTo(ProductStatus.ACTIVE);
@@ -194,7 +194,7 @@ class HttpAdaptersTest {
         "{\"clientId\":\"CLI-1\",\"status\":\"SUSPENDED\",\"segment\":\"RETAIL\","
                 + "\"taxRegime\":\"GENERAL\",\"market\":\"MX\"}",
         "{\"clientId\":\"CLI-1\",\"status\":\"ACTIVE\",\"segment\":\"RETAIL\","
-                + "\"taxRegime\":\"GENERAL\",\"market\":\"AR\"}",
+                + "\"taxRegime\":\"GENERAL\",\"market\":\"ARG\"}",
         "{\"clientId\":\" \",\"status\":\"ACTIVE\"}",
         "null"
     })
@@ -213,7 +213,7 @@ class HttpAdaptersTest {
     void should_treat_invalid_product_bodies_as_permanent(final String body) {
         API.stubFor(get(urlPathEqualTo("/products/PRD-ODD")).willReturn(okJson(body)));
 
-        assertThatThrownBy(() -> products.findProduct("PRD-ODD", Market.PE))
+        assertThatThrownBy(() -> products.findProduct("PRD-ODD", Markets.PE))
                 .isInstanceOf(ExternalPermanentException.class);
     }
 
@@ -221,7 +221,7 @@ class HttpAdaptersTest {
     void should_fail_fast_as_transient_when_circuit_is_open() {
         circuitBreakers.circuitBreaker(Dependency.PRODUCTS_API.id()).transitionToOpenState();
 
-        assertThatThrownBy(() -> products.findProduct("PRD-001", Market.MX))
+        assertThatThrownBy(() -> products.findProduct("PRD-001", Markets.MX))
                 .isInstanceOf(ExternalTransientException.class)
                 .hasMessage("products-api circuit breaker is open");
         API.verify(0, getRequestedFor(urlPathEqualTo("/products/PRD-001")));

@@ -10,7 +10,7 @@ import com.grupomariposa.orders.application.error.PersistenceException;
 import com.grupomariposa.orders.application.query.OrderSearchCriteria;
 import com.grupomariposa.orders.application.query.PageResult;
 import com.grupomariposa.orders.application.service.RelaySettings;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.Markets;
 import com.grupomariposa.orders.domain.model.OrderStatus;
 import java.time.Duration;
 import java.util.List;
@@ -47,10 +47,10 @@ class ApplicationModelTest {
     @Test
     void should_expose_optional_search_filters() {
         final OrderSearchCriteria criteria =
-                new OrderSearchCriteria(OrderStatus.APPROVED, Market.PE, 1, 5);
+                new OrderSearchCriteria(OrderStatus.APPROVED, Markets.PE, 1, 5);
 
         assertThat(criteria.statusFilter()).contains(OrderStatus.APPROVED);
-        assertThat(criteria.marketFilter()).contains(Market.PE);
+        assertThat(criteria.marketFilter()).contains(Markets.PE);
         assertThat(new OrderSearchCriteria(null, null, 0, 1).statusFilter()).isEmpty();
     }
 

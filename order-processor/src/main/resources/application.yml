@@ -128,6 +128,10 @@ springdoc:
     enabled: ${API_DOCS_ENABLED:false}
     path: /v3/api-docs
 
+platform:
+  markets: ${PLATFORM_MARKETS:MX:MXN:es-MX,CO:COP:es-CO,PE:PEN:es-PE,CL:CLP:es-CL,EC:USD:es-EC}
+  currencies: ${PLATFORM_CURRENCIES:MXN:2,COP:2,PEN:2,CLP:0,USD:2}
+
 pricing:
   tax-rates:
     MX:
@@ -142,13 +146,17 @@ pricing:
       STANDARD: ${PRICING_TAX_PE_STANDARD:0.18}
       REDUCED: ${PRICING_TAX_PE_REDUCED:0.10}
       EXEMPT: ${PRICING_TAX_PE_EXEMPT:0.00}
+    CL:
+      STANDARD: ${PRICING_TAX_CL_STANDARD:0.19}
+      REDUCED: ${PRICING_TAX_CL_REDUCED:0.19}
+      EXEMPT: ${PRICING_TAX_CL_EXEMPT:0.00}
+    EC:
+      STANDARD: ${PRICING_TAX_EC_STANDARD:0.15}
+      REDUCED: ${PRICING_TAX_EC_REDUCED:0.05}
+      EXEMPT: ${PRICING_TAX_EC_EXEMPT:0.00}
   wholesale-discount:
     rate: ${PRICING_WHOLESALE_DISCOUNT_RATE:0.03}
     min-quantity: ${PRICING_WHOLESALE_DISCOUNT_MIN_QUANTITY:20}
-  market-currencies:
-    MX: ${PRICING_CURRENCY_MX:MXN}
-    CO: ${PRICING_CURRENCY_CO:COP}
-    PE: ${PRICING_CURRENCY_PE:PEN}
 
 app:
   keycloak:

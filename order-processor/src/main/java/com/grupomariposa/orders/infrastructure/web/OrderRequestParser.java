@@ -1,7 +1,7 @@
 package com.grupomariposa.orders.infrastructure.web;
 
 import com.grupomariposa.orders.application.query.OrderSearchCriteria;
-import com.grupomariposa.orders.domain.model.Market;
+import com.grupomariposa.orders.domain.model.MarketCode;
 import com.grupomariposa.orders.domain.model.OrderStatus;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -18,6 +18,7 @@ public final class OrderRequestParser {
     private static final String ORDER_ID_FIELD = "orderId";
     private static final String STATUS = "status";
     private static final String MARKET = "market";
+    private static final String MARKET_FORMAT = "must be a two-letter market code";
     private static final String PAGE = "page";
     private static final String SIZE = "size";
     private static final String INVALID_ORDER_ID =
@@ -45,7 +46,7 @@ public final class OrderRequestParser {
     public OrderSearchCriteria criteria(final String status, final String market,
                                         final String page, final String size) {
         final Parsed<OrderStatus> parsedStatus = enumValue(OrderStatus.class, STATUS, status);
-        final Parsed<Market> parsedMarket = enumValue(Market.class, MARKET, market);
+        final Parsed<MarketCode> parsedMarket = marketCode(market);
         final Parsed<Integer> parsedPage = number(PAGE, page, FIRST_PAGE,
                 value -> value >= FIRST_PAGE, MIN_PAGE);
         final Parsed<Integer> parsedSize = number(SIZE, size, limits.defaultPageSize(),
@@ -62,6 +63,14 @@ public final class OrderRequestParser {
         }
         return new OrderSearchCriteria(parsedStatus.value(), parsedMarket.value(),
                 parsedPage.value(), parsedSize.value());
+    }
+
+    private static Parsed<MarketCode> marketCode(final String raw) {
+        if (raw == null) {
+            return Parsed.valid(null);
+        }
+        return MarketCode.parse(raw).map(Parsed::valid).orElseGet(() ->
+                Parsed.invalid(new FieldViolation(MARKET, MARKET_FORMAT)));
     }
 
     private static <E extends Enum<E>> Parsed<E> enumValue(final Class<E> type,

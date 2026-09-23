@@ -8,7 +8,7 @@ public record ClientSnapshot(
         ClientStatus status,
         ClientSegment segment,
         TaxRegime taxRegime,
-        Market market) {
+        MarketCode market) {
 
     public ClientSnapshot {
         Objects.requireNonNull(clientId, "clientId");

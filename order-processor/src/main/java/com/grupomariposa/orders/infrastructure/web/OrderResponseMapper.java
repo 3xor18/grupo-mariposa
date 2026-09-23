@@ -28,7 +28,7 @@ public final class OrderResponseMapper {
 
     public OrderResponse toResponse(final Order order) {
         return new OrderResponse(order.orderId(), order.sourceEventId(), order.eventVersion(),
-                order.status().name(), order.market().name(), order.currency().name(),
+                order.status().name(), order.market().value(), order.currency().value(),
                 order.channel(), client(order.client()),
                 order.lines().stream().map(OrderResponseMapper::line).toList(),
                 totals(order.totals()), order.reason().map(RejectionCode::name).orElse(null),
@@ -47,7 +47,7 @@ public final class OrderResponseMapper {
 
     private static OrderSummaryResponse summary(final OrderSummary summary) {
         return new OrderSummaryResponse(summary.orderId(), summary.status().name(),
-                summary.market().name(), summary.currency().name(), summary.clientId(),
+                summary.market().value(), summary.currency().value(), summary.clientId(),
                 summary.eventVersion(), summary.grandTotal().amount(),
                 nameOf(summary.reason()), summary.processedAt());
     }
@@ -55,7 +55,7 @@ public final class OrderResponseMapper {
     private static ClientSnapshotResponse client(final ClientSnapshot client) {
         return new ClientSnapshotResponse(client.clientId(), client.name(),
                 nameOf(client.status()), nameOf(client.segment()), nameOf(client.taxRegime()),
-                nameOf(client.market()));
+                client.market() == null ? null : client.market().value());
     }
 
     private static OrderLineResponse line(final OrderLine line) {
