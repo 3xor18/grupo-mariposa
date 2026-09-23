@@ -27,6 +27,9 @@ Opción 4.
 - En la misma transacción que el cambio se inserta el evento en el outbox; un relay lo publica en
   `clients.changed.v1` / `products.changed.v1` (key = id, tópicos compactados), con el mismo esquema de lease que
   `order-processor`.
+- **Los eventos de cambio nunca publican datos personales**: `clients.changed.v1` no lleva el nombre del cliente
+  (un tópico compactado lo retendría indefinidamente, fuera del cifrado de `order-processor`). Quien necesite el
+  nombre lo lee por HTTP a `clients-api`.
 - `order-processor` cachea clientes (`CachingClientDirectory`) y productos en Redis con la **versión** de la entidad.
   Al recibir un evento de cambio **sobrescribe** la entrada si la versión es mayor (o la borra si el evento no trae el
   estado completo). Eventos viejos no pisan datos más nuevos.
