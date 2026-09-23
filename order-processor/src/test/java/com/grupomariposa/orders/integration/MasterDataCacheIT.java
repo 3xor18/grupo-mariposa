@@ -56,6 +56,8 @@ class MasterDataCacheIT extends IntegrationTest {
 
         publishClient("CLI-CACHEBLK1", 2, "BLOCKED");
         awaitCachedVersion("clients:CLI-CACHEBLK1", "2");
+        assertThat((String) redis.opsForHash().get("clients:CLI-CACHEBLK1", DATA_FIELD))
+                .contains("\"encryptedName\":\"k1:", "\"status\":\"BLOCKED\"");
 
         final Document rejected = processOrder("BLK-B", "CLI-CACHEBLK1", "PRD-001",
                 "REJECTED");
@@ -95,6 +97,7 @@ class MasterDataCacheIT extends IntegrationTest {
     void should_not_let_an_older_api_read_override_a_newer_cached_version() {
         stubs.golden();
         stubs.versionedClient("CLI-CACHEOLD1", "MX", "ACTIVE", 4);
+        processOrder("OLD-0", "CLI-CACHEOLD1", "PRD-001", "APPROVED");
         publishClient("CLI-CACHEOLD1", 7, "BLOCKED");
         awaitCachedVersion("clients:CLI-CACHEOLD1", "7");
 
@@ -130,7 +133,7 @@ class MasterDataCacheIT extends IntegrationTest {
         publish(CLIENTS_CHANGED, clientId, """
                 {"eventId":"%s-%d","occurredAt":"2026-09-23T10:00:00Z","clientId":"%s",
                  "version":%d,"status":"%s","segment":"WHOLESALE","taxRegime":"GENERAL",
-                 "market":"MX","name":"Distribuidora Central"}"""
+                 "market":"MX"}"""
                 .formatted(clientId, version, clientId, version, status));
     }
 

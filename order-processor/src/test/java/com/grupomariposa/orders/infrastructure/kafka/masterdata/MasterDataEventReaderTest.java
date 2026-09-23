@@ -40,6 +40,14 @@ class MasterDataEventReaderTest {
     }
 
     @Test
+    void should_treat_client_events_without_name_as_full_state() {
+        assertThat(reader.readClient(bytes(CLIENT.replace(",\"name\":\"Distribuidora Central\"",
+                "")))).isEqualTo(new MasterDataChange.ClientChanged(new Versioned<>(
+                        new ClientProfile("CLI-99821", null, ClientStatus.BLOCKED,
+                                ClientSegment.WHOLESALE, TaxRegime.GENERAL, Markets.MX), 4L)));
+    }
+
+    @Test
     void should_read_full_product_state_keyed_by_market() {
         assertThat(reader.readProduct(bytes(PRODUCT))).isEqualTo(
                 new MasterDataChange.ProductChanged(Markets.CL, new Versioned<>(

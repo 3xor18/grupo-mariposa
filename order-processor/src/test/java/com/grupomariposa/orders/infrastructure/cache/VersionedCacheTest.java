@@ -132,6 +132,15 @@ class VersionedCacheTest {
     }
 
     @Test
+    void should_peek_cached_entries_without_counting_hits() {
+        when(store.read(KEY)).thenReturn(Optional.of(codec.encode(ACTIVE)), Optional.empty());
+
+        assertThat(cache.peek(ID)).contains(ACTIVE);
+        assertThat(cache.peek(ID)).isEmpty();
+        assertThat(count(CacheMetrics.HITS)).isZero();
+    }
+
+    @Test
     void should_evict_with_version_guard() {
         when(store.evict(KEY, 6L, TTL)).thenReturn(true, false)
                 .thenThrow(new RedisConnectionFailureException("down"));

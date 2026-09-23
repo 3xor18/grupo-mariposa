@@ -18,7 +18,15 @@ public final class MasterDataCacheUpdater {
     }
 
     public CacheWrite clientChanged(final Versioned<ClientProfile> change) {
-        return clients.apply(change.value().clientId(), change);
+        final ClientProfile incoming = change.value();
+        final String clientId = incoming.clientId();
+        if (incoming.name() != null) {
+            return clients.apply(clientId, change);
+        }
+        return clients.peek(clientId).map(ClientProfile::name)
+                .map(name -> clients.apply(clientId,
+                        new Versioned<>(withName(incoming, name), change.version())))
+                .orElseGet(() -> clients.evict(clientId, change.version()));
     }
 
     public CacheWrite clientRemoved(final String clientId, final long version) {
@@ -50,5 +58,10 @@ public final class MasterDataCacheUpdater {
 
     public void productChangeFailed() {
         products.failed();
+    }
+
+    private static ClientProfile withName(final ClientProfile profile, final String name) {
+        return new ClientProfile(profile.clientId(), name, profile.status(), profile.segment(),
+                profile.taxRegime(), profile.market());
     }
 }
