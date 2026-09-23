@@ -17,6 +17,8 @@ curl -s -H "Authorization: Bearer $(./mariposa.sh token admin)" localhost:8082/c
 ```
 - El `ETag` debe ser la versión nueva y `status` el valor esperado. Si no, el `PATCH` falló (`412` por un
   `If-Match` viejo, `403` sin rol `clients-admin` / `products-admin`): no es un problema de caché.
+- En EKS el `PATCH` sólo llega desde pods `admin-tools` o el namespace `operations` (NetworkPolicy); un timeout
+  desde otro origen es la política, no la API.
 
 ## 2. ¿El outbox de la API está publicando?
 - Panel **"Outbox de clients-api y products-api"**: antigüedad y pendientes por servicio. Una antigüedad creciente
