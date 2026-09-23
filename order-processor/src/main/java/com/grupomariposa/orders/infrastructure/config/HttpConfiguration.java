@@ -1,19 +1,24 @@
 package com.grupomariposa.orders.infrastructure.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.grupomariposa.orders.application.port.out.ClientDirectory;
 import com.grupomariposa.orders.application.port.out.ProductCatalog;
+import com.grupomariposa.orders.domain.model.ClientProfile;
+import com.grupomariposa.orders.domain.model.ProductProfile;
+import com.grupomariposa.orders.infrastructure.cache.CachingClientDirectory;
 import com.grupomariposa.orders.infrastructure.cache.CachingProductCatalog;
+import com.grupomariposa.orders.infrastructure.cache.ClientCacheProperties;
 import com.grupomariposa.orders.infrastructure.cache.ProductCacheProperties;
+import com.grupomariposa.orders.infrastructure.cache.VersionedCache;
 import com.grupomariposa.orders.infrastructure.http.HttpDependenciesProperties;
 import com.grupomariposa.orders.infrastructure.http.ResilienceFactory;
 import com.grupomariposa.orders.infrastructure.http.RestClientFactory;
 import com.grupomariposa.orders.infrastructure.http.RetryAfterParser;
+import com.grupomariposa.orders.infrastructure.http.client.HttpClientDirectory;
+import com.grupomariposa.orders.infrastructure.http.product.HttpProductCatalog;
 import com.grupomariposa.orders.infrastructure.observability.ProcessingMetrics;
 import io.github.resilience4j.bulkhead.BulkheadRegistry;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryRegistry;
-import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
@@ -21,7 +26,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -103,21 +107,19 @@ public class HttpConfiguration {
     }
 
     @Bean
-    public ClientDirectory clientDirectory(final HttpAdapterSupport support) {
-        return support.clientDirectory();
+    public ClientDirectory clientDirectory(final HttpAdapterSupport support,
+                                           final ClientCacheProperties cache,
+                                           final VersionedCache<ClientProfile> clientCache) {
+        final HttpClientDirectory http = support.clientDirectory();
+        return cache.enabled() ? new CachingClientDirectory(http, clientCache) : http;
     }
 
     @Bean
     public ProductCatalog productCatalog(final HttpAdapterSupport support,
                                          final ProductCacheProperties cache,
-                                         final ObjectProvider<StringRedisTemplate> redis,
-                                         final ObjectMapper objectMapper,
-                                         final MeterRegistry registry) {
-        final ProductCatalog http = support.productCatalog();
-        if (!cache.enabled()) {
-            return http;
-        }
-        return new CachingProductCatalog(http, redis.getObject(), objectMapper, cache, registry);
+                                         final VersionedCache<ProductProfile> productCache) {
+        final HttpProductCatalog http = support.productCatalog();
+        return cache.enabled() ? new CachingProductCatalog(http, productCache) : http;
     }
 
     private static OAuth2ClientHttpRequestInterceptor oauthInterceptor(

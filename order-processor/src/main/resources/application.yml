@@ -209,9 +209,13 @@ app:
       bulkhead-max-concurrent-calls: ${HTTP_BULKHEAD_MAX_CALLS:32}
       bulkhead-max-wait: ${HTTP_BULKHEAD_MAX_WAIT:500ms}
   cache:
+    clients:
+      enabled: ${CACHE_CLIENTS_ENABLED:${CACHE_ENABLED:true}}
+      ttl: ${CACHE_CLIENTS_TTL:60s}
+      key-prefix: ${CACHE_CLIENTS_KEY_PREFIX:clients}
     products:
-      enabled: ${CACHE_ENABLED:true}
-      ttl: ${CACHE_PRODUCTS_TTL:5m}
+      enabled: ${CACHE_PRODUCTS_ENABLED:${CACHE_ENABLED:true}}
+      ttl: ${CACHE_PRODUCTS_TTL:10m}
       key-prefix: ${CACHE_PRODUCTS_KEY_PREFIX:products}
   persistence:
     transaction-attempts: ${MONGO_TX_ATTEMPTS:5}
