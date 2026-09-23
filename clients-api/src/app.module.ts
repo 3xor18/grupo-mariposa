@@ -1,12 +1,16 @@
-import { DynamicModule, Module, Provider } from '@nestjs/common';
+import { DynamicModule, Module, Provider, Type } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { ClientsModule } from './clients/clients.module';
-import { APP_CONFIG, AppConfig } from './config/app-config';
+import { APP_CONFIG, AppConfig, StorageConfig, StorageDriver } from './config/app-config';
+import { MemoryStorageModule } from './shared/storage/memory-storage.module';
 import { ConfigModule } from './config/config.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './shared/auth/auth.module';
 import { JwtAuthGuard } from './shared/auth/jwt-auth.guard';
+import { MongoModule } from './shared/mongo/mongo.module';
+import { OutboxModule } from './shared/outbox/outbox.module';
+import { PlatformModule } from './shared/platform.module';
 import { ProblemDetailsFilter } from './shared/errors/problem-details.filter';
 import { createValidationPipe } from './shared/errors/validation';
 import { FaultInjectionInterceptor } from './shared/fault-injection/fault-injection.interceptor';
@@ -29,6 +33,12 @@ const REQUEST_PIPELINE: readonly Provider[] = Object.freeze([
   { provide: APP_INTERCEPTOR, useClass: FaultInjectionInterceptor },
 ]);
 
+export function storageModulesFor(storage: StorageConfig): (DynamicModule | Type)[] {
+  return storage.driver === StorageDriver.MEMORY
+    ? [MemoryStorageModule]
+    : [MongoModule.forRoot(storage), OutboxModule];
+}
+
 @Module({})
 export class AppModule {
   static forRoot(config: AppConfig): DynamicModule {
@@ -41,11 +51,13 @@ export class AppModule {
           inject: [APP_CONFIG, TraceContextStore],
           useFactory: buildLoggerParams,
         }),
+        PlatformModule,
         AuthModule,
         RateLimitModule,
         FaultInjectionModule,
+        ...storageModulesFor(config.storage),
         HealthModule,
-        ClientsModule,
+        ClientsModule.forStorage(config.storage.driver),
       ],
       providers: [...REQUEST_PIPELINE],
     };

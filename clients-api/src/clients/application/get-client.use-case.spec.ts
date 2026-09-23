@@ -1,29 +1,22 @@
-import { Client } from '../domain/client';
+import { aClient } from '../../../test/support/clients';
+import { Client, UpdateClientCommand } from '../domain/client';
 import { ClientNotFoundError } from '../domain/client-not-found.error';
-import { ClientStatus } from '../domain/client-status.enum';
-import { Market } from '../domain/market.enum';
-import { Segment } from '../domain/segment.enum';
-import { TaxRegime } from '../domain/tax-regime.enum';
 import { ClientRepository } from './client.repository';
 import { GetClientUseCase } from './get-client.use-case';
-
-const CLIENT: Client = {
-  id: 'CLI-1',
-  name: 'Test client',
-  status: ClientStatus.ACTIVE,
-  segment: Segment.RETAIL,
-  taxRegime: TaxRegime.EXEMPT,
-  market: Market.PE,
-};
+import { UpdateClientUseCase } from './update-client.use-case';
 
 describe('GetClientUseCase', () => {
-  const repository = { findById: jest.fn<Promise<Client | null>, [string]>() };
+  const repository = {
+    findById: jest.fn<Promise<Client | null>, [string]>(),
+    update: jest.fn<Promise<Client>, [UpdateClientCommand]>(),
+  };
   const useCase = new GetClientUseCase(repository satisfies ClientRepository);
 
   it('should_return_client_when_repository_finds_it', async () => {
-    repository.findById.mockResolvedValueOnce(CLIENT);
+    const client = aClient();
+    repository.findById.mockResolvedValueOnce(client);
 
-    await expect(useCase.execute('CLI-1')).resolves.toBe(CLIENT);
+    await expect(useCase.execute('CLI-1')).resolves.toBe(client);
     expect(repository.findById).toHaveBeenCalledWith('CLI-1');
   });
 
@@ -38,5 +31,19 @@ describe('GetClientUseCase', () => {
     repository.findById.mockRejectedValueOnce(failure);
 
     await expect(useCase.execute('CLI-3')).rejects.toBe(failure);
+  });
+});
+
+describe('UpdateClientUseCase', () => {
+  it('should_delegate_the_versioned_update_to_the_repository', async () => {
+    const updated = aClient({ version: 2 });
+    const repository = {
+      findById: jest.fn<Promise<Client | null>, [string]>(),
+      update: jest.fn<Promise<Client>, [UpdateClientCommand]>().mockResolvedValue(updated),
+    };
+    const command = { clientId: 'CLI-1', changes: {}, expectedVersion: 1 };
+
+    await expect(new UpdateClientUseCase(repository).execute(command)).resolves.toBe(updated);
+    expect(repository.update).toHaveBeenCalledWith(command);
   });
 });

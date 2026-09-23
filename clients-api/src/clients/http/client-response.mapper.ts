@@ -3,6 +3,7 @@ import { ClientResponse } from './client.response';
 
 export function toClientResponse(client: Client): ClientResponse {
   return new ClientResponse({
+    version: client.version,
     clientId: client.id,
     name: client.name,
     status: client.status,

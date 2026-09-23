@@ -7,6 +7,7 @@ import { ConfigServerUnavailableError } from './config-server-client';
 import { loadRemoteConfig, REMOTE_CONFIG_MESSAGES } from './load-remote-config';
 
 const REMOTE_PROPERTIES = [
+  'mongodb.uri: mongodb://mongo:27017/?replicaSet=rs0',
   'auth.issuer: http://localhost:8180/realms/mariposa',
   'auth.jwks-url: http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs',
   'rate-limit.rps: 50',
@@ -97,6 +98,7 @@ describe('loadRemoteConfig', () => {
       {
         url: `${stub.url}/clients-api-docker.properties`,
         keys: [
+          'MONGODB_URI',
           'AUTH_ISSUER',
           'AUTH_JWKS_URL',
           'RATE_LIMIT_RPS',

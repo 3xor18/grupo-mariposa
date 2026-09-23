@@ -26,8 +26,8 @@ export function loadClientsContract(): OpenApiContract {
   return parse(raw) as OpenApiContract;
 }
 
-function loadProblemSchema(): object {
-  const raw = readFileSync(join(CONTRACTS_DIR, 'common', 'problem.schema.json'), 'utf8');
+function loadJsonSchema(...segments: string[]): object {
+  const raw = readFileSync(join(CONTRACTS_DIR, ...segments), 'utf8');
   return JSON.parse(raw) as object;
 }
 
@@ -35,6 +35,7 @@ export interface ContractValidators {
   readonly problem: ValidateFunction;
   readonly client: ValidateFunction;
   readonly health: ValidateFunction;
+  readonly clientChanged: ValidateFunction;
 }
 
 export function createContractValidators(): ContractValidators {
@@ -43,7 +44,8 @@ export function createContractValidators(): ContractValidators {
   const contract = loadClientsContract();
   const healthSchema = contract.components.responses.Health?.content['application/json']?.schema;
   return {
-    problem: ajv.compile(loadProblemSchema()),
+    problem: ajv.compile(loadJsonSchema('common', 'problem.schema.json')),
+    clientChanged: ajv.compile(loadJsonSchema('events', 'clients.changed.v1.schema.json')),
     client: ajv.compile({ ...contract.components.schemas.Client, additionalProperties: false }),
     health: ajv.compile(healthSchema ?? {}),
   };
