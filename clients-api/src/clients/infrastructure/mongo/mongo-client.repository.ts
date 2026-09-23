@@ -8,9 +8,8 @@ import {
 import { Clock } from '../../../shared/time/clock';
 import { clientChangedEvent } from '../../application/client-changed.event';
 import { ClientRepository } from '../../application/client.repository';
-import { Client, UpdateClientCommand } from '../../domain/client';
+import { Client, ClientChanges, planUpdate, UpdateClientCommand } from '../../domain/client';
 import { ClientNotFoundError } from '../../domain/client-not-found.error';
-import { ClientVersionConflictError } from '../../domain/client-version-conflict.error';
 import { CLIENTS_COLLECTION, ClientDocument, toClient } from './client.document';
 
 export interface ChangeEventSettings {
@@ -54,37 +53,39 @@ export class MongoClientRepository implements ClientRepository {
     command: UpdateClientCommand,
     session: ClientSession,
   ): Promise<Client> {
-    const now = this.events.clock();
-    const updated = await this.clients.findOneAndUpdate(
-      this.versionedFilter(command),
-      { $set: { ...command.changes, updatedAt: now }, $inc: { version: 1 } },
-      { session, returnDocument: 'after', projection: WITHOUT_ID },
+    const current = await this.clients.findOne(
+      { clientId: command.clientId },
+      { session, projection: WITHOUT_ID },
     );
-    if (updated === null) {
-      throw command.expectedVersion === undefined
-        ? new ClientNotFoundError(command.clientId)
-        : await this.rejection(command.clientId, command.expectedVersion, session);
+    if (current === null) {
+      throw new ClientNotFoundError(command.clientId);
     }
-    const client = toClient(updated);
-    const event = clientChangedEvent(client, this.events.ids(), now);
-    const message = { id: event.eventId, topic: this.events.topic, key: client.id, payload: event };
-    await this.outbox.insertOne(pendingOutboxDocument(message, now), { session });
-    return client;
+    const plan = planUpdate(toClient(current), command);
+    if (plan.changed) {
+      await this.persist(plan.client, plan.changes, session);
+    }
+    return plan.client;
   }
 
-  private versionedFilter(command: UpdateClientCommand): Partial<ClientDocument> {
-    const { clientId, expectedVersion } = command;
-    return expectedVersion === undefined ? { clientId } : { clientId, version: expectedVersion };
-  }
-
-  private async rejection(
-    clientId: string,
-    expectedVersion: number,
+  private async persist(
+    client: Client,
+    changes: ClientChanges,
     session: ClientSession,
-  ): Promise<Error> {
-    const current = await this.clients.findOne({ clientId }, { session });
-    return current === null
-      ? new ClientNotFoundError(clientId)
-      : new ClientVersionConflictError(clientId, expectedVersion, current.version);
+  ): Promise<void> {
+    const now = this.events.clock();
+    await this.clients.updateOne(
+      { clientId: client.id, version: client.version - 1 },
+      { $set: { ...changes, updatedAt: now }, $inc: { version: 1 } },
+      { session },
+    );
+    const event = clientChangedEvent(client, this.events.ids(), now);
+    const message = {
+      id: event.eventId,
+      topic: this.events.topic,
+      key: client.id,
+      version: client.version,
+      payload: event,
+    };
+    await this.outbox.insertOne(pendingOutboxDocument(message, now), { session });
   }
 }
