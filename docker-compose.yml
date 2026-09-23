@@ -213,6 +213,7 @@ services:
         ${MONGO_PRODUCTS_PASSWORD:?run ./mariposa.sh init}@mongo:27017/products?\
         replicaSet=rs0&authSource=products"
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TLS_ENABLED: "false"
     ports:
       - "127.0.0.1:8081:8081"
     depends_on:
@@ -232,6 +233,7 @@ services:
         ${MONGO_CLIENTS_PASSWORD:?run ./mariposa.sh init}@mongo:27017/clients?\
         replicaSet=rs0&authSource=clients"
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TLS_ENABLED: "false"
     ports:
       - "127.0.0.1:8082:3000"
     depends_on:

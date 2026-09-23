@@ -59,9 +59,12 @@ Compartido por los cuatro servicios desde `config-repo/application.yml`. Un merc
   `PATCH` acepta `If-Match` y responde `412 PRECONDITION_FAILED` si no coincide.
 - El cambio y el evento se guardan en **la misma transacción** (outbox). Un relay con lease publica en el tópico
   del servicio. Semilla: se inserta al arrancar sólo si el documento no existe (upsert `$setOnInsert`).
-- Variables de las APIs: `MONGODB_URI` (secreto), `KAFKA_BOOTSTRAP_SERVERS`, `OUTBOX_RELAY_INTERVAL_MS` (250),
-  `OUTBOX_BATCH_SIZE` (100), `OUTBOX_LEASE_MS` (30000), `KAFKA_TOPIC_CHANGES` (`clients.changed.v1` /
-  `products.changed.v1`).
+- Variables de las APIs: `MONGODB_URI` (secreto), `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_TLS_ENABLED` (`false` en
+  Compose, `true` en EKS contra MSK), `SEED_ENABLED` / `seed.enabled` (carga la semilla si falta; `true` sólo en el
+  perfil `docker`, `false` en staging y producción), `OUTBOX_RELAY_INTERVAL_MS` (250), `OUTBOX_BATCH_SIZE` (100),
+  `OUTBOX_LEASE_MS` (30000), `OUTBOX_RETRY_DELAY_MS` (1000, espera antes de reintentar una publicación fallida),
+  `OUTBOX_RETENTION` (tiempo que se conservan los eventos ya publicados antes de purgarlos) y `KAFKA_TOPIC_CHANGES`
+  (`clients.changed.v1` / `products.changed.v1`).
 - `order-processor` cachea en Redis `clients:{clientId}` y `products:{market}:{productId}` con la `version`. Un
   listener (grupo `order-processor-cache`) aplica cada evento sólo si su versión es mayor (script atómico en Redis);
   las lecturas desde la API tampoco pisan una versión mayor. TTL de respaldo: `CACHE_CLIENTS_TTL` 60s,
