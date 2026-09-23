@@ -16,6 +16,11 @@ readonly CONSUME_TIMEOUT_MS=5000
 readonly KEYCLOAK_TOKEN_PATH=/realms/mariposa/protocol/openid-connect/token
 readonly TOKEN_CLIENT_ID=orders-cli
 readonly DEFAULT_USER=analyst
+readonly ADMIN_USER=admin
+readonly CLIENTS_API_URL=http://localhost:8082
+readonly CLIENT_ID_PATTERN='^CLI-[A-Z0-9]{1,20}$'
+readonly CLIENT_ACTIVE=ACTIVE
+readonly CLIENT_BLOCKED=BLOCKED
 readonly FLUTTER_VERSION=3.44.0
 readonly FLUTTER_IMAGE="ghcr.io/cirruslabs/flutter:${FLUTTER_VERSION}"
 readonly SHOW_SECRETS_FLAG=--show-secrets
@@ -165,6 +170,32 @@ cmd_token() {
     | sed -E 's/.*"access_token":"([^"]+)".*/\1/'
 }
 
+client_etag() {
+  local token="$1" client_id="$2" response
+  response="$(curl -s -i -H "Authorization: Bearer ${token}" \
+    "${CLIENTS_API_URL}/clients/${client_id}")"
+  awk 'tolower($1) == "etag:" { print $2 }' <<< "${response}" | tr -d '\r'
+}
+
+cmd_client_status() {
+  local status="$1" client_id="${2:-}"
+  if [[ ! "${client_id}" =~ ${CLIENT_ID_PATTERN} ]]; then
+    echo "Uso: ./mariposa.sh block-client|unblock-client <CLI-...>" >&2
+    exit 1
+  fi
+  local token etag
+  token="$(cmd_token "${ADMIN_USER}")"
+  etag="$(client_etag "${token}" "${client_id}")"
+  if [[ -z "${etag}" ]]; then
+    echo "No se encontró ${client_id} o clients-api no respondió" >&2
+    exit 1
+  fi
+  curl -s --fail-with-body -X PATCH "${CLIENTS_API_URL}/clients/${client_id}" \
+    -H "Authorization: Bearer ${token}" -H "If-Match: ${etag}" \
+    -H 'Content-Type: application/json' -d "{\"status\":\"${status}\"}"
+  echo
+}
+
 cmd_mongo() {
   local query="${1:-${DEFAULT_MONGO_QUERY}}"
   local script="db.getSiblingDB('admin').auth(process.env.MONGO_INITDB_ROOT_USERNAME,
@@ -207,6 +238,8 @@ Uso: ./mariposa.sh <comando>
   scenarios            publica todos los escenarios de samples/events
   consume [tópico]     lee ${DEFAULT_CONSUME_TOPIC} (o el tópico indicado)
   token [usuario]      obtiene un access token (${DEFAULT_USER} por defecto)
+  block-client <id>    bloquea un cliente con PATCH + If-Match (demo de invalidación de caché)
+  unblock-client <id>  reactiva un cliente bloqueado
   mongo [expresión]    consulta la base orders
   test                 corre las pruebas de los componentes
   e2e                  corre Karate + Playwright contra la plataforma levantada
@@ -229,6 +262,8 @@ main() {
     scenarios) cmd_scenarios ;;
     consume) cmd_consume "$@" ;;
     token) cmd_token "$@" ;;
+    block-client) cmd_client_status "${CLIENT_BLOCKED}" "$@" ;;
+    unblock-client) cmd_client_status "${CLIENT_ACTIVE}" "$@" ;;
     mongo) cmd_mongo "$@" ;;
     test) cmd_test ;;
     e2e) cmd_e2e ;;
