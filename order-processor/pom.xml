@@ -35,7 +35,7 @@
         <wiremock.version>3.13.1</wiremock.version>
         <json-schema-validator.version>1.5.8</json-schema-validator.version>
         <awaitility.version>4.3.0</awaitility.version>
-        <jacoco.version>0.8.13</jacoco.version>
+        <jacoco.version>0.8.15</jacoco.version>
         <checkstyle-plugin.version>3.6.0</checkstyle-plugin.version>
         <checkstyle.version>10.26.1</checkstyle.version>
         <spotbugs-plugin.version>4.9.3.2</spotbugs-plugin.version>
