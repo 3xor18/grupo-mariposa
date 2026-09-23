@@ -1,0 +1,12 @@
+env:
+  SPRING_PROFILES_ACTIVE: staging
+  KAFKA_BOOTSTRAP_SERVERS: "b-1.msk.staging.example.com:9094,\
+    b-2.msk.staging.example.com:9094,\
+    b-3.msk.staging.example.com:9094"
+  REDIS_HOST: cache.staging.example.com
+  AUTH_ISSUER: https://auth.staging.example.com/realms/mariposa
+  AUTH_JWKS_URL: https://auth.staging.example.com/realms/mariposa/protocol/openid-connect/certs
+  OAUTH_TOKEN_URI: https://auth.staging.example.com/realms/mariposa/protocol/openid-connect/token
+  ALLOWED_ORIGINS: https://tracker.staging.example.com
+serviceAccount:
+  roleArn: arn:aws:iam::ACCOUNT_ID:role/mariposa-order-processor-staging

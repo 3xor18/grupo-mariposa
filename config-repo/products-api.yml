@@ -1,0 +1,13 @@
+log-level: INFO
+request-timeout-ms: 3000
+shutdown-timeout-ms: 10000
+rate-limit:
+  rps: 200
+  burst: 400
+auth:
+  enabled: true
+  required-role: products-reader
+  audience: products-api
+fault:
+  rules: ""
+  timeout-ms: 5000

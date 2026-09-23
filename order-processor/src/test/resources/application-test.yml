@@ -1,0 +1,52 @@
+spring:
+  kafka:
+    consumer:
+      properties:
+        metadata.max.age.ms: 1000
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://issuer.test/realms/mariposa
+          audiences: order-processor
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      export:
+        enabled: false
+
+logging:
+  structured:
+    format:
+      console: ecs
+  level:
+    root: WARN
+    com.grupomariposa.orders: INFO
+    com.networknt: ERROR
+
+app:
+  processing:
+    instance-id: integration-tests
+  kafka:
+    concurrency: 2
+    create-topics: true
+    replication-factor: 1
+    record-retry:
+      initial-interval: 100ms
+  http:
+    read-timeout: 500ms
+    resilience:
+      initial-backoff: 20ms
+      sliding-window-size: 100
+      minimum-number-of-calls: 100
+  persistence:
+    transaction-attempts: 10
+  outbox:
+    fixed-delay: 100ms
+    initial-backoff: 200ms
+  security:
+    allowed-origins: http://localhost:8090

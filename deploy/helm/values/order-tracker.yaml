@@ -1,0 +1,61 @@
+image:
+  repository: grupo-mariposa/order-tracker
+containerPort: 8080
+podSecurityContext:
+  runAsUser: 101
+  runAsGroup: 101
+  fsGroup: 101
+probes:
+  liveness: /healthz
+  readiness: /healthz
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  failureThreshold: 3
+  startup:
+    path: /healthz
+    periodSeconds: 5
+    failureThreshold: 12
+metrics:
+  enabled: false
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    memory: 64Mi
+env:
+  NGINX_RESOLVER: kube-dns.kube-system.svc.cluster.local
+  ORDERS_API_URL: http://order-processor.grupo-mariposa.svc.cluster.local
+  API_BASE_URL: /api
+  KEYCLOAK_REALM: mariposa
+  KEYCLOAK_CLIENT_ID: order-tracker
+  CONFIG_SERVER_URL: http://config-server.grupo-mariposa.svc.cluster.local
+  CONFIG_APP_NAME: order-tracker
+  CONFIG_SERVER_USERNAME: config-reader
+  CONFIG_SERVER_FAIL_FAST: "true"
+externalSecret:
+  enabled: true
+  remoteKey: grupo-mariposa/config-server
+  keys:
+    - CONFIG_SERVER_PASSWORD
+extraVolumes:
+  - name: nginx-conf
+    emptyDir: {}
+  - name: nginx-cache
+    emptyDir: {}
+extraVolumeMounts:
+  - name: nginx-conf
+    mountPath: /etc/nginx/conf.d
+  - name: nginx-cache
+    mountPath: /var/cache/nginx
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+networkPolicy:
+  enabled: false

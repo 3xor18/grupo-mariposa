@@ -1,0 +1,5 @@
+env:
+  CONFIG_PROFILE: staging
+  AUTH_ISSUER: https://auth.staging.example.com/realms/mariposa
+  AUTH_JWKS_URL: https://auth.staging.example.com/realms/mariposa/protocol/openid-connect/certs
+  NODE_ENV: production

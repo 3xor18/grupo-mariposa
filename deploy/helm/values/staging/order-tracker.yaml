@@ -1,0 +1,10 @@
+env:
+  CONFIG_PROFILE: staging
+  KEYCLOAK_URL: https://auth.staging.example.com
+  REDIRECT_URI: https://tracker.staging.example.com/
+ingress:
+  host: tracker.staging.example.com
+networkPolicy:
+  enabled: true
+  allowedCidrs:
+    - 10.0.0.0/16

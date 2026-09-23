@@ -1,0 +1,33 @@
+image:
+  repository: grupo-mariposa/clients-api
+containerPort: 3000
+podSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+resources:
+  requests:
+    cpu: 100m
+    memory: 192Mi
+  limits:
+    memory: 256Mi
+env:
+  PORT: "3000"
+  NODE_OPTIONS: --max-old-space-size=160
+  AUTH_ENABLED: "true"
+  AUTH_REQUIRED_ROLE: clients-reader
+  AUTH_AUDIENCE: clients-api
+  FAULT_INJECTION_ENABLED: "false"
+  CONFIG_SERVER_URL: http://config-server.grupo-mariposa.svc.cluster.local
+  CONFIG_APP_NAME: clients-api
+  CONFIG_SERVER_USERNAME: config-reader
+  CONFIG_SERVER_FAIL_FAST: "true"
+externalSecret:
+  enabled: true
+  remoteKey: grupo-mariposa/config-server
+  keys:
+    - CONFIG_SERVER_PASSWORD
+networkPolicy:
+  enabled: true
+  allowedFrom:
+    - order-processor

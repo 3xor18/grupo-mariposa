@@ -1,0 +1,7 @@
+.dart_tool
+.idea
+build
+coverage
+e2e
+Dockerfile
+.dockerignore

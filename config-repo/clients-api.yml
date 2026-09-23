@@ -1,0 +1,11 @@
+log-level: info
+rate-limit:
+  rps: 200
+  burst: 400
+auth:
+  enabled: true
+  required-role: clients-reader
+  audience: clients-api
+fault:
+  rules: ""
+  timeout-ms: 5000

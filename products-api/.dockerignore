@@ -1,0 +1,10 @@
+.git
+.gitignore
+.golangci.yml
+.dockerignore
+Dockerfile
+README.md
+coverage.out
+*.out
+**/*_test.go
+internal/auth/authtest

@@ -1,0 +1,87 @@
+nameOverride: ""
+
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+containerPort: 8080
+
+service:
+  type: ClusterIP
+  port: 80
+
+podSecurityContext:
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+
+terminationGracePeriodSeconds: 30
+
+lifecycle:
+  preStopSleepSeconds: 5
+
+probes:
+  liveness: /health/live
+  readiness: /health/ready
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  failureThreshold: 3
+  startup:
+    path: ""
+    periodSeconds: 5
+    failureThreshold: 12
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  minAvailable: 1
+  maxUnavailable: ""
+
+env: {}
+
+externalSecret:
+  enabled: false
+  refreshInterval: 1h
+  secretStore: aws-secrets-manager
+  remoteKey: ""
+  keys: []
+
+serviceAccount:
+  roleArn: ""
+
+ingress:
+  enabled: false
+  className: alb
+  host: ""
+  path: /
+  annotations: {}
+
+metrics:
+  enabled: true
+  path: /metrics
+
+networkPolicy:
+  enabled: true
+  allowedFrom: []
+  allowedCidrs: []
+  monitoringNamespace: monitoring
+
+extraVolumes: []
+
+extraVolumeMounts: []
+
+podAnnotations: {}

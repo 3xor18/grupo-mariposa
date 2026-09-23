@@ -1,0 +1,165 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mariposa.name" . }}
+  labels:
+    {{- include "mariposa.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "mariposa.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "mariposa.name" . }}
+  labels:
+    {{- include "mariposa.labels" . | nindent 4 }}
+  {{- with .Values.serviceAccount.roleArn }}
+  annotations:
+    eks.amazonaws.com/role-arn: {{ . }}
+  {{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "mariposa.name" . }}
+  labels:
+    {{- include "mariposa.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ . }}
+  {{- else }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mariposa.selectorLabels" . | nindent 6 }}
+{{- if .Values.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "mariposa.name" . }}
+  labels:
+    {{- include "mariposa.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "mariposa.name" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- if .Values.externalSecret.enabled }}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ include "mariposa.name" . }}
+  labels:
+    {{- include "mariposa.labels" . | nindent 4 }}
+spec:
+  refreshInterval: {{ .Values.externalSecret.refreshInterval }}
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ .Values.externalSecret.secretStore }}
+  target:
+    name: {{ include "mariposa.name" . }}
+  data:
+    {{- range .Values.externalSecret.keys }}
+    {{- if kindIs "string" . }}
+    - secretKey: {{ . }}
+      remoteRef:
+        key: {{ required "externalSecret.remoteKey is required" $.Values.externalSecret.remoteKey }}
+        property: {{ . }}
+    {{- else }}
+    - secretKey: {{ .secretKey }}
+      remoteRef:
+        key: {{ .remoteKey | default $.Values.externalSecret.remoteKey }}
+        property: {{ .property | default .secretKey }}
+    {{- end }}
+    {{- end }}
+{{- end }}
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "mariposa.name" . }}
+  labels:
+    {{- include "mariposa.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "mariposa.name" . }}
+                port:
+                  name: http
+{{- end }}
+{{- if .Values.networkPolicy.enabled }}
+{{- if and .Values.ingress.enabled (empty .Values.networkPolicy.allowedCidrs) }}
+{{- fail "networkPolicy.allowedCidrs must list the VPC CIDR when ingress is enabled" }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "mariposa.name" . }}
+  labels:
+    {{- include "mariposa.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mariposa.selectorLabels" . | nindent 6 }}
+  policyTypes: ["Ingress"]
+  ingress:
+    {{- with .Values.networkPolicy.allowedFrom }}
+    - from:
+        {{- range . }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ . }}
+        {{- end }}
+      ports:
+        - port: http
+    {{- end }}
+    {{- with .Values.networkPolicy.allowedCidrs }}
+    - from:
+        {{- range . }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - port: http
+    {{- end }}
+    {{- if .Values.metrics.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoringNamespace }}
+      ports:
+        - port: http
+    {{- end }}
+{{- end }}

@@ -1,0 +1,3 @@
+export const FAULT_INJECTOR = Symbol('FAULT_INJECTOR');
+export const FAULT_INJECTION_CONFIG = Symbol('FAULT_INJECTION_CONFIG');
+export const PENDING_HOLDS = Symbol('PENDING_HOLDS');

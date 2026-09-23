@@ -1,0 +1,305 @@
+openapi: 3.1.0
+info:
+  title: Orders query API (order-processor)
+  version: 1.0.0
+  description: |
+    Read side of processed orders. Owner: order-processor team.
+    Consumed by the order-tracker PWA. Additive changes only within v1.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /orders/{orderId}:
+    get:
+      operationId: getOrder
+      summary: Get the processing result of an order
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          example: ORD-MX-000147
+      responses:
+        '200':
+          description: Order found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /orders:
+    get:
+      operationId: listOrders
+      summary: List processed orders, newest first
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [APPROVED, REJECTED, TECHNICAL_FAILURE]
+        - name: market
+          in: query
+          schema:
+            type: string
+            enum: [MX, CO, PE]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Page of order summaries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Keycloak token with realm role orders-reader
+  responses:
+    Problem:
+      description: Error following RFC 9457
+      content:
+        application/problem+json:
+          schema:
+            $ref: '../common/problem.schema.json'
+  schemas:
+    Market:
+      type: string
+      enum: [MX, CO, PE]
+    Currency:
+      type: string
+      enum: [MXN, COP, PEN]
+    RejectionReason:
+      type: [string, 'null']
+      description: Primary rejection code, null unless the order is REJECTED.
+      enum:
+        - null
+        - CLIENT_NOT_FOUND
+        - CLIENT_NOT_ACTIVE
+        - CLIENT_MARKET_MISMATCH
+        - PRODUCT_NOT_FOUND
+        - PRODUCT_NOT_ACTIVE
+    Money:
+      type: number
+      description: Monetary amount with two decimals, HALF_UP
+    UnitPrice:
+      type: number
+      minimum: 0
+      description: Unit price as received in the event, up to four decimals, never rounded
+    Order:
+      type: object
+      required:
+        - orderId
+        - sourceEventId
+        - eventVersion
+        - status
+        - market
+        - currency
+        - client
+        - lines
+        - totals
+        - receivedAt
+        - processedAt
+      properties:
+        orderId:
+          type: string
+        sourceEventId:
+          type: string
+        eventVersion:
+          type: integer
+        status:
+          type: string
+          enum: [APPROVED, REJECTED, TECHNICAL_FAILURE]
+        market:
+          $ref: '#/components/schemas/Market'
+        currency:
+          $ref: '#/components/schemas/Currency'
+        channel:
+          type: [string, 'null']
+        client:
+          $ref: '#/components/schemas/ClientSnapshot'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLine'
+        totals:
+          $ref: '#/components/schemas/Totals'
+        reason:
+          $ref: '#/components/schemas/RejectionReason'
+        violations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Violation'
+        failure:
+          oneOf:
+            - $ref: '#/components/schemas/Failure'
+            - type: 'null'
+        occurredAt:
+          type: [string, 'null']
+          format: date-time
+        receivedAt:
+          type: string
+          format: date-time
+        processedAt:
+          type: string
+          format: date-time
+        traceId:
+          type: [string, 'null']
+    ClientSnapshot:
+      type: object
+      required: [clientId]
+      properties:
+        clientId:
+          type: string
+        name:
+          type: [string, 'null']
+        status:
+          type: [string, 'null']
+        segment:
+          type: [string, 'null']
+        taxRegime:
+          type: [string, 'null']
+        market:
+          type: [string, 'null']
+    OrderLine:
+      type: object
+      required: [productId, quantity, unitPrice]
+      properties:
+        productId:
+          type: string
+        name:
+          type: [string, 'null']
+        sku:
+          type: [string, 'null']
+        taxCategory:
+          type: [string, 'null']
+        quantity:
+          type: integer
+        unitPrice:
+          $ref: '#/components/schemas/UnitPrice'
+        grossSubtotal:
+          $ref: '#/components/schemas/Money'
+        discountRate:
+          type: number
+        discount:
+          $ref: '#/components/schemas/Money'
+        netSubtotal:
+          $ref: '#/components/schemas/Money'
+        taxRate:
+          type: number
+        taxAmount:
+          $ref: '#/components/schemas/Money'
+        lineTotal:
+          $ref: '#/components/schemas/Money'
+    Totals:
+      type: object
+      required: [grossSubtotal, discount, netSubtotal, tax, grandTotal]
+      properties:
+        grossSubtotal:
+          $ref: '#/components/schemas/Money'
+        discount:
+          $ref: '#/components/schemas/Money'
+        netSubtotal:
+          $ref: '#/components/schemas/Money'
+        tax:
+          $ref: '#/components/schemas/Money'
+        grandTotal:
+          $ref: '#/components/schemas/Money'
+    Violation:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        productId:
+          type: [string, 'null']
+    Failure:
+      type: object
+      required: [category, cause, attempts]
+      properties:
+        category:
+          type: string
+        cause:
+          type: string
+        attempts:
+          type: integer
+    OrderSummary:
+      type: object
+      required: [orderId, status, market, currency, clientId, grandTotal, processedAt]
+      properties:
+        orderId:
+          type: string
+        status:
+          type: string
+          enum: [APPROVED, REJECTED, TECHNICAL_FAILURE]
+        market:
+          $ref: '#/components/schemas/Market'
+        currency:
+          $ref: '#/components/schemas/Currency'
+        clientId:
+          type: string
+        eventVersion:
+          type: integer
+        grandTotal:
+          $ref: '#/components/schemas/Money'
+        reason:
+          $ref: '#/components/schemas/RejectionReason'
+        processedAt:
+          type: string
+          format: date-time
+    OrderPage:
+      type: object
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderSummary'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer

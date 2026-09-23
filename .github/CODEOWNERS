@@ -1,0 +1,11 @@
+*                                   @3xor18
+/contracts/events/orders.created*   @3xor18
+/contracts/events/orders.processed* @3xor18
+/contracts/http/products-api*       @3xor18
+/contracts/http/clients-api*        @3xor18
+/contracts/http/order-processor*    @3xor18
+/order-processor/                   @3xor18
+/products-api/                      @3xor18
+/clients-api/                       @3xor18
+/order-tracker/                     @3xor18
+/deploy/                            @3xor18

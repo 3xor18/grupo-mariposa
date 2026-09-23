@@ -1,0 +1,50 @@
+groups:
+  - name: order-processor
+    rules:
+      - alert: OutboxBacklogAging
+        expr: max(outbox_oldest_age_seconds) > 60
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Processed orders are not being published to orders.processed.v1
+          runbook: docs/runbooks/missing-order.md
+      - alert: DeadLetterRateHigh
+        expr: sum(rate(orders_dlt_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Messages are being sent to orders.processing.dlt
+          runbook: docs/runbooks/missing-order.md
+      - alert: TechnicalFailuresRising
+        expr: sum(rate(orders_technical_failures_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Orders are ending in TECHNICAL_FAILURE
+      - alert: ProcessingLatencyP95High
+        expr: >-
+          histogram_quantile(0.95,
+          sum(rate(orders_processing_latency_seconds_bucket[5m])) by (le)) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: p95 order processing latency above 1s
+      - alert: ConsumerLagGrowing
+        expr: max(kafka_consumer_fetch_manager_records_lag_max) > 1000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: order-processor is falling behind orders.created.v1
+          runbook: docs/runbooks/missing-order.md
+      - alert: CircuitBreakerOpen
+        expr: max by (name) (resilience4j_circuitbreaker_state{state="open"}) == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: A dependency circuit breaker is open

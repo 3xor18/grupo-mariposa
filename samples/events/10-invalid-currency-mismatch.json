@@ -1,0 +1,13 @@
+{
+  "eventId": "01J8ZP6M5E4RH0K7Y2N9A3TQ10",
+  "eventVersion": 1,
+  "occurredAt": "2026-09-18T15:42:10Z",
+  "orderId": "ORD-MX-000151",
+  "market": "MX",
+  "currency": "COP",
+  "clientId": "CLI-99821",
+  "channel": "C1",
+  "items": [
+    { "productId": "PRD-001", "quantity": 1, "unitPrice": 35.5 }
+  ]
+}

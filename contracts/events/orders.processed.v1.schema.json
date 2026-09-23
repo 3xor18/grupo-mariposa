@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.grupomariposa.dev/events/orders.processed.v1.schema.json",
+  "title": "OrderProcessed v1",
+  "description": "Topic orders.processed.v1, key = orderId. Owner: order-processor team.",
+  "$comment": "At-least-once: dedupe by eventId, drop eventVersion below the last seen.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventVersion",
+    "occurredAt",
+    "sourceEventId",
+    "orderId",
+    "status",
+    "market",
+    "currency",
+    "totals",
+    "reason"
+  ],
+  "properties": {
+    "eventId": { "type": "string", "minLength": 1 },
+    "eventVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Same order revision as the source event."
+    },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "sourceEventId": { "type": "string", "minLength": 1 },
+    "orderId": { "type": "string", "minLength": 1 },
+    "clientId": { "type": "string" },
+    "status": { "type": "string", "enum": ["APPROVED", "REJECTED"] },
+    "market": { "type": "string", "enum": ["MX", "CO", "PE"] },
+    "currency": { "type": "string", "enum": ["MXN", "COP", "PEN"] },
+    "totals": {
+      "type": "object",
+      "required": ["grossSubtotal", "discount", "netSubtotal", "tax", "grandTotal"],
+      "properties": {
+        "grossSubtotal": { "type": "number", "minimum": 0 },
+        "discount": { "type": "number", "minimum": 0 },
+        "netSubtotal": { "type": "number", "minimum": 0 },
+        "tax": { "type": "number", "minimum": 0 },
+        "grandTotal": { "type": "number", "minimum": 0 }
+      }
+    },
+    "reason": {
+      "type": ["string", "null"],
+      "description": "Primary rejection code, null when APPROVED.",
+      "enum": [
+        null,
+        "CLIENT_NOT_FOUND",
+        "CLIENT_NOT_ACTIVE",
+        "CLIENT_MARKET_MISMATCH",
+        "PRODUCT_NOT_FOUND",
+        "PRODUCT_NOT_ACTIVE"
+      ]
+    },
+    "violations": {
+      "type": "array",
+      "description": "Additive field. Every rejection cause, in evaluation order.",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "productId": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

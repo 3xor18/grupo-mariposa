@@ -1,0 +1,4 @@
+shell=sh
+disable=SC1090
+disable=SC1091
+disable=SC2016
