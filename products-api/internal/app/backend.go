@@ -33,7 +33,7 @@ func openBackend(ctx context.Context, cfg config.Config, logger *slog.Logger,
 	recorder outbox.Recorder,
 ) (backend, error) {
 	if cfg.Storage.Driver == config.StorageMemory {
-		repo := memory.NewRepository(seed.Products())
+		repo := memory.NewRepository(seedRows(cfg.Storage))
 		return backend{repository: repo, writer: repo, ping: alwaysReachable,
 			close: alwaysReachable}, nil
 	}
@@ -44,13 +44,14 @@ func mongoBackend(ctx context.Context, cfg config.Config, logger *slog.Logger,
 	recorder outbox.Recorder,
 ) (backend, error) {
 	store, err := mongodb.Open(mongodb.Settings{URI: cfg.Storage.MongoURI,
-		Database: cfg.Storage.Database, Topic: cfg.Kafka.Topic, Timeout: cfg.Storage.Timeout})
+		Database: cfg.Storage.Database, Topic: cfg.Kafka.Topic, Timeout: cfg.Storage.Timeout,
+		Retention: cfg.Outbox.Retention})
 	if err != nil {
 		return backend{}, err
 	}
 	producer, producerErr := kafka.NewProducer(kafka.Settings{Brokers: cfg.Kafka.Brokers,
-		Topic: cfg.Kafka.Topic, ClientID: telemetry.ServiceName})
-	if err := errors.Join(producerErr, store.Setup(ctx, seed.Products())); err != nil {
+		Topic: cfg.Kafka.Topic, ClientID: telemetry.ServiceName, TLS: cfg.Kafka.TLS})
+	if err := errors.Join(producerErr, store.Setup(ctx, seedRows(cfg.Storage))); err != nil {
 		producer.Close()
 		return backend{}, errors.Join(fmt.Errorf("prepare mongodb backend: %w", err),
 			store.Close(context.WithoutCancel(ctx)))
@@ -62,6 +63,13 @@ func mongoBackend(ctx context.Context, cfg config.Config, logger *slog.Logger,
 			producer.Close()
 			return store.Close(ctx)
 		}}, nil
+}
+
+func seedRows(storage config.Storage) []product.Product {
+	if !storage.Seed {
+		return nil
+	}
+	return seed.Products()
 }
 
 func relaySettings(o config.Outbox) outbox.Settings {
