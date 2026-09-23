@@ -14,8 +14,10 @@ import (
 
 	"github.com/grupomariposa/platform/products-api/internal/catalog"
 	"github.com/grupomariposa/platform/products-api/internal/httpapi"
+	"github.com/grupomariposa/platform/products-api/internal/market"
 	"github.com/grupomariposa/platform/products-api/internal/product"
 	"github.com/grupomariposa/platform/products-api/internal/ratelimit"
+	"github.com/grupomariposa/platform/products-api/internal/seed"
 	"github.com/grupomariposa/platform/products-api/internal/storage/memory"
 	"github.com/grupomariposa/platform/products-api/internal/telemetry"
 )
@@ -30,18 +32,39 @@ const (
 	defaultTimeout   = time.Second
 	defaultFaultHold = 10 * time.Millisecond
 	testRemoteAddr   = "192.0.2.10:4321"
+	readerRole       = "products-reader"
+	adminRole        = "products-admin"
 )
 
 var fixedTime = time.Date(2026, 9, 22, 10, 0, 0, 0, time.UTC)
 
 type readiness struct{ ready bool }
 
-func (r readiness) Ready() bool { return r.ready }
+func (r readiness) Ready(context.Context) bool { return r.ready }
 
 type finderFunc func(ctx context.Context, q catalog.Query) (product.Product, error)
 
 func (f finderFunc) GetProduct(ctx context.Context, q catalog.Query) (product.Product, error) {
 	return f(ctx, q)
+}
+
+func (f finderFunc) UpdateProduct(ctx context.Context, cmd catalog.UpdateCommand,
+) (product.Product, error) {
+	return f(ctx, catalog.Query{ProductID: cmd.ProductID, Market: cmd.Market})
+}
+
+const eventID = "0190a0b0-0000-7000-8000-000000000001"
+
+func newCatalogService(t *testing.T) *catalog.Service {
+	t.Helper()
+	markets, err := market.Parse(market.DefaultMarkets)
+	if err != nil {
+		t.Fatalf("markets: %v", err)
+	}
+	repo := memory.NewRepository(seed.Products())
+	events := catalog.NewChangeEvents(func() time.Time { return fixedTime },
+		func() (string, error) { return eventID, nil })
+	return catalog.NewService(repo, repo, markets, events)
 }
 
 type observation struct {
@@ -93,9 +116,11 @@ func generousLimiter() *ratelimit.Keyed {
 	return ratelimit.NewKeyed(generousRate, generousBurst, limiterCapacity)
 }
 
-func defaultDependencies(logs *syncBuffer, rec *recorder) httpapi.Dependencies {
+func defaultDependencies(t *testing.T, logs *syncBuffer, rec *recorder) httpapi.Dependencies {
 	return httpapi.Dependencies{
-		Products:         catalog.NewService(memory.NewSeededRepository()),
+		Products:         newCatalogService(t),
+		ReaderRole:       readerRole,
+		AdminRole:        adminRole,
 		FaultHold:        defaultFaultHold,
 		ClientLimiter:    generousLimiter(),
 		PrincipalLimiter: generousLimiter(),
@@ -112,7 +137,7 @@ func defaultDependencies(logs *syncBuffer, rec *recorder) httpapi.Dependencies {
 func newHarness(t *testing.T, customize ...func(*httpapi.Dependencies)) harness {
 	t.Helper()
 	logs, rec := &syncBuffer{}, &recorder{}
-	deps := defaultDependencies(logs, rec)
+	deps := defaultDependencies(t, logs, rec)
 	for _, apply := range customize {
 		apply(&deps)
 	}

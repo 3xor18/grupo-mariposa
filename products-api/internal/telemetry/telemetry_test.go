@@ -61,6 +61,9 @@ func TestLoggerOmitsTraceWhenAbsent(t *testing.T) {
 func TestMetricsExposeRequests(t *testing.T) {
 	metrics := telemetry.NewMetrics()
 	metrics.ObserveRequest(http.MethodGet, "/products/{productId}", http.StatusOK, time.Millisecond)
+	metrics.OutboxPending(3)
+	metrics.OutboxPublished(2)
+	metrics.OutboxFailed(1)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil)
 	metrics.Handler().ServeHTTP(rec, req)
@@ -69,6 +72,9 @@ func TestMetricsExposeRequests(t *testing.T) {
 		`http_server_requests_total{method="GET",route="/products/{productId}",status="200"} 1`,
 		"http_server_request_duration_seconds_bucket",
 		"go_goroutines",
+		"outbox_pending 3",
+		"outbox_published_total 2",
+		"outbox_publish_failures_total 1",
 	} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("metrics missing %q", want)

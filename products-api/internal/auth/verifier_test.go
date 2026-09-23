@@ -20,6 +20,7 @@ import (
 const (
 	fastRefresh = 10 * time.Millisecond
 	waitLimit   = 5 * time.Second
+	reader      = authtest.RequiredRole
 )
 
 func settings(issuer *authtest.Issuer) auth.Settings {
@@ -27,7 +28,6 @@ func settings(issuer *authtest.Issuer) auth.Settings {
 		Issuer:         authtest.IssuerURL,
 		Audience:       authtest.Audience,
 		JWKSURL:        issuer.JWKSURL,
-		RequiredRole:   authtest.RequiredRole,
 		JWKSTimeout:    time.Second,
 		Refresh:        time.Hour,
 		MinimumRefresh: fastRefresh,
@@ -41,7 +41,7 @@ func newVerifier(s auth.Settings) *auth.Verifier {
 func TestVerifyAcceptsValidToken(t *testing.T) {
 	issuer := authtest.NewIssuer(t)
 	principal, err := newVerifier(settings(issuer)).Verify(context.Background(),
-		issuer.Token(t, authtest.ValidClaims()))
+		issuer.Token(t, authtest.ValidClaims()), authtest.RequiredRole)
 	if err != nil || principal.ID != authtest.Client {
 		t.Fatalf("want principal %q, got %+v err=%v", authtest.Client, principal, err)
 	}
@@ -52,7 +52,7 @@ func TestVerifyFallsBackToSubject(t *testing.T) {
 	claims := authtest.ValidClaims()
 	claims.AuthorizedParty = ""
 	principal, err := newVerifier(settings(issuer)).Verify(context.Background(),
-		issuer.Token(t, claims))
+		issuer.Token(t, claims), authtest.RequiredRole)
 	if err != nil || principal.ID != claims.Subject {
 		t.Fatalf("want subject principal, got %+v err=%v", principal, err)
 	}
@@ -95,7 +95,8 @@ func TestVerifyRejectsInvalidTokens(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := verifier.Verify(context.Background(), tc.token); !errors.Is(err, tc.want) {
+			_, err := verifier.Verify(context.Background(), tc.token, authtest.RequiredRole)
+			if !errors.Is(err, tc.want) {
 				t.Fatalf("want %v, got %v", tc.want, err)
 			}
 		})
@@ -107,7 +108,7 @@ func TestVerifyAlwaysChecksAudience(t *testing.T) {
 	s := settings(issuer)
 	s.Audience = ""
 	token := issuer.Token(t, with(func(c *authtest.Claims) { c.Audience = []string{"account"} }))
-	if _, err := newVerifier(s).Verify(context.Background(), token); !errors.Is(err,
+	if _, err := newVerifier(s).Verify(context.Background(), token, reader); !errors.Is(err,
 		auth.ErrUnauthenticated) {
 		t.Fatalf("audience must never fail open, got %v", err)
 	}
@@ -116,10 +117,12 @@ func TestVerifyAlwaysChecksAudience(t *testing.T) {
 func TestVerifyReportsUnavailableJWKS(t *testing.T) {
 	issuer := authtest.NewIssuer(t)
 	issuer.SetAvailable(false)
-	verifier := newVerifier(settings(issuer))
+	s := settings(issuer)
+	s.MinimumRefresh = time.Hour
+	verifier := newVerifier(s)
 	token := issuer.Token(t, authtest.ValidClaims())
 	for range 2 {
-		if _, err := verifier.Verify(context.Background(), token); !errors.Is(err,
+		if _, err := verifier.Verify(context.Background(), token, reader); !errors.Is(err,
 			auth.ErrUnavailable) {
 			t.Fatalf("want ErrUnavailable while jwks is down, got %v", err)
 		}
@@ -133,7 +136,8 @@ func TestVerifyReportsCancelledContextAsUnavailable(t *testing.T) {
 	issuer := authtest.NewIssuer(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := newVerifier(settings(issuer)).Verify(ctx, issuer.Token(t, authtest.ValidClaims()))
+	_, err := newVerifier(settings(issuer)).Verify(ctx, issuer.Token(t, authtest.ValidClaims()),
+		reader)
 	if !errors.Is(err, auth.ErrUnavailable) {
 		t.Fatalf("want ErrUnavailable for cancelled context, got %v", err)
 	}
@@ -159,7 +163,7 @@ func TestRunWarmsUpAndRetries(t *testing.T) {
 	}
 	issuer.SetAvailable(true)
 	waitFor(t, verifier.Ready)
-	if _, err := verifier.Verify(ctx, issuer.Token(t, authtest.ValidClaims())); err != nil {
+	if _, err := verifier.Verify(ctx, issuer.Token(t, authtest.ValidClaims()), reader); err != nil {
 		t.Fatalf("want valid token after warm-up, got %v", err)
 	}
 }
@@ -229,5 +233,20 @@ func TestReadinessStaysDownWithEmptyKeySet(t *testing.T) {
 	waitFor(t, func() bool { return requests.Load() >= 2 })
 	if verifier.Ready() {
 		t.Fatal("an empty key set must not make the verifier ready")
+	}
+}
+
+func TestVerifyChecksTheRequestedRole(t *testing.T) {
+	issuer := authtest.NewIssuer(t)
+	verifier := newVerifier(settings(issuer))
+	token := issuer.Token(t, authtest.ValidClaims())
+	if _, err := verifier.Verify(context.Background(), token, "products-admin"); !errors.Is(err,
+		auth.ErrForbidden) {
+		t.Fatalf("reader token must not pass the admin role, got %v", err)
+	}
+	admin := with(func(c *authtest.Claims) { c.Roles = []string{"products-admin"} })
+	if _, err := verifier.Verify(context.Background(), issuer.Token(t, admin),
+		"products-admin"); err != nil {
+		t.Fatalf("admin token must pass, got %v", err)
 	}
 }

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"strings"
 )
@@ -14,7 +15,7 @@ const (
 )
 
 type Readiness interface {
-	Ready() bool
+	Ready(ctx context.Context) bool
 }
 
 type healthResponse struct {
@@ -27,7 +28,7 @@ func (rs responder) live(w http.ResponseWriter, r *http.Request) {
 
 func (rs responder) ready(readiness Readiness) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !readiness.Ready() {
+		if !readiness.Ready(r.Context()) {
 			rs.json(w, r, http.StatusServiceUnavailable, healthResponse{Status: statusDown})
 			return
 		}

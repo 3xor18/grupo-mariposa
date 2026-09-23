@@ -19,13 +19,13 @@ func TestGetProductReturnsProduct(t *testing.T) {
 	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("unexpected response %d %s", rec.Code, rec.Header().Get("Content-Type"))
 	}
-	var body map[string]string
+	var body map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	want := map[string]string{
+	want := map[string]any{
 		"productId": "PRD-001", "name": "Bebida 600 ml", "sku": "BEB-600-PET",
-		"status": "ACTIVE", "taxCategory": "STANDARD",
+		"status": "ACTIVE", "taxCategory": "STANDARD", "version": float64(1),
 	}
 	if len(body) != len(want) {
 		t.Fatalf("want exactly %d fields, got %v", len(want), body)
@@ -34,6 +34,9 @@ func TestGetProductReturnsProduct(t *testing.T) {
 		if body[key] != value {
 			t.Fatalf("field %s: want %q, got %q", key, value, body[key])
 		}
+	}
+	if rec.Header().Get("ETag") != `"1"` {
+		t.Fatalf("want ETag \"1\", got %q", rec.Header().Get("ETag"))
 	}
 	if rec.Header().Get("Cache-Control") != "" {
 		t.Fatal("successful responses must not be marked no-store")
@@ -58,6 +61,8 @@ func TestGetProductValidation(t *testing.T) {
 			fields: []string{"productId"}},
 		{name: "should_require_market", target: "/products/PRD-001", fields: []string{"market"}},
 		{name: "should_reject_unknown_market", target: "/products/PRD-001?market=US",
+			fields: []string{"market"}},
+		{name: "should_accept_catalog_markets_only", target: "/products/PRD-001?market=BR",
 			fields: []string{"market"}},
 		{name: "should_report_every_field", target: "/products/prd-1?market=mx",
 			fields: []string{"productId", "market"}},
@@ -178,11 +183,13 @@ func TestUnknownPathReturnsStaticNotFound(t *testing.T) {
 
 func TestWrongMethodOnKnownRouteReturns405(t *testing.T) {
 	h := newHarness(t)
-	for _, target := range []string{productPath, "/health/live", "/health/ready", "/metrics"} {
+	allow := map[string]string{productPath: "GET, HEAD, PATCH", "/health/live": "GET, HEAD",
+		"/health/ready": "GET, HEAD", "/metrics": "GET, HEAD"}
+	for target, want := range allow {
 		for _, method := range []string{http.MethodPost, http.MethodDelete, "BREW"} {
 			rec := h.do(t, newRequest(t, method, target))
 			assertProblem(t, rec, http.StatusMethodNotAllowed, httpapi.CodeMethodNotAllowed)
-			if rec.Header().Get("Allow") != "GET, HEAD" {
+			if rec.Header().Get("Allow") != want {
 				t.Fatalf("%s %s: unexpected Allow %q", method, target, rec.Header().Get("Allow"))
 			}
 		}

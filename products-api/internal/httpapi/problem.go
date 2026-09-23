@@ -18,6 +18,8 @@ const (
 	headerRetryAfter          = "Retry-After"
 	headerAuthenticate        = "WWW-Authenticate"
 	headerAllow               = "Allow"
+	headerETag                = "ETag"
+	headerIfMatch             = "If-Match"
 	contentTypeJSON           = "application/json"
 	contentTypeProblem        = "application/problem+json"
 	cacheNoStore              = "no-store"
@@ -36,6 +38,7 @@ const (
 	codeProductNotFound    code = "PRODUCT_NOT_FOUND"
 	codeResourceNotFound   code = "RESOURCE_NOT_FOUND"
 	codeMethodNotAllowed   code = "METHOD_NOT_ALLOWED"
+	codePreconditionFailed code = "PRECONDITION_FAILED"
 	codeUnauthorized       code = "UNAUTHORIZED"
 	codeForbidden          code = "FORBIDDEN"
 	codeRateLimited        code = "RATE_LIMITED"
@@ -52,6 +55,7 @@ const (
 	kindNotFound
 	kindNoRoute
 	kindMethodNotAllowed
+	kindPreconditionFailed
 	kindUnauthorized
 	kindForbidden
 	kindRateLimited
@@ -74,12 +78,15 @@ func definitions() [kindCount]definition {
 		kindNotFound:         {http.StatusNotFound, codeProductNotFound, "Product not found"},
 		kindNoRoute:          {http.StatusNotFound, codeResourceNotFound, "Resource not found"},
 		kindMethodNotAllowed: {http.StatusMethodNotAllowed, codeMethodNotAllowed, "Method not allowed"},
-		kindUnauthorized:     {http.StatusUnauthorized, codeUnauthorized, "Unauthorized"},
-		kindForbidden:        {http.StatusForbidden, codeForbidden, "Forbidden"},
-		kindRateLimited:      {http.StatusTooManyRequests, codeRateLimited, "Too many requests"},
-		kindClientClosed:     {statusClientClosedRequest, codeClientClosed, "Client closed request"},
-		kindInternal:         {http.StatusInternalServerError, codeInternal, "Internal error"},
-		kindBadGateway:       {http.StatusBadGateway, codeBadGateway, "Bad gateway"},
+		kindPreconditionFailed: {
+			http.StatusPreconditionFailed, codePreconditionFailed, "Precondition failed",
+		},
+		kindUnauthorized: {http.StatusUnauthorized, codeUnauthorized, "Unauthorized"},
+		kindForbidden:    {http.StatusForbidden, codeForbidden, "Forbidden"},
+		kindRateLimited:  {http.StatusTooManyRequests, codeRateLimited, "Too many requests"},
+		kindClientClosed: {statusClientClosedRequest, codeClientClosed, "Client closed request"},
+		kindInternal:     {http.StatusInternalServerError, codeInternal, "Internal error"},
+		kindBadGateway:   {http.StatusBadGateway, codeBadGateway, "Bad gateway"},
 		kindUnavailable: {
 			http.StatusServiceUnavailable, codeServiceUnavailable, "Service unavailable",
 		},

@@ -3,14 +3,21 @@ package memory_test
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/grupomariposa/platform/products-api/internal/product"
+	"github.com/grupomariposa/platform/products-api/internal/seed"
 	"github.com/grupomariposa/platform/products-api/internal/storage/memory"
 )
 
+func noEvent(product.Product) (product.ChangeEvent, error) {
+	return product.ChangeEvent{}, nil
+}
+
 func TestFindByIDInMarket(t *testing.T) {
-	repo := memory.NewSeededRepository()
+	repo := memory.NewRepository(seed.Products())
 	cases := []struct {
 		name    string
 		id      product.ID
@@ -18,54 +25,113 @@ func TestFindByIDInMarket(t *testing.T) {
 		wantSKU string
 		wantErr error
 	}{
-		{name: "should_find_multi_market_in_mx", id: "PRD-001", market: product.MarketMX,
-			wantSKU: "BEB-600-PET"},
-		{name: "should_find_multi_market_in_pe", id: "PRD-001", market: product.MarketPE,
-			wantSKU: "BEB-600-PET"},
-		{name: "should_find_discontinued", id: "PRD-007", market: product.MarketCO,
-			wantSKU: "PAN-500-BLQ"},
-		{name: "should_not_find_unknown", id: "PRD-999", market: product.MarketMX,
+		{name: "should_find_in_mx", id: "PRD-001", market: "MX", wantSKU: "BEB-600-PET"},
+		{name: "should_find_in_ec", id: "PRD-001", market: "EC", wantSKU: "BEB-600-PET"},
+		{name: "should_not_find_unknown", id: "PRD-999", market: "MX",
 			wantErr: product.ErrNotFound},
-		{name: "should_not_find_in_other_market", id: "PRD-002", market: product.MarketPE,
+		{name: "should_not_find_in_other_market", id: "PRD-002", market: "PE",
 			wantErr: product.ErrNotFound},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := repo.FindByIDInMarket(context.Background(), tc.id, tc.market)
-			if !errors.Is(err, tc.wantErr) {
-				t.Fatalf("want %v, got %v", tc.wantErr, err)
-			}
-			if got.SKU != tc.wantSKU {
-				t.Fatalf("want sku %q, got %q", tc.wantSKU, got.SKU)
+			if !errors.Is(err, tc.wantErr) || got.SKU != tc.wantSKU {
+				t.Fatalf("want %q/%v, got %q/%v", tc.wantSKU, tc.wantErr, got.SKU, err)
 			}
 		})
 	}
 }
 
-func TestFindByIDInMarketHonoursCancellation(t *testing.T) {
+func TestUpdateAppliesPatchAndBuildsEvent(t *testing.T) {
+	repo := memory.NewRepository(seed.Products())
+	status := product.StatusDiscontinued
+	var event product.Product
+	updated, err := repo.Update(context.Background(), product.UpdateRequest{
+		ID: "PRD-020", Market: "MX", Patch: product.Patch{Status: &status},
+		ExpectedVersion: ptr(product.InitialVersion),
+		NewEvent: func(p product.Product) (product.ChangeEvent, error) {
+			event = p
+			return product.ChangeEvent{}, nil
+		},
+	})
+	if err != nil || updated.Status != status || updated.Version != 2 || event != updated {
+		t.Fatalf("unexpected update %+v err=%v event=%+v", updated, err, event)
+	}
+	stored, _ := repo.FindByIDInMarket(context.Background(), "PRD-020", "MX")
+	if stored != updated {
+		t.Fatalf("update must be persisted, got %+v", stored)
+	}
+}
+
+func TestUpdateFailures(t *testing.T) {
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	failingEvent := func(product.Product) (product.ChangeEvent, error) {
+		return product.ChangeEvent{}, errors.New("no entropy")
+	}
+	cases := []struct {
+		name    string
+		ctx     context.Context
+		request product.UpdateRequest
+		want    error
+	}{
+		{name: "should_fail_when_cancelled", ctx: cancelled, want: context.Canceled,
+			request: product.UpdateRequest{ID: "PRD-001", Market: "MX", NewEvent: noEvent}},
+		{name: "should_fail_when_missing", ctx: context.Background(), want: product.ErrNotFound,
+			request: product.UpdateRequest{ID: "PRD-001", Market: "US", NewEvent: noEvent}},
+		{name: "should_fail_when_stale", ctx: context.Background(),
+			want: product.ErrVersionConflict, request: product.UpdateRequest{ID: "PRD-001",
+				Market: "MX", ExpectedVersion: ptr(7), NewEvent: noEvent}},
+	}
+	repo := memory.NewRepository(seed.Products())
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := repo.Update(tc.ctx, tc.request); !errors.Is(err, tc.want) {
+				t.Fatalf("want %v, got %v", tc.want, err)
+			}
+		})
+	}
+	_, err := repo.Update(context.Background(), product.UpdateRequest{ID: "PRD-001",
+		Market: "MX", NewEvent: failingEvent})
+	stored, _ := repo.FindByIDInMarket(context.Background(), "PRD-001", "MX")
+	if err == nil || stored.Version != product.InitialVersion {
+		t.Fatalf("event failure must abort the update, got %v version %d", err, stored.Version)
+	}
+}
+
+func TestFindHonoursCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := memory.NewSeededRepository().FindByIDInMarket(ctx, "PRD-001", product.MarketMX)
+	_, err := memory.NewRepository(seed.Products()).FindByIDInMarket(ctx, "PRD-001", "MX")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("want context.Canceled, got %v", err)
 	}
 }
 
-func TestSeedCoversAllMarkets(t *testing.T) {
-	const minimumProducts = 10
-	seed := memory.Seed()
-	if len(seed) < minimumProducts {
-		t.Fatalf("want at least %d products, got %d", minimumProducts, len(seed))
+func TestConcurrentUpdatesWithSameVersionHaveOneWinner(t *testing.T) {
+	const writers = 32
+	repo := memory.NewRepository(seed.Products())
+	name := "Concurrent"
+	var wins atomic.Int32
+	var wg sync.WaitGroup
+	for range writers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := repo.Update(context.Background(), product.UpdateRequest{ID: "PRD-001",
+				Market: "PE", Patch: product.Patch{Name: &name},
+				ExpectedVersion: ptr(product.InitialVersion), NewEvent: noEvent})
+			if err == nil {
+				wins.Add(1)
+			}
+		}()
 	}
-	perMarket := map[product.Market]int{}
-	for _, l := range seed {
-		for _, m := range l.Markets {
-			perMarket[m]++
-		}
+	wg.Wait()
+	if wins.Load() != 1 {
+		t.Fatalf("want exactly one winner, got %d", wins.Load())
 	}
-	for _, m := range product.Markets() {
-		if perMarket[m] == 0 {
-			t.Fatalf("market %s has no products", m)
-		}
-	}
+}
+
+func ptr(v int64) *int64 {
+	return &v
 }

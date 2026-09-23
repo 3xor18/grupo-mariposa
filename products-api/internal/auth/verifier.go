@@ -26,7 +26,6 @@ type Settings struct {
 	Issuer         string
 	Audience       string
 	JWKSURL        string
-	RequiredRole   string
 	ClockLeeway    time.Duration
 	JWKSTimeout    time.Duration
 	Refresh        time.Duration
@@ -38,11 +37,10 @@ type Principal struct {
 }
 
 type Verifier struct {
-	keys         *keyStore
-	parser       *jwt.Parser
-	requiredRole string
-	refresh      time.Duration
-	retry        time.Duration
+	keys    *keyStore
+	parser  *jwt.Parser
+	refresh time.Duration
+	retry   time.Duration
 }
 
 type claims struct {
@@ -59,10 +57,9 @@ func NewVerifier(settings Settings, logger *slog.Logger) *Verifier {
 	return &Verifier{
 		keys: newKeyStore(settings.JWKSURL, settings.JWKSTimeout, settings.MinimumRefresh,
 			logger),
-		parser:       jwt.NewParser(parserOptions(settings)...),
-		requiredRole: settings.RequiredRole,
-		refresh:      settings.Refresh,
-		retry:        settings.MinimumRefresh,
+		parser:  jwt.NewParser(parserOptions(settings)...),
+		refresh: settings.Refresh,
+		retry:   settings.MinimumRefresh,
 	}
 }
 
@@ -84,7 +81,7 @@ func (v *Verifier) Ready() bool {
 	return v.keys.warmed.Load()
 }
 
-func (v *Verifier) Verify(ctx context.Context, token string) (Principal, error) {
+func (v *Verifier) Verify(ctx context.Context, token, requiredRole string) (Principal, error) {
 	if token == "" {
 		return Principal{}, fmt.Errorf("%w: %w", ErrUnauthenticated, errMissingToken)
 	}
@@ -96,7 +93,7 @@ func (v *Verifier) Verify(ctx context.Context, token string) (Principal, error) 
 	case err != nil:
 		return Principal{}, fmt.Errorf("%w: %w", ErrUnauthenticated, err)
 	}
-	return authorize(parsed, v.requiredRole)
+	return authorize(parsed, requiredRole)
 }
 
 func authorize(parsed claims, requiredRole string) (Principal, error) {
