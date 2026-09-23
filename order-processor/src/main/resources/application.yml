@@ -183,6 +183,13 @@ app:
       initial-interval: ${RECORD_RETRY_INITIAL_INTERVAL:1s}
       multiplier: ${RECORD_RETRY_MULTIPLIER:2.0}
       max-attempts: ${RECORD_RETRY_MAX_ATTEMPTS:4}
+    master-data:
+      enabled: ${KAFKA_MASTER_DATA_ENABLED:true}
+      clients-changed-topic: ${KAFKA_TOPIC_CLIENTS_CHANGED:clients.changed.v1}
+      products-changed-topic: ${KAFKA_TOPIC_PRODUCTS_CHANGED:products.changed.v1}
+      topic-partitions: ${KAFKA_TOPIC_MASTER_DATA_PARTITIONS:3}
+      consumer-group: ${KAFKA_CACHE_CONSUMER_GROUP:order-processor-cache}
+      concurrency: ${KAFKA_MASTER_DATA_CONCURRENCY:1}
   http:
     clients:
       base-url: ${CLIENTS_API_URL:http://localhost:8082}
