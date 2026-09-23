@@ -55,7 +55,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [MX, CO, PE]
+            pattern: '^[A-Z]{2}$'
         - name: page
           in: query
           schema:
@@ -103,10 +103,10 @@ components:
   schemas:
     Market:
       type: string
-      enum: [MX, CO, PE]
+      pattern: '^[A-Z]{2}$'
     Currency:
       type: string
-      enum: [MXN, COP, PEN]
+      pattern: '^[A-Z]{3}$'
     RejectionReason:
       type: [string, 'null']
       description: Primary rejection code, null unless the order is REJECTED.
