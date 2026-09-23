@@ -6,12 +6,10 @@ export class ClientVersionConflictError extends DomainError {
 
   constructor(
     readonly clientId: string,
-    readonly expectedVersion: number,
     readonly currentVersion: number,
   ) {
     super(
-      `Client ${clientId} is at version ${String(currentVersion)}, ` +
-        `not ${String(expectedVersion)}`,
+      `Client ${clientId} is at version ${String(currentVersion)}, which If-Match does not match`,
     );
   }
 }

@@ -8,6 +8,7 @@ import { hostname } from 'node:os';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { APP_CONFIG, AppConfig } from '../../config/app-config';
 import { ID_GENERATOR, IdGenerator } from '../ids/uuid-v7';
+import { CLOCK, Clock } from '../time/clock';
 import { CHANGE_EVENT_PUBLISHER, ChangeEventPublisher } from './change-event-publisher';
 import { OutboxMetrics } from './outbox-metrics';
 import { OUTBOX_STORE, OutboxStore } from './outbox.store';
@@ -34,6 +35,7 @@ export class OutboxRelay implements OnApplicationBootstrap, BeforeApplicationShu
     @Inject(CHANGE_EVENT_PUBLISHER) private readonly publisher: ChangeEventPublisher,
     private readonly metrics: OutboxMetrics,
     @Inject(ID_GENERATOR) ids: IdGenerator,
+    @Inject(CLOCK) private readonly clock: Clock,
     @InjectPinoLogger(OutboxRelay.name) private readonly logger: PinoLogger,
   ) {
     this.owner = [hostname(), String(process.pid), ids()].join(OWNER_SEPARATOR);
@@ -66,7 +68,12 @@ export class OutboxRelay implements OnApplicationBootstrap, BeforeApplicationShu
     } catch (error: unknown) {
       this.metrics.recordFailure(batch.length);
       this.logger.warn({ err: error, count: batch.length }, RELAY_MESSAGES.publishFailed);
-      await this.store.release(this.owner, ids, String(error));
+      await this.store.release({
+        owner: this.owner,
+        ids,
+        reason: String(error),
+        availableAt: new Date(this.clock().getTime() + this.config.outbox.retryDelayMs),
+      });
       return 0;
     }
     return this.markPublished(ids);

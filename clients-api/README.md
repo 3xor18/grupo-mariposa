@@ -26,21 +26,21 @@ docker run --rm -p 8082:3000 \
   -e KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
   -e AUTH_ISSUER=http://localhost:8180/realms/mariposa \
   -e AUTH_JWKS_URL=http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs \
-  -e API_DOCS_ENABLED=true -e TRUST_PROXY=1 \
+  -e API_DOCS_ENABLED=true -e TRUST_PROXY=1 -e SEED_ENABLED=true \
   -e FAULT_INJECTION_ENABLED=true -e FAULT_RULES=CLI-40001:503:2,CLI-40002:503 clients-api
 ```
 
 The image is pinned to `node:24.21.0-alpine3.24` and does not set `NODE_ENV`. Production deployments
 set `NODE_ENV=production`, which makes the service refuse to start with `AUTH_ENABLED=false`,
-`FAULT_INJECTION_ENABLED=true`, `API_DOCS_ENABLED=true`, `STORAGE_DRIVER=memory` or without
-`KAFKA_BOOTSTRAP_SERVERS`.
+`FAULT_INJECTION_ENABLED=true`, `API_DOCS_ENABLED=true`, `STORAGE_DRIVER=memory`,
+`SEED_ENABLED=true`, `KAFKA_TLS_ENABLED=false` or without `KAFKA_BOOTSTRAP_SERVERS`.
 
 | Endpoint                                | Auth                          | Notes                                                                  |
 | --------------------------------------- | ----------------------------- | ---------------------------------------------------------------------- |
 | `GET /clients/{clientId}`               | Bearer, role `clients-reader` | `clientId` must match `^CLI-[A-Z0-9]{1,20}$`; responds `ETag: "<v>"`   |
 | `PATCH /clients/{clientId}`             | Bearer, role `clients-admin`  | `status`, `segment`, `taxRegime`; stale `If-Match` returns `412`       |
 | `GET /health/live`, `GET /health/ready` | public                        | `{"status":"UP"}`; ready is `503 DOWN` when Mongo fails or on shutdown |
-| `GET /metrics`                          | public (internal network)     | HTTP metrics plus `outbox_published_total`, failures and backlog gauge |
+| `GET /metrics`                          | public (internal network)     | HTTP metrics plus outbox counters and backlog gauges (see below)       |
 | `GET /docs`, `GET /docs-json`           | public, only if enabled       | Swagger UI / generated OpenAPI 3.1 (`API_DOCS_ENABLED`)                |
 
 `/metrics` and `/docs` are unauthenticated by design (ADR 0003): they are only reachable inside the
@@ -57,8 +57,16 @@ curl -i -X PATCH http://localhost:8082/clients/CLI-70001 \
 ```
 
 The body accepts only `status`, `segment` and `taxRegime` (at least one; unknown fields are `400`).
-`If-Match` accepts `"<version>"`, `<version>` or `*`; without it the update is unconditional. A stale
-version returns `412 PRECONDITION_FAILED`.
+`If-Match` rules (shared by all services):
+
+- absent or `*`: unconditional update;
+- otherwise a comma separated list of entity tags: a strong `"N"` (or bare `N`) matches when `N` is
+  the current version; weak tags `W/"N"` and opaque tags such as `"abc"` never match;
+- a valid list without a match returns `412 PRECONDITION_FAILED`; a malformed list (empty item,
+  unbalanced quotes, `*` inside a list) returns `400 VALIDATION_ERROR`.
+
+A PATCH that changes nothing returns `200` with the current entity and `ETag`, without bumping the
+version or writing a change event.
 
 ## Test
 
@@ -81,59 +89,71 @@ OpenAPI document (operations, status codes, `Client` schema) against the contrac
 The configuration is validated at startup; the process exits with a `fatal` log on any invalid value.
 Authentication fails closed: `AUTH_ENABLED=true` without issuer or JWKS URL stops the process.
 
-| Variable                         | Default                  | Description                                                                 |
-| -------------------------------- | ------------------------ | --------------------------------------------------------------------------- |
-| `PORT`                           | `3000`                   | HTTP port                                                                   |
-| `LOG_LEVEL`                      | `info`                   | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`                |
-| `NODE_ENV`                       | unset                    | `production` forbids auth off, fault injection, API docs and no Kafka       |
-| `PLATFORM_MARKETS`               | 5 markets (see below)    | `CODE:CURRENCY:locale,...` catalog (config key `platform.markets`)          |
-| `STORAGE_DRIVER`                 | `mongo`                  | `mongo` or `memory` (seeded, no events; refused when `NODE_ENV=production`) |
-| `MONGODB_URI`                    | required with `mongo`    | secret `mongodb://` or `mongodb+srv://` connection string of a replica set  |
-| `MONGODB_DATABASE`               | `clients`                | database with the `clients` and `outbox` collections                        |
-| `KAFKA_BOOTSTRAP_SERVERS`        | empty (relay disabled)   | comma separated brokers; required when `NODE_ENV=production`                |
-| `KAFKA_TOPIC_CHANGES`            | `clients.changed.v1`     | topic of the change events (key `clientId`)                                 |
-| `OUTBOX_RELAY_INTERVAL_MS`       | `250`                    | pause between relay iterations                                              |
-| `OUTBOX_BATCH_SIZE`              | `100`                    | outbox entries leased per iteration                                         |
-| `OUTBOX_LEASE_MS`                | `30000`                  | lease length before another relay may take over an entry                    |
-| `AUTH_ENABLED`                   | `true`                   | `false` only for local tests                                                |
-| `AUTH_ISSUER`                    | required when auth is on | expected `iss` claim                                                        |
-| `AUTH_JWKS_URL`                  | required when auth is on | Keycloak JWKS endpoint (RS256 only)                                         |
-| `AUTH_AUDIENCE`                  | `clients-api`            | required `aud` claim, never blank (config key `auth.audience`)              |
-| `AUTH_REQUIRED_ROLE`             | `clients-reader`         | realm role for reads                                                        |
-| `AUTH_ADMIN_ROLE`                | `clients-admin`          | realm role for `PATCH /clients/{clientId}`                                  |
-| `FAULT_INJECTION_ENABLED`        | `false`                  | enables `FAULT_RULES`; refused when `NODE_ENV=production`                   |
-| `FAULT_RULES`                    | empty                    | `id:type[:times]` list, types `429`, `500`, `502`, `503`, `400`, `timeout`  |
-| `FAULT_TIMEOUT_MS`               | `5000`                   | hold time of `timeout` rules (released early on cancel or shutdown)         |
-| `RATE_LIMIT_RPS`                 | `200`                    | refill rate of every caller bucket                                          |
-| `RATE_LIMIT_BURST`               | `400`                    | capacity of every caller bucket                                             |
-| `RATE_LIMIT_MAX_TRACKED_CALLERS` | `10000`                  | LRU bound of buckets kept per layer                                         |
-| `SHUTDOWN_DRAIN_MS`              | `5000`                   | time readiness reports `DOWN` before the server closes                      |
-| `SHUTDOWN_TIMEOUT_MS`            | `10000`                  | extra time after the drain before a signalled shutdown is forced            |
-| `API_DOCS_ENABLED`               | `false`                  | mounts Swagger at `/docs`; refused when `NODE_ENV=production`               |
-| `TRUST_PROXY`                    | `false`                  | Express `trust proxy`: `true`, hop count or address list (behind ingress)   |
+| Variable                         | Default                         | Description                                                                |
+| -------------------------------- | ------------------------------- | -------------------------------------------------------------------------- |
+| `PORT`                           | `3000`                          | HTTP port                                                                  |
+| `LOG_LEVEL`                      | `info`                          | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`               |
+| `NODE_ENV`                       | unset                           | `production` enables the guards listed under Run                           |
+| `PLATFORM_MARKETS`               | 5 markets (see below)           | `CODE:CURRENCY:LOCALE,...` catalog (config key `platform.markets`)         |
+| `PLATFORM_CURRENCIES`            | `MXN:2,COP:2,PEN:2,CLP:0,USD:2` | `CODE:DIGITS` (0..4) list (config key `platform.currencies`)               |
+| `STORAGE_DRIVER`                 | `mongo`                         | `mongo` or `memory` (no events; refused when `NODE_ENV=production`)        |
+| `SEED_ENABLED`                   | `false`                         | loads the demo/master seed at startup; refused when `NODE_ENV=production`  |
+| `MONGODB_URI`                    | required with `mongo`           | secret `mongodb://` or `mongodb+srv://` connection string of a replica set |
+| `MONGODB_DATABASE`               | `clients`                       | database with the `clients` and `outbox` collections                       |
+| `KAFKA_BOOTSTRAP_SERVERS`        | empty (relay disabled)          | comma separated brokers; required when `NODE_ENV=production`               |
+| `KAFKA_TOPIC_CHANGES`            | `clients.changed.v1`            | topic of the change events (key `clientId`)                                |
+| `KAFKA_TLS_ENABLED`              | `false`                         | TLS to the brokers; must be `true` when `NODE_ENV=production`              |
+| `OUTBOX_RELAY_INTERVAL_MS`       | `250`                           | pause between relay iterations                                             |
+| `OUTBOX_BATCH_SIZE`              | `100`                           | outbox entries leased per iteration                                        |
+| `OUTBOX_LEASE_MS`                | `30000`                         | lease length before another relay may take over an entry                   |
+| `OUTBOX_RETRY_DELAY_MS`          | `1000`                          | delay before a failed entry becomes claimable again                        |
+| `OUTBOX_RETENTION`               | `7d`                            | TTL of published entries (`s`, `m`, `h` or `d`)                            |
+| `AUTH_ENABLED`                   | `true`                          | `false` only for local tests                                               |
+| `AUTH_ISSUER`                    | required when auth is on        | expected `iss` claim                                                       |
+| `AUTH_JWKS_URL`                  | required when auth is on        | Keycloak JWKS endpoint (RS256 only)                                        |
+| `AUTH_AUDIENCE`                  | `clients-api`                   | required `aud` claim, never blank (config key `auth.audience`)             |
+| `AUTH_REQUIRED_ROLE`             | `clients-reader`                | realm role for reads                                                       |
+| `AUTH_ADMIN_ROLE`                | `clients-admin`                 | realm role for `PATCH /clients/{clientId}`                                 |
+| `FAULT_INJECTION_ENABLED`        | `false`                         | enables `FAULT_RULES`; refused when `NODE_ENV=production`                  |
+| `FAULT_RULES`                    | empty                           | `id:type[:times]` list, types `429`, `500`, `502`, `503`, `400`, `timeout` |
+| `FAULT_TIMEOUT_MS`               | `5000`                          | hold time of `timeout` rules (released early on cancel or shutdown)        |
+| `RATE_LIMIT_RPS`                 | `200`                           | refill rate of every caller bucket                                         |
+| `RATE_LIMIT_BURST`               | `400`                           | capacity of every caller bucket                                            |
+| `RATE_LIMIT_MAX_TRACKED_CALLERS` | `10000`                         | LRU bound of buckets kept per layer                                        |
+| `SHUTDOWN_DRAIN_MS`              | `5000`                          | time readiness reports `DOWN` before the server closes                     |
+| `SHUTDOWN_TIMEOUT_MS`            | `10000`                         | extra time after the drain before a signalled shutdown is forced           |
+| `API_DOCS_ENABLED`               | `false`                         | mounts Swagger at `/docs`; refused when `NODE_ENV=production`              |
+| `TRUST_PROXY`                    | `false`                         | Express `trust proxy`: `true`, hop count or address list (behind ingress)  |
 
 ### Market catalog (ADR 0006)
 
-Markets are not an enum: `PLATFORM_MARKETS` (default
-`MX:MXN:es-MX,CO:COP:es-CO,PE:PEN:es-PE,CL:CLP:es-CL,EC:USD:es-EC`) is validated at startup (two
-letter code, ISO 4217 currency, `xx-XX` locale, no duplicates; currencies may repeat). Only seed
-clients whose market belongs to the catalog are loaded, and the API publishes `market` with the
-contract pattern `^[A-Z]{2}$`. `PLATFORM_CURRENCIES` belongs to `order-processor` and is ignored here.
+Markets are not an enum. Both lists are validated at startup with the grammar shared by all
+services: `PLATFORM_MARKETS` entries are `CODE:CURRENCY:LOCALE` (trimmed; `^[A-Z]{2}$`,
+`^[A-Z]{3}$`, `^[a-z]{2}-[A-Z]{2}$`; no duplicate codes) and `PLATFORM_CURRENCIES` entries are
+`CODE:DIGITS` with 0 to 4 minor digits and no duplicates. Every market currency must be declared
+(EC and a future PA may share USD). Only seed clients whose market belongs to the catalog are loaded,
+and the API publishes `market` with the contract pattern `^[A-Z]{2}$`.
 
 ### Persistence and change events (ADR 0007)
 
-- `clients` collection: one document per client with a unique `clientId` index, `version` (starts at
-  1. and `updatedAt`. The seed (master data, CL/EC clients, `CLI-40001`/`CLI-40002` resilience fixtures
-     and the `CLI-70001` cache demo client) is applied on every start with upserts using `$setOnInsert`,
-     so changes made through the API survive restarts.
+- `clients` collection: one document per client with a unique `clientId` index, `version` (starting
+  at one) and `updatedAt`. With `SEED_ENABLED=true` the seed (master data, CL/EC clients, the
+  `CLI-40001`/`CLI-40002` resilience fixtures and the `CLI-70001` cache demo client) is applied with
+  upserts using `$setOnInsert`, so changes made through the API survive restarts.
 - `PATCH` runs a MongoDB transaction that updates the client (`version + 1`) and inserts a
-  `clients.changed.v1` event (full state, `eventId` UUIDv7) into the `outbox` collection.
-- `OutboxRelay` leases up to `OUTBOX_BATCH_SIZE` entries (`IN_FLIGHT` + owner + `leaseUntil`),
-  publishes them with an idempotent kafkajs producer (key `clientId`, headers `eventId` and
-  `contentType`) and marks them `PUBLISHED` only while it still owns the lease. Publish failures
-  release the entries for retry and expired leases are taken over by other instances, so delivery is
-  at least once and consumers keep the highest `version` per key. Shutdown stops the timer, waits for
-  the running batch and disconnects the producer.
+  `clients.changed.v1` event into the `outbox` collection. The event carries the state needed by
+  consumers (`clientId`, `version`, `status`, `segment`, `taxRegime`, `market`) but not the client
+  name, which is personal data and must not live on a compacted topic.
+- `OutboxRelay` claims, for each key, only the oldest unpublished event and only when it is claimable
+  (pending and available, or with an expired lease), so a newer version of a client is never published
+  while an older one is pending or in flight. It leases up to `OUTBOX_BATCH_SIZE` events
+  (`IN_FLIGHT` + owner + `leaseUntil`), publishes them with an idempotent kafkajs producer (key
+  `clientId`, headers `eventId` and `contentType`) and marks them `PUBLISHED` only while it still owns
+  the lease. A failed publication releases the events with `attempts + 1` and
+  `availableAt = now + OUTBOX_RETRY_DELAY_MS`. Published events expire after `OUTBOX_RETENTION` (TTL
+  index on `publishedAt`). Delivery is at least once; consumers keep the highest `version` per key.
+- Metrics: `outbox_published_total`, `outbox_publish_failures_total`, `outbox_pending` (pending or in
+  flight) and `outbox_oldest_age_seconds`, both gauges computed on scrape with indexed queries.
 
 ### Rate limiting
 
@@ -223,7 +243,7 @@ messages: the detail comes from the error catalog and the original error is logg
 The use cases depend only on the `ClientRepository` port (`findById`, `update`), bound to the
 `CLIENT_REPOSITORY` token in `clients/infrastructure/client-repository.provider.ts`. Production binds
 `MongoClientRepository`; `InMemoryClientRepository` implements the same contract (versioning,
-conflicts, recorded change events) for unit tests and `STORAGE_DRIVER=memory` (same parity switch as
+conflicts, change events through the `ClientChangeEvents` port) for unit tests and `STORAGE_DRIVER=memory` (same switch as
 `products-api`; the relay is not started and events are only kept in memory). Another store only needs an adapter that persists
 the change and its `ClientChangedEvent` atomically and a different `useFactory`, for example:
 

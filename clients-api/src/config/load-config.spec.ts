@@ -1,15 +1,23 @@
 import { FaultType } from '../shared/fault-injection/fault-rule';
+import { DEFAULT_PLATFORM_CURRENCIES, parseCurrencies } from '../shared/markets/currency-catalog';
 import { DEFAULT_PLATFORM_MARKETS, parseMarkets } from '../shared/markets/market-catalog';
 import { LogLevel, StorageDriver } from './app-config';
 import { InvalidConfigurationError, loadConfig } from './load-config';
 
 const MONGO_URI = 'mongodb://mongo:27017/?replicaSet=rs0';
 const BASE_ENV = { MONGODB_URI: MONGO_URI };
+const PRODUCTION_ENV_EXTRAS = {
+  NODE_ENV: 'production',
+  KAFKA_BOOTSTRAP_SERVERS: 'kafka:9093',
+  KAFKA_TLS_ENABLED: 'true',
+};
 const AUTH_ENV = {
   ...BASE_ENV,
   AUTH_ISSUER: 'http://localhost:8180/realms/mariposa',
   AUTH_JWKS_URL: 'http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs',
 };
+
+const PRODUCTION_ENV = { ...AUTH_ENV, ...PRODUCTION_ENV_EXTRAS };
 
 describe('loadConfig', () => {
   it('should_apply_platform_defaults_when_only_auth_urls_are_set', () => {
@@ -29,9 +37,17 @@ describe('loadConfig', () => {
       shutdown: { drainMs: 5000, timeoutMs: 10_000 },
       http: { apiDocsEnabled: false, trustProxy: false },
       markets: parseMarkets(DEFAULT_PLATFORM_MARKETS),
+      currencies: parseCurrencies(DEFAULT_PLATFORM_CURRENCIES),
       storage: { driver: StorageDriver.MONGO, uri: MONGO_URI, database: 'clients' },
-      outbox: { relayIntervalMs: 250, batchSize: 100, leaseMs: 30_000 },
-      kafka: { bootstrapServers: [], changesTopic: 'clients.changed.v1' },
+      outbox: {
+        relayIntervalMs: 250,
+        batchSize: 100,
+        leaseMs: 30_000,
+        retryDelayMs: 1000,
+        retentionSeconds: 604_800,
+      },
+      kafka: { bootstrapServers: [], changesTopic: 'clients.changed.v1', tlsEnabled: false },
+      seedEnabled: false,
     });
   });
 
@@ -63,6 +79,10 @@ describe('loadConfig', () => {
       OUTBOX_LEASE_MS: '10000',
       KAFKA_BOOTSTRAP_SERVERS: 'kafka-1:9092, kafka-2:9092,',
       KAFKA_TOPIC_CHANGES: 'clients.changed.v2',
+      KAFKA_TLS_ENABLED: 'true',
+      SEED_ENABLED: 'true',
+      OUTBOX_RETRY_DELAY_MS: '2500',
+      OUTBOX_RETENTION: '12h',
     });
 
     expect(config).toEqual({
@@ -91,16 +111,28 @@ describe('loadConfig', () => {
         { code: 'MX', currency: 'MXN', locale: 'es-MX' },
         { code: 'CL', currency: 'CLP', locale: 'es-CL' },
       ],
+      currencies: [
+        { code: 'MXN', minorUnits: 2 },
+        { code: 'CLP', minorUnits: 0 },
+      ],
       storage: {
         driver: StorageDriver.MONGO,
         uri: 'mongodb+srv://user:secret@cluster.example.net/',
         database: 'master',
       },
-      outbox: { relayIntervalMs: 500, batchSize: 20, leaseMs: 10_000 },
+      outbox: {
+        relayIntervalMs: 500,
+        batchSize: 20,
+        leaseMs: 10_000,
+        retryDelayMs: 2500,
+        retentionSeconds: 43_200,
+      },
       kafka: {
         bootstrapServers: ['kafka-1:9092', 'kafka-2:9092'],
         changesTopic: 'clients.changed.v2',
+        tlsEnabled: true,
       },
+      seedEnabled: true,
     });
   });
 
@@ -130,7 +162,8 @@ describe('loadConfig', () => {
         API_DOCS_ENABLED: 'true',
       }),
     ).toThrow(
-      'Invalid configuration: AUTH_ENABLED=false is not allowed when NODE_ENV=production; ' +
+      'Invalid configuration: KAFKA_TLS_ENABLED=false is not allowed when NODE_ENV=production; ' +
+        'AUTH_ENABLED=false is not allowed when NODE_ENV=production; ' +
         'FAULT_INJECTION_ENABLED=true is not allowed when NODE_ENV=production; ' +
         'API_DOCS_ENABLED=true is not allowed when NODE_ENV=production; ' +
         'KAFKA_BOOTSTRAP_SERVERS is required when NODE_ENV=production',
@@ -141,9 +174,12 @@ describe('loadConfig', () => {
     [{ AUTH_ENABLED: 'false' }, 'AUTH_ENABLED=false'],
     [{ FAULT_INJECTION_ENABLED: 'true' }, 'FAULT_INJECTION_ENABLED=true'],
     [{ API_DOCS_ENABLED: 'true' }, 'API_DOCS_ENABLED=true'],
+    [{ SEED_ENABLED: 'true' }, 'SEED_ENABLED=true'],
+    [{ KAFKA_TLS_ENABLED: 'false' }, 'KAFKA_TLS_ENABLED=false'],
+    [{ STORAGE_DRIVER: 'memory' }, 'STORAGE_DRIVER=memory'],
   ])('should_refuse_%j_in_production', (overrides, setting) => {
-    expect(() => loadConfig({ ...AUTH_ENV, NODE_ENV: 'production', ...overrides })).toThrow(
-      `Invalid configuration: ${setting} is not allowed when NODE_ENV=production`,
+    expect(() => loadConfig({ ...PRODUCTION_ENV, ...overrides })).toThrow(
+      new InvalidConfigurationError([`${setting} is not allowed when NODE_ENV=production`]),
     );
   });
 
@@ -153,29 +189,14 @@ describe('loadConfig', () => {
     expect(config.storage).toEqual({ driver: StorageDriver.MEMORY });
   });
 
-  it('should_refuse_in_memory_storage_in_production', () => {
-    expect(() =>
-      loadConfig({
-        ...AUTH_ENV,
-        NODE_ENV: 'production',
-        STORAGE_DRIVER: 'memory',
-        KAFKA_BOOTSTRAP_SERVERS: 'k:9092',
-      }),
-    ).toThrow(
-      'Invalid configuration: STORAGE_DRIVER=memory is not allowed when NODE_ENV=production',
-    );
-  });
-
   it('should_start_in_production_with_secure_defaults', () => {
-    const config = loadConfig({
-      ...AUTH_ENV,
-      NODE_ENV: 'production',
-      KAFKA_BOOTSTRAP_SERVERS: 'kafka:9092',
-    });
+    const config = loadConfig(PRODUCTION_ENV);
 
     expect(config.auth).toMatchObject({ enabled: true, audience: 'clients-api' });
     expect(config.faultInjection.enabled).toBe(false);
     expect(config.http.apiDocsEnabled).toBe(false);
+    expect(config.seedEnabled).toBe(false);
+    expect(config.kafka.tlsEnabled).toBe(true);
   });
 
   it.each([
@@ -217,6 +238,15 @@ describe('loadConfig', () => {
     [{ OUTBOX_RELAY_INTERVAL_MS: '-1' }, 'OUTBOX_RELAY_INTERVAL_MS: Too small'],
     [{ KAFKA_TOPIC_CHANGES: ' ' }, 'KAFKA_TOPIC_CHANGES: Too small'],
     [{ AUTH_ADMIN_ROLE: '' }, 'AUTH_ADMIN_ROLE: Too small'],
+    [{ PLATFORM_CURRENCIES: 'MXN:9' }, 'PLATFORM_CURRENCIES: MarketCatalogError'],
+    [
+      { PLATFORM_CURRENCIES: 'MXN:2,COP:2,PEN:2,CLP:0' },
+      'Invalid configuration: market EC uses undeclared currency USD',
+    ],
+    [{ OUTBOX_RETENTION: '7w' }, 'OUTBOX_RETENTION: must be a positive duration'],
+    [{ OUTBOX_RETRY_DELAY_MS: '0' }, 'OUTBOX_RETRY_DELAY_MS: Too small'],
+    [{ KAFKA_TLS_ENABLED: 'yes' }, 'KAFKA_TLS_ENABLED: Invalid option'],
+    [{ SEED_ENABLED: 'no' }, 'SEED_ENABLED: Invalid option'],
   ])('should_reject_invalid_environment_%j', (overrides, message) => {
     const load = (): unknown => loadConfig({ ...AUTH_ENV, ...overrides });
 

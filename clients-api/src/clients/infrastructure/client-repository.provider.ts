@@ -5,6 +5,7 @@ import { MARKET_CATALOG, MarketCatalog } from '../../shared/markets/market-catal
 import { ID_GENERATOR, IdGenerator } from '../../shared/ids/uuid-v7';
 import { MONGO_CLIENT, MONGO_DATABASE } from '../../shared/mongo/mongo.tokens';
 import { CLOCK, Clock } from '../../shared/time/clock';
+import { DiscardedClientChangeEvents } from '../application/client-changed.event';
 import { CLIENT_REPOSITORY, ClientRepository } from '../application/client.repository';
 import { seedForCatalog } from './client.seed';
 import { InMemoryClientRepository } from './in-memory-client.repository';
@@ -33,16 +34,18 @@ export const clientRepositoryProvider: Provider<ClientRepository> = {
 
 export function createInMemoryClientRepository(
   catalog: MarketCatalog,
+  config: AppConfig,
   ids: IdGenerator,
   clock: Clock,
 ): ClientRepository {
-  return new InMemoryClientRepository(seedForCatalog(catalog), ids, clock);
+  const seed = config.seedEnabled ? seedForCatalog(catalog) : [];
+  return new InMemoryClientRepository(seed, new DiscardedClientChangeEvents(), ids, clock);
 }
 
 export const inMemoryClientRepositoryProvider: Provider<ClientRepository> = {
   provide: CLIENT_REPOSITORY,
   useFactory: createInMemoryClientRepository,
-  inject: [MARKET_CATALOG, ID_GENERATOR, CLOCK],
+  inject: [MARKET_CATALOG, APP_CONFIG, ID_GENERATOR, CLOCK],
 };
 
 export function storageProvidersFor(driver: StorageDriver): Provider[] {

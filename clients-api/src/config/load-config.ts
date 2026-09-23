@@ -6,6 +6,12 @@ import {
   TRUE_VALUE,
 } from '../shared/constants/environment.constants';
 import { parseFaultRules } from '../shared/fault-injection/fault-rule';
+import { DURATION_FORMAT_MESSAGE, parseDurationSeconds } from './duration';
+import {
+  DEFAULT_PLATFORM_CURRENCIES,
+  parseCurrencies,
+  undeclaredCurrencies,
+} from '../shared/markets/currency-catalog';
 import { DEFAULT_PLATFORM_MARKETS, parseMarkets } from '../shared/markets/market-catalog';
 import {
   AppConfig,
@@ -37,11 +43,16 @@ export const CONFIG_DEFAULTS = Object.freeze({
   apiDocsEnabled: FALSE_VALUE,
   trustProxy: false,
   platformMarkets: DEFAULT_PLATFORM_MARKETS,
+  platformCurrencies: DEFAULT_PLATFORM_CURRENCIES,
   storageDriver: StorageDriver.MONGO,
   mongoDatabase: 'clients',
   outboxRelayIntervalMs: 250,
   outboxBatchSize: 100,
   outboxLeaseMs: 30_000,
+  outboxRetryDelayMs: 1000,
+  outboxRetention: '7d',
+  kafkaTlsEnabled: FALSE_VALUE,
+  seedEnabled: FALSE_VALUE,
   kafkaBootstrapServers: '',
   kafkaChangesTopic: 'clients.changed.v1',
 });
@@ -92,6 +103,18 @@ export const trustProxySchema = z
   ])
   .default(CONFIG_DEFAULTS.trustProxy);
 
+const currenciesSchema = z
+  .string()
+  .default(CONFIG_DEFAULTS.platformCurrencies)
+  .transform((raw, context) => {
+    try {
+      return parseCurrencies(raw);
+    } catch (error: unknown) {
+      context.addIssue({ code: CUSTOM_ISSUE, message: String(error) });
+      return z.NEVER;
+    }
+  });
+
 const marketsSchema = z
   .string()
   .default(CONFIG_DEFAULTS.platformMarkets)
@@ -120,6 +143,18 @@ const bootstrapServersSchema = z
       .filter((server) => server.length > 0),
   );
 
+const retentionSchema = z
+  .string()
+  .default(CONFIG_DEFAULTS.outboxRetention)
+  .transform((raw, context) => {
+    const seconds = parseDurationSeconds(raw);
+    if (seconds === undefined) {
+      context.addIssue({ code: CUSTOM_ISSUE, message: DURATION_FORMAT_MESSAGE });
+      return z.NEVER;
+    }
+    return seconds;
+  });
+
 const positiveInteger = (fallback: number): z.ZodDefault<z.ZodCoercedNumber> =>
   z.coerce.number().int().positive().default(fallback);
 
@@ -144,12 +179,17 @@ const environmentSchema = z.object({
   API_DOCS_ENABLED: z.enum(BOOLEAN_VALUES).default(CONFIG_DEFAULTS.apiDocsEnabled),
   TRUST_PROXY: trustProxySchema,
   PLATFORM_MARKETS: marketsSchema,
+  PLATFORM_CURRENCIES: currenciesSchema,
   STORAGE_DRIVER: z.enum(StorageDriver).default(CONFIG_DEFAULTS.storageDriver),
   MONGODB_URI: mongoUriSchema.optional(),
   MONGODB_DATABASE: z.string().trim().min(1).default(CONFIG_DEFAULTS.mongoDatabase),
   OUTBOX_RELAY_INTERVAL_MS: positiveInteger(CONFIG_DEFAULTS.outboxRelayIntervalMs),
   OUTBOX_BATCH_SIZE: positiveInteger(CONFIG_DEFAULTS.outboxBatchSize),
   OUTBOX_LEASE_MS: positiveInteger(CONFIG_DEFAULTS.outboxLeaseMs),
+  OUTBOX_RETRY_DELAY_MS: positiveInteger(CONFIG_DEFAULTS.outboxRetryDelayMs),
+  OUTBOX_RETENTION: retentionSchema,
+  KAFKA_TLS_ENABLED: z.enum(BOOLEAN_VALUES).default(CONFIG_DEFAULTS.kafkaTlsEnabled),
+  SEED_ENABLED: z.enum(BOOLEAN_VALUES).default(CONFIG_DEFAULTS.seedEnabled),
   KAFKA_BOOTSTRAP_SERVERS: bootstrapServersSchema,
   KAFKA_TOPIC_CHANGES: z.string().trim().min(1).default(CONFIG_DEFAULTS.kafkaChangesTopic),
 });
@@ -157,6 +197,8 @@ const environmentSchema = z.object({
 type Environment = z.infer<typeof environmentSchema>;
 
 const PRODUCTION_FORBIDDEN_VALUES = Object.freeze([
+  ['KAFKA_TLS_ENABLED', FALSE_VALUE],
+  ['SEED_ENABLED', TRUE_VALUE],
   ['AUTH_ENABLED', FALSE_VALUE],
   ['FAULT_INJECTION_ENABLED', TRUE_VALUE],
   ['API_DOCS_ENABLED', TRUE_VALUE],
@@ -221,6 +263,8 @@ function toOutboxConfig(environment: Environment): OutboxConfig {
     relayIntervalMs: environment.OUTBOX_RELAY_INTERVAL_MS,
     batchSize: environment.OUTBOX_BATCH_SIZE,
     leaseMs: environment.OUTBOX_LEASE_MS,
+    retryDelayMs: environment.OUTBOX_RETRY_DELAY_MS,
+    retentionSeconds: environment.OUTBOX_RETENTION,
   };
 }
 
@@ -242,6 +286,7 @@ function toKafkaConfig(environment: Environment): KafkaConfig {
   return {
     bootstrapServers: environment.KAFKA_BOOTSTRAP_SERVERS,
     changesTopic: environment.KAFKA_TOPIC_CHANGES,
+    tlsEnabled: environment.KAFKA_TLS_ENABLED === TRUE_VALUE,
   };
 }
 
@@ -254,7 +299,10 @@ function parseEnvironment(source: ConfigSource): Environment {
   if (!result.success) {
     throw new InvalidConfigurationError(issuesOf(result.error));
   }
-  const issues = productionIssues(result.data);
+  const issues = [
+    ...undeclaredCurrencies(result.data.PLATFORM_MARKETS, result.data.PLATFORM_CURRENCIES),
+    ...productionIssues(result.data),
+  ];
   if (issues.length > 0) {
     throw new InvalidConfigurationError(issues);
   }
@@ -279,8 +327,10 @@ export function loadConfig(source: ConfigSource): AppConfig {
     },
     http: toHttpConfig(environment),
     markets: environment.PLATFORM_MARKETS,
+    currencies: environment.PLATFORM_CURRENCIES,
     storage: toStorageConfig(environment),
     outbox: toOutboxConfig(environment),
     kafka: toKafkaConfig(environment),
+    seedEnabled: environment.SEED_ENABLED === TRUE_VALUE,
   };
 }

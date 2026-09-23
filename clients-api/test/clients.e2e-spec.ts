@@ -307,16 +307,32 @@ describe('PATCH /clients/:clientId', () => {
     expect(response.body).toMatchObject({ segment: 'WHOLESALE', taxRegime: 'EXEMPT', version: 3 });
   });
 
-  it('should_return_412_when_if_match_is_stale', async () => {
-    const response = await patch('CLI-60001', { status: 'BLOCKED' }, '"7"').expect(412);
+  it.each(['"7"', 'W/"1"', '"abc"', '"7", W/"1"'])(
+    'should_return_412_when_if_match_%s_does_not_match',
+    async (ifMatch) => {
+      const response = await patch('CLI-60001', { status: 'BLOCKED' }, ifMatch).expect(412);
 
-    expect(response.body).toMatchObject({
-      status: 412,
-      code: ErrorCode.PRECONDITION_FAILED,
-      title: 'Precondition failed',
-      detail: 'Client CLI-60001 is at version 1, not 7',
-    });
-    expect(validators.problem(response.body)).toBe(true);
+      expect(response.body).toMatchObject({
+        status: 412,
+        code: ErrorCode.PRECONDITION_FAILED,
+        title: 'Precondition failed',
+        detail: 'Client CLI-60001 is at version 1, which If-Match does not match',
+      });
+      expect(validators.problem(response.body)).toBe(true);
+    },
+  );
+
+  it('should_update_when_any_listed_entity_tag_matches', async () => {
+    const response = await patch('CLI-30001', { taxRegime: 'EXEMPT' }, '"9", 1').expect(200);
+
+    expect(response.headers.etag).toBe('"2"');
+  });
+
+  it('should_answer_no_op_updates_with_the_current_entity_and_etag', async () => {
+    const response = await patch('CLI-30002', { status: 'ACTIVE' }, '"1"').expect(200);
+
+    expect(response.headers.etag).toBe('"1"');
+    expect(response.body).toMatchObject({ clientId: 'CLI-30002', status: 'ACTIVE', version: 1 });
   });
 
   it.each([
@@ -339,12 +355,19 @@ describe('PATCH /clients/:clientId', () => {
   });
 
   it('should_return_400_for_malformed_if_match', async () => {
-    const response = await patch('CLI-60002', { status: 'ACTIVE' }, 'v2').expect(400);
+    for (const ifMatch of ['v2', '"1', '"1",']) {
+      const response = await patch('CLI-60002', { status: 'ACTIVE' }, ifMatch).expect(400);
 
-    expect(response.body).toMatchObject({
-      code: ErrorCode.VALIDATION_ERROR,
-      errors: [{ field: 'if-match', message: 'must be a version number such as "3" or *' }],
-    });
+      expect(response.body).toMatchObject({
+        code: ErrorCode.VALIDATION_ERROR,
+        errors: [
+          {
+            field: 'if-match',
+            message: 'must be * or a comma separated list of entity tags such as "3"',
+          },
+        ],
+      });
+    }
   });
 
   it('should_return_400_for_invalid_client_id', async () => {

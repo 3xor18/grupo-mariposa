@@ -7,9 +7,11 @@ import { OutboxMessage } from './outbox.document';
 import { OutboxStore } from './outbox.store';
 import { OutboxRelay, RELAY_MESSAGES } from './outbox-relay';
 
+const NOW = new Date('2026-09-23T10:00:00.000Z');
+
 const MESSAGES: OutboxMessage[] = [
-  { id: 'e1', topic: 't', key: 'CLI-1', payload: {} },
-  { id: 'e2', topic: 't', key: 'CLI-2', payload: {} },
+  { id: 'e1', topic: 't', key: 'CLI-1', version: 2, payload: {} },
+  { id: 'e2', topic: 't', key: 'CLI-2', version: 5, payload: {} },
 ];
 
 interface RelayFixture {
@@ -28,13 +30,14 @@ function setup(bootstrapServers: string[] = ['localhost:9092']): RelayFixture {
   const config = {
     ...base,
     kafka: { ...base.kafka, bootstrapServers },
-    outbox: { relayIntervalMs: 5, batchSize: 2, leaseMs: 1000 },
+    outbox: { ...base.outbox, relayIntervalMs: 5, batchSize: 2, leaseMs: 1000, retryDelayMs: 250 },
   };
   const store: jest.Mocked<OutboxStore> = {
     claim: jest.fn().mockResolvedValue([]),
     markPublished: jest.fn(),
     release: jest.fn().mockResolvedValue(undefined),
-    countUnpublished: jest.fn().mockResolvedValue(0),
+    countPending: jest.fn().mockResolvedValue(0),
+    oldestPendingCreatedAt: jest.fn().mockResolvedValue(undefined),
   };
   const publisher: jest.Mocked<ChangeEventPublisher> = {
     publish: jest.fn().mockResolvedValue(undefined),
@@ -46,8 +49,9 @@ function setup(bootstrapServers: string[] = ['localhost:9092']): RelayFixture {
     config,
     store,
     publisher,
-    new OutboxMetrics(registry, store),
+    new OutboxMetrics(registry, store, () => NOW),
     () => 'relay-id',
+    () => NOW,
     logger as unknown as PinoLogger,
   );
   return { relay, store, publisher, logger, registry };
@@ -85,7 +89,12 @@ describe('OutboxRelay', () => {
 
     await expect(relay.relayOnce()).resolves.toBe(0);
 
-    expect(store.release).toHaveBeenCalledWith(relay.owner, ['e1', 'e2'], 'Error: broker down');
+    expect(store.release).toHaveBeenCalledWith({
+      owner: relay.owner,
+      ids: ['e1', 'e2'],
+      reason: 'Error: broker down',
+      availableAt: new Date('2026-09-23T10:00:00.250Z'),
+    });
     expect(store.markPublished).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ count: 2 }),

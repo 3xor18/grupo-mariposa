@@ -1,4 +1,12 @@
-import { Kafka, logLevel, Message, Partitioners, Producer, TopicMessages } from 'kafkajs';
+import {
+  Kafka,
+  KafkaConfig as KafkaClientConfig,
+  logLevel,
+  Message,
+  Partitioners,
+  Producer,
+  TopicMessages,
+} from 'kafkajs';
 import { KafkaConfig } from '../../config/app-config';
 import { SERVICE_NAME } from '../constants/logging.constants';
 import { OutboxMessage } from './outbox.document';
@@ -75,14 +83,18 @@ export class KafkaChangeEventPublisher implements ChangeEventPublisher {
   }
 }
 
-export function createKafkaProducer(config: KafkaConfig): Producer {
-  const kafka = new Kafka({
+export function kafkaClientOptions(config: KafkaConfig): KafkaClientConfig {
+  return {
     clientId: SERVICE_NAME,
     brokers: [...config.bootstrapServers],
+    ssl: config.tlsEnabled,
     logLevel: logLevel.NOTHING,
     retry: { retries: KAFKA_PRODUCER_SETTINGS.retries },
-  });
-  return kafka.producer({
+  };
+}
+
+export function createKafkaProducer(config: KafkaConfig): Producer {
+  return new Kafka(kafkaClientOptions(config)).producer({
     idempotent: true,
     maxInFlightRequests: KAFKA_PRODUCER_SETTINGS.maxInFlightRequests,
     createPartitioner: Partitioners.DefaultPartitioner,

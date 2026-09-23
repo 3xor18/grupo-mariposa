@@ -22,10 +22,13 @@ export function createOutboxStore(database: Db, clock: Clock): MongoOutboxStore 
 
 @Injectable()
 export class OutboxIndexes implements OnModuleInit {
-  constructor(@Inject(OUTBOX_STORE) private readonly store: MongoOutboxStore) {}
+  constructor(
+    @Inject(OUTBOX_STORE) private readonly store: MongoOutboxStore,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
+  ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.store.ensureIndexes();
+    await this.store.ensureIndexes(this.config.outbox.retentionSeconds);
   }
 }
 

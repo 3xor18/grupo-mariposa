@@ -51,7 +51,7 @@ describe('outbox relay publishing to Kafka', () => {
     app = await createTestApp({
       ...config,
       auth: NO_AUTH,
-      kafka: { bootstrapServers: [kafka.bootstrapServer], changesTopic: TOPIC },
+      kafka: { bootstrapServers: [kafka.bootstrapServer], changesTopic: TOPIC, tlsEnabled: false },
     });
     server = app.getHttpServer();
   });
@@ -84,6 +84,8 @@ describe('outbox relay publishing to Kafka', () => {
     expect(String(received[0]?.headers?.eventId)).toBe((events[0] as { eventId: string }).eventId);
     const metrics = await request(server).get('/metrics').expect(200);
     expect(metrics.text).toContain('outbox_published_total 2');
-    expect(metrics.text).toContain('outbox_unpublished 0');
+    expect(metrics.text).toMatch(/^outbox_pending 0$/m);
+    expect(metrics.text).toMatch(/^outbox_oldest_age_seconds 0$/m);
+    expect(events.some((event) => 'name' in event)).toBe(false);
   });
 });
