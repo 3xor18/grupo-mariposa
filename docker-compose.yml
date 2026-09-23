@@ -95,7 +95,7 @@ services:
     logging: *default-logging
 
   kafka-ui:
-    image: ghcr.io/kafbat/kafka-ui:v1.3.0
+    image: ghcr.io/kafbat/kafka-ui:v1.5.0
     environment:
       KAFKA_CLUSTERS_0_NAME: mariposa-local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
