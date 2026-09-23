@@ -47,6 +47,11 @@ public final class OrderEvents {
         return this;
     }
 
+    public OrderEvents market(final String market) {
+        event.put("market", market);
+        return this;
+    }
+
     public OrderEvents currency(final String currency) {
         event.put("currency", currency);
         return this;
