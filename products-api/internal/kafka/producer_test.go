@@ -110,6 +110,20 @@ func TestPublishReportsFailuresPerMessage(t *testing.T) {
 	}
 }
 
+func TestTLSProducerFailsAgainstPlaintextListener(t *testing.T) {
+	producer, err := kafka.NewProducer(kafka.Settings{Brokers: []string{"127.0.0.1:1"},
+		Topic: topic, TLS: true})
+	if err != nil {
+		t.Fatalf("producer: %v", err)
+	}
+	defer producer.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+	if errs := producer.Publish(ctx, []outbox.Message{{Key: []byte("a")}}); errs[0] == nil {
+		t.Fatal("want delivery failure")
+	}
+}
+
 func TestCloseIsNilSafe(_ *testing.T) {
 	var producer *kafka.Producer
 	producer.Close()
