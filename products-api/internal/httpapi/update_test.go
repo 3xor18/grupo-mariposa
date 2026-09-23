@@ -68,14 +68,24 @@ func TestPatchUpdatesProductAndReturnsNewVersion(t *testing.T) {
 
 func TestPatchIfMatchVariants(t *testing.T) {
 	cases := map[string]int{
-		"":      http.StatusOK,
-		"*":     http.StatusOK,
-		"1":     http.StatusOK,
-		`"1"`:   http.StatusOK,
-		`"9"`:   http.StatusPreconditionFailed,
-		`W/"1"`: http.StatusBadRequest,
-		`"0"`:   http.StatusBadRequest,
-		"abc":   http.StatusBadRequest,
+		"*":          http.StatusOK,
+		"1":          http.StatusOK,
+		`"1"`:        http.StatusOK,
+		` "7", "1" `: http.StatusOK,
+		`W/"9", "1"`: http.StatusOK,
+		`"9"`:        http.StatusPreconditionFailed,
+		`W/"1"`:      http.StatusPreconditionFailed,
+		`"0"`:        http.StatusPreconditionFailed,
+		`"abc"`:      http.StatusPreconditionFailed,
+		"abc":        http.StatusPreconditionFailed,
+		"":           http.StatusBadRequest,
+		`"1`:         http.StatusBadRequest,
+		`"1",,"2"`:   http.StatusBadRequest,
+		`"1",`:       http.StatusBadRequest,
+		`W/1`:        http.StatusBadRequest,
+		`"1" "2"`:    http.StatusBadRequest,
+		`"a b"`:      http.StatusBadRequest,
+		"\"é\"":      http.StatusPreconditionFailed,
 	}
 	for ifMatch, want := range cases {
 		t.Run(ifMatch, func(t *testing.T) {
@@ -87,6 +97,26 @@ func TestPatchIfMatchVariants(t *testing.T) {
 					rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestPatchWithoutIfMatchIsUnconditional(t *testing.T) {
+	rec := newHarness(t).do(t, patchRequest(t, patchPath, `{"taxCategory":"EXEMPT"}`))
+	if rec.Code != http.StatusOK || rec.Header().Get("ETag") != `"2"` {
+		t.Fatalf("want unconditional update, got %d %q", rec.Code, rec.Header().Get("ETag"))
+	}
+}
+
+func TestNoOpPatchKeepsVersion(t *testing.T) {
+	h := newHarness(t)
+	rec := h.do(t, patchRequest(t, patchPath, `{"status":"ACTIVE","name":"Producto demo caché"}`,
+		"If-Match", `"1"`))
+	if rec.Code != http.StatusOK || rec.Header().Get("ETag") != `"1"` {
+		t.Fatalf("no-op must return current version, got %d %q", rec.Code,
+			rec.Header().Get("ETag"))
+	}
+	if decodeProduct(t, rec.Body.Bytes())["version"] != 1.0 {
+		t.Fatal("no-op must not bump the version")
 	}
 }
 
@@ -142,7 +172,7 @@ func TestPatchValidation(t *testing.T) {
 }
 
 func TestPatchReportsIfMatchWithBodyErrors(t *testing.T) {
-	rec := newHarness(t).do(t, patchRequest(t, patchPath, `{`, "If-Match", "x"))
+	rec := newHarness(t).do(t, patchRequest(t, patchPath, `{`, "If-Match", `"x`))
 	problem := assertProblem(t, rec, http.StatusBadRequest, httpapi.CodeValidation)
 	if len(problem.Errors) != 2 || problem.Errors[0].Field != "If-Match" {
 		t.Fatalf("want If-Match and body errors, got %+v", problem.Errors)

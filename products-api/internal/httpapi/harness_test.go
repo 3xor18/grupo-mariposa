@@ -57,7 +57,7 @@ const eventID = "0190a0b0-0000-7000-8000-000000000001"
 
 func newCatalogService(t *testing.T) *catalog.Service {
 	t.Helper()
-	markets, err := market.Parse(market.DefaultMarkets)
+	markets, err := market.Parse(market.DefaultMarkets, market.DefaultCurrencies)
 	if err != nil {
 		t.Fatalf("markets: %v", err)
 	}
