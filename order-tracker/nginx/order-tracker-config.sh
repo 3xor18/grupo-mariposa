@@ -12,7 +12,7 @@ REDIRECT_URI ENABLE_SEMANTICS HSTS_MAX_AGE NGINX_RESOLVER PLATFORM_MARKETS PLATF
 MARKET_NAMES"
 OPTIONAL_KEYS="MARKET_NAMES"
 URL_PATTERN='^https?://[A-Za-z0-9._~:/?#@!&()*+,=%-]+$'
-MARKET_ENTRY='[A-Z]{2}:[A-Z]{3}:[a-z]{2}(-[A-Z]{2})?'
+MARKET_ENTRY='[A-Z]{2}:[A-Z]{3}:[a-z]{2}-[A-Z]{2}'
 CURRENCY_ENTRY='[A-Z]{3}:[0-4]'
 MARKET_NAME_ENTRY='[A-Z]{2}:[^,:"\\$;<>{}|&`]+'
 PATH_PATTERN='^/[A-Za-z0-9._~/-]*$'
@@ -218,7 +218,16 @@ list_entries() {
   printf '%s\n' "$1" | tr ',' '\n'
 }
 
+validate_unique_markets() {
+  duplicate=$(list_entries "$1" | cut -d: -f1 | sort | uniq -d | head -n 1)
+  if [ -n "$duplicate" ]; then
+    log "PLATFORM_MARKETS declares $duplicate more than once"
+    return 1
+  fi
+}
+
 validate_catalog_currencies() {
+  validate_unique_markets "$1" || return 1
   known=",$2,"
   for currency in $(list_entries "$1" | cut -d: -f2); do
     case "$known" in

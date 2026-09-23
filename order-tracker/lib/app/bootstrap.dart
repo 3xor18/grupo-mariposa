@@ -5,6 +5,7 @@ import 'package:order_tracker/app/app_dependencies.dart';
 import 'package:order_tracker/app/config_error_app.dart';
 import 'package:order_tracker/app/order_tracker_app.dart';
 import 'package:order_tracker/app/silent_sign_in_view.dart';
+import 'package:order_tracker/core/config/config_load_exception.dart';
 import 'package:order_tracker/core/config/config_loader.dart';
 import 'package:order_tracker/core/format/app_locale.dart';
 import 'package:order_tracker/core/platform/browser_location.dart';
