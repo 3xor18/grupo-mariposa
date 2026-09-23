@@ -21,7 +21,11 @@ Reglas:
   viven en `deploy/helm/values/<ambiente>/<servicio>.yaml`; aquí sólo hay parámetros de negocio y técnicos.
 - Precedencia en todos los servicios: **variable de entorno > config server > valor por defecto**. Una variable
   definida en los values de Helm oculta el valor de este directorio.
-- Cambiar un parámetro de negocio (tasas de impuesto, descuento) o técnico (timeouts, reintentos, TTL de caché) es
+- Las tasas `PRICING_TAX_*` son sólo la **semilla y el respaldo** de la colección `tax_rates` (ADR 0008): se
+  copian a MongoDB la primera vez que falta una combinación mercado/categoría y se usan si la colección nunca
+  pudo cargarse. Un cambio de tasa con fecha se hace con la API `/tax-rates` (propuesta + aprobación de otra
+  persona), no con un PR aquí.
+- Cambiar un parámetro de negocio (descuento) o técnico (timeouts, reintentos, TTL de caché) es
   un PR sobre este directorio, revisado y auditable, sin recompilar el servicio. Aplica a los mercados existentes:
   agregar un país todavía requiere código (TODO-1 de `docs/roadmap.md`). Se aplica con un reinicio
   progresivo (`kubectl rollout restart`) porque la configuración es inmutable en tiempo de ejecución.
