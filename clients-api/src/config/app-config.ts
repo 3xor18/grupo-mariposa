@@ -1,4 +1,5 @@
 import { FaultRule } from '../shared/fault-injection/fault-rule';
+import { MarketDefinition } from '../shared/markets/market-catalog';
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
 
@@ -17,6 +18,7 @@ export interface EnabledAuthConfig {
   readonly issuer: string;
   readonly jwksUrl: string;
   readonly requiredRole: string;
+  readonly adminRole: string;
   readonly audience: string;
 }
 
@@ -50,6 +52,34 @@ export interface HttpConfig {
   readonly trustProxy: TrustProxySetting;
 }
 
+export enum StorageDriver {
+  MONGO = 'mongo',
+  MEMORY = 'memory',
+}
+
+export interface MongoStorageConfig {
+  readonly driver: StorageDriver.MONGO;
+  readonly uri: string;
+  readonly database: string;
+}
+
+export interface MemoryStorageConfig {
+  readonly driver: StorageDriver.MEMORY;
+}
+
+export type StorageConfig = MongoStorageConfig | MemoryStorageConfig;
+
+export interface OutboxConfig {
+  readonly relayIntervalMs: number;
+  readonly batchSize: number;
+  readonly leaseMs: number;
+}
+
+export interface KafkaConfig {
+  readonly bootstrapServers: readonly string[];
+  readonly changesTopic: string;
+}
+
 export interface AppConfig {
   readonly port: number;
   readonly logLevel: LogLevel;
@@ -58,4 +88,8 @@ export interface AppConfig {
   readonly rateLimit: RateLimitConfig;
   readonly shutdown: ShutdownConfig;
   readonly http: HttpConfig;
+  readonly markets: readonly MarketDefinition[];
+  readonly storage: StorageConfig;
+  readonly outbox: OutboxConfig;
+  readonly kafka: KafkaConfig;
 }

@@ -1,8 +1,12 @@
 import { FaultType } from '../shared/fault-injection/fault-rule';
-import { LogLevel } from './app-config';
+import { DEFAULT_PLATFORM_MARKETS, parseMarkets } from '../shared/markets/market-catalog';
+import { LogLevel, StorageDriver } from './app-config';
 import { InvalidConfigurationError, loadConfig } from './load-config';
 
+const MONGO_URI = 'mongodb://mongo:27017/?replicaSet=rs0';
+const BASE_ENV = { MONGODB_URI: MONGO_URI };
 const AUTH_ENV = {
+  ...BASE_ENV,
   AUTH_ISSUER: 'http://localhost:8180/realms/mariposa',
   AUTH_JWKS_URL: 'http://keycloak:8080/realms/mariposa/protocol/openid-connect/certs',
 };
@@ -17,12 +21,17 @@ describe('loadConfig', () => {
         issuer: AUTH_ENV.AUTH_ISSUER,
         jwksUrl: AUTH_ENV.AUTH_JWKS_URL,
         requiredRole: 'clients-reader',
+        adminRole: 'clients-admin',
         audience: 'clients-api',
       },
       faultInjection: { enabled: false, rules: [], timeoutMs: 5000 },
       rateLimit: { requestsPerSecond: 200, burst: 400, maxTrackedCallers: 10_000 },
       shutdown: { drainMs: 5000, timeoutMs: 10_000 },
       http: { apiDocsEnabled: false, trustProxy: false },
+      markets: parseMarkets(DEFAULT_PLATFORM_MARKETS),
+      storage: { driver: StorageDriver.MONGO, uri: MONGO_URI, database: 'clients' },
+      outbox: { relayIntervalMs: 250, batchSize: 100, leaseMs: 30_000 },
+      kafka: { bootstrapServers: [], changesTopic: 'clients.changed.v1' },
     });
   });
 
@@ -44,6 +53,16 @@ describe('loadConfig', () => {
       SHUTDOWN_DRAIN_MS: '0',
       SHUTDOWN_TIMEOUT_MS: '1500',
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: 'health',
+      AUTH_ADMIN_ROLE: 'master-data-admin',
+      PLATFORM_MARKETS: 'MX:MXN:es-MX,CL:CLP:es-CL',
+      PLATFORM_CURRENCIES: 'MXN:2,CLP:0',
+      MONGODB_URI: 'mongodb+srv://user:secret@cluster.example.net/',
+      MONGODB_DATABASE: 'master',
+      OUTBOX_RELAY_INTERVAL_MS: '500',
+      OUTBOX_BATCH_SIZE: '20',
+      OUTBOX_LEASE_MS: '10000',
+      KAFKA_BOOTSTRAP_SERVERS: 'kafka-1:9092, kafka-2:9092,',
+      KAFKA_TOPIC_CHANGES: 'clients.changed.v2',
     });
 
     expect(config).toEqual({
@@ -54,6 +73,7 @@ describe('loadConfig', () => {
         issuer: AUTH_ENV.AUTH_ISSUER,
         jwksUrl: AUTH_ENV.AUTH_JWKS_URL,
         requiredRole: 'custom-role',
+        adminRole: 'master-data-admin',
         audience: 'clients-api-v2',
       },
       faultInjection: {
@@ -67,21 +87,35 @@ describe('loadConfig', () => {
       rateLimit: { requestsPerSecond: 10, burst: 20, maxTrackedCallers: 50 },
       shutdown: { drainMs: 0, timeoutMs: 1500 },
       http: { apiDocsEnabled: true, trustProxy: 1 },
+      markets: [
+        { code: 'MX', currency: 'MXN', locale: 'es-MX' },
+        { code: 'CL', currency: 'CLP', locale: 'es-CL' },
+      ],
+      storage: {
+        driver: StorageDriver.MONGO,
+        uri: 'mongodb+srv://user:secret@cluster.example.net/',
+        database: 'master',
+      },
+      outbox: { relayIntervalMs: 500, batchSize: 20, leaseMs: 10_000 },
+      kafka: {
+        bootstrapServers: ['kafka-1:9092', 'kafka-2:9092'],
+        changesTopic: 'clients.changed.v2',
+      },
     });
   });
 
   it('should_disable_auth_without_urls_when_auth_enabled_is_false', () => {
-    expect(loadConfig({ AUTH_ENABLED: 'false' }).auth).toEqual({ enabled: false });
+    expect(loadConfig({ ...BASE_ENV, AUTH_ENABLED: 'false' }).auth).toEqual({ enabled: false });
   });
 
   it('should_fail_closed_when_auth_is_enabled_without_issuer_or_jwks', () => {
-    expect(() => loadConfig({})).toThrow(
+    expect(() => loadConfig(BASE_ENV)).toThrow(
       new InvalidConfigurationError([
         'AUTH_ISSUER: is required when AUTH_ENABLED=true',
         'AUTH_JWKS_URL: is required when AUTH_ENABLED=true',
       ]),
     );
-    expect(() => loadConfig({ AUTH_ISSUER: AUTH_ENV.AUTH_ISSUER })).toThrow(
+    expect(() => loadConfig({ ...BASE_ENV, AUTH_ISSUER: AUTH_ENV.AUTH_ISSUER })).toThrow(
       'Invalid configuration: AUTH_JWKS_URL: is required when AUTH_ENABLED=true',
     );
   });
@@ -89,6 +123,7 @@ describe('loadConfig', () => {
   it('should_refuse_unsafe_switches_in_production', () => {
     expect(() =>
       loadConfig({
+        ...BASE_ENV,
         NODE_ENV: 'production',
         AUTH_ENABLED: 'false',
         FAULT_INJECTION_ENABLED: 'true',
@@ -97,7 +132,8 @@ describe('loadConfig', () => {
     ).toThrow(
       'Invalid configuration: AUTH_ENABLED=false is not allowed when NODE_ENV=production; ' +
         'FAULT_INJECTION_ENABLED=true is not allowed when NODE_ENV=production; ' +
-        'API_DOCS_ENABLED=true is not allowed when NODE_ENV=production',
+        'API_DOCS_ENABLED=true is not allowed when NODE_ENV=production; ' +
+        'KAFKA_BOOTSTRAP_SERVERS is required when NODE_ENV=production',
     );
   });
 
@@ -111,8 +147,31 @@ describe('loadConfig', () => {
     );
   });
 
+  it('should_use_in_memory_storage_without_mongodb_when_requested', () => {
+    const config = loadConfig({ AUTH_ENABLED: 'false', STORAGE_DRIVER: 'memory' });
+
+    expect(config.storage).toEqual({ driver: StorageDriver.MEMORY });
+  });
+
+  it('should_refuse_in_memory_storage_in_production', () => {
+    expect(() =>
+      loadConfig({
+        ...AUTH_ENV,
+        NODE_ENV: 'production',
+        STORAGE_DRIVER: 'memory',
+        KAFKA_BOOTSTRAP_SERVERS: 'k:9092',
+      }),
+    ).toThrow(
+      'Invalid configuration: STORAGE_DRIVER=memory is not allowed when NODE_ENV=production',
+    );
+  });
+
   it('should_start_in_production_with_secure_defaults', () => {
-    const config = loadConfig({ ...AUTH_ENV, NODE_ENV: 'production' });
+    const config = loadConfig({
+      ...AUTH_ENV,
+      NODE_ENV: 'production',
+      KAFKA_BOOTSTRAP_SERVERS: 'kafka:9092',
+    });
 
     expect(config.auth).toMatchObject({ enabled: true, audience: 'clients-api' });
     expect(config.faultInjection.enabled).toBe(false);
@@ -147,6 +206,17 @@ describe('loadConfig', () => {
     [{ RATE_LIMIT_BURST: '1.5' }, 'RATE_LIMIT_BURST: Invalid input: expected int'],
     [{ RATE_LIMIT_MAX_TRACKED_CALLERS: '0' }, 'RATE_LIMIT_MAX_TRACKED_CALLERS: Too small'],
     [{ SHUTDOWN_DRAIN_MS: '-5' }, 'SHUTDOWN_DRAIN_MS: Too small'],
+    [{ MONGODB_URI: undefined }, 'MONGODB_URI: is required when STORAGE_DRIVER=mongo'],
+    [{ STORAGE_DRIVER: 'redis' }, 'STORAGE_DRIVER: Invalid option'],
+    [{ MONGODB_URI: 'postgres://db' }, 'MONGODB_URI: must be a mongodb:// or mongodb+srv://'],
+    [{ MONGODB_DATABASE: ' ' }, 'MONGODB_DATABASE: Too small'],
+    [{ PLATFORM_MARKETS: 'MX:MXN' }, 'PLATFORM_MARKETS: MarketCatalogError: Invalid market'],
+    [{ PLATFORM_MARKETS: '' }, 'at least one market is required'],
+    [{ OUTBOX_BATCH_SIZE: '0' }, 'OUTBOX_BATCH_SIZE: Too small'],
+    [{ OUTBOX_LEASE_MS: 'x' }, 'OUTBOX_LEASE_MS: Invalid input'],
+    [{ OUTBOX_RELAY_INTERVAL_MS: '-1' }, 'OUTBOX_RELAY_INTERVAL_MS: Too small'],
+    [{ KAFKA_TOPIC_CHANGES: ' ' }, 'KAFKA_TOPIC_CHANGES: Too small'],
+    [{ AUTH_ADMIN_ROLE: '' }, 'AUTH_ADMIN_ROLE: Too small'],
   ])('should_reject_invalid_environment_%j', (overrides, message) => {
     const load = (): unknown => loadConfig({ ...AUTH_ENV, ...overrides });
 
