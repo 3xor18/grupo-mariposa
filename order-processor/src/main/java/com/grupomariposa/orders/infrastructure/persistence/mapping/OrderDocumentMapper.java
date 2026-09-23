@@ -50,7 +50,7 @@ public final class OrderDocumentMapper {
                 order.violations().stream().map(OrderDocumentMapper::violationDocument).toList(),
                 failureDocument(order.failure()),
                 order.timeline().occurredAt(), order.timeline().receivedAt(),
-                order.processedAt(), order.traceId());
+                order.processedAt(), order.traceId(), order.taxRateEffectiveFrom());
     }
 
     public Order toDomain(final OrderDocument document) {
@@ -67,7 +67,7 @@ public final class OrderDocumentMapper {
                 failure(document.failure()),
                 new OrderTimeline(document.occurredAt(), document.receivedAt(),
                         document.processedAt()),
-                document.traceId());
+                document.traceId(), document.taxRateEffectiveFrom());
     }
 
     public OrderSummary toSummary(final OrderDocument document) {

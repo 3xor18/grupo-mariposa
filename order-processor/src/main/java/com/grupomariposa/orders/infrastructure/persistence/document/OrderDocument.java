@@ -23,7 +23,8 @@ public record OrderDocument(
         Instant occurredAt,
         Instant receivedAt,
         Instant processedAt,
-        String traceId) {
+        String traceId,
+        Instant taxRateEffectiveFrom) {
 
     public static final String COLLECTION = "orders";
 }

@@ -37,7 +37,7 @@ public final class OrderResponseMapper {
                         .toList(),
                 failure(order.failure()),
                 order.timeline().occurredAt(), order.timeline().receivedAt(),
-                order.processedAt(), order.traceId());
+                order.processedAt(), order.traceId(), order.taxRateEffectiveFrom());
     }
 
     public OrderPageResponse toPage(final PageResult<OrderSummary> page) {

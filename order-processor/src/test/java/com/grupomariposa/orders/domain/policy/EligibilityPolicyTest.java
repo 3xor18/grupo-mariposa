@@ -81,7 +81,7 @@ class EligibilityPolicyTest {
                 Lookup.found(blocked(Markets.PE)), List.of(
                 resolved("PRD-1", Lookup.found(discontinued("PRD-1"))),
                 resolved("PRD-2", ACTIVE_PRODUCT),
-                resolved("PRD-3", Lookup.notFound())));
+                resolved("PRD-3", Lookup.notFound())), DomainFixtures.APPLIED_RATES);
 
         final List<Violation> violations = policy.violations(input);
 
@@ -96,7 +96,8 @@ class EligibilityPolicyTest {
     void should_combine_missing_client_and_missing_products() {
         final EvaluationInput input = new EvaluationInput(Markets.CO,
                 DomainFixtures.digits(Markets.CO), Lookup.notFound(), List.of(
-                resolved("PRD-1", Lookup.notFound()), resolved("PRD-2", Lookup.notFound())));
+                resolved("PRD-1", Lookup.notFound()), resolved("PRD-2", Lookup.notFound())),
+                DomainFixtures.APPLIED_RATES);
 
         assertThat(codes(policy.violations(input))).containsExactly(
                 RejectionCode.CLIENT_NOT_FOUND, RejectionCode.PRODUCT_NOT_FOUND,
@@ -110,7 +111,7 @@ class EligibilityPolicyTest {
     private static EvaluationInput input(final Lookup<ClientProfile> client,
                                          final Lookup<ProductProfile> product) {
         return new EvaluationInput(Markets.MX, DomainFixtures.digits(Markets.MX), client,
-                List.of(resolved("PRD-1", product)));
+                List.of(resolved("PRD-1", product)), DomainFixtures.APPLIED_RATES);
     }
 
     private static ResolvedItem resolved(final String productId,

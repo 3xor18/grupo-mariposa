@@ -5,12 +5,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.grupomariposa.orders.infrastructure.persistence.document.InboxDocument;
 import com.grupomariposa.orders.infrastructure.persistence.document.OrderDocument;
 import com.grupomariposa.orders.infrastructure.persistence.document.OutboxDocument;
+import com.grupomariposa.orders.infrastructure.persistence.document.TaxRateDocument;
 import java.time.Duration;
 import java.util.List;
 import org.bson.Document;
@@ -30,6 +32,7 @@ class IndexInitializerTest {
     private final IndexOperations orders = mock(IndexOperations.class);
     private final IndexOperations inbox = mock(IndexOperations.class);
     private final IndexOperations outbox = mock(IndexOperations.class);
+    private final IndexOperations taxRates = mock(IndexOperations.class);
 
     @BeforeEach
     void setUp() {
@@ -37,6 +40,7 @@ class IndexInitializerTest {
         when(mongo.indexOps(OutboxDocument.class)).thenReturn(outbox);
         when(mongo.indexOps(InboxDocument.COLLECTION)).thenReturn(inbox);
         when(mongo.indexOps(OutboxDocument.COLLECTION)).thenReturn(outbox);
+        when(mongo.indexOps(TaxRateDocument.class)).thenReturn(taxRates);
     }
 
     @Test
@@ -47,6 +51,7 @@ class IndexInitializerTest {
         new IndexInitializer(mongo, PROPERTIES).afterSingletonsInstantiated();
 
         verify(inbox).createIndex(any());
+        verify(taxRates, times(2)).createIndex(any());
         verify(mongo, never()).executeCommand(any(Document.class));
     }
 

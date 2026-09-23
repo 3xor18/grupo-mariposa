@@ -1,8 +1,14 @@
 package com.grupomariposa.orders.infrastructure.web;
 
+import com.grupomariposa.orders.application.error.InvalidTaxRateException;
 import com.grupomariposa.orders.application.error.PersistenceException;
+import com.grupomariposa.orders.application.error.TaxRateConflictException;
+import com.grupomariposa.orders.application.error.TaxRateNotFoundException;
+import com.grupomariposa.orders.domain.model.TaxRateRule;
+import com.grupomariposa.orders.domain.model.TaxRateRuleViolation;
 import com.grupomariposa.orders.infrastructure.observability.CauseSanitizer;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -23,6 +30,7 @@ public class ApiExceptionHandler {
     private static final String NOT_ALLOWED = "HTTP method is not supported for this resource";
     private static final String INTERNAL = "Unexpected error while processing the request";
     private static final String UNAVAILABLE = "Orders are temporarily unavailable";
+    private static final String UNREADABLE = "Request body is missing or is not valid JSON";
 
     private final ProblemFactory problems;
     private final CauseSanitizer sanitizer;
@@ -44,6 +52,45 @@ public class ApiExceptionHandler {
                                                  final HttpServletRequest request) {
         return respond(problems.invalid(failure.violations(), failure.getMessage(),
                 request.getRequestURI()));
+    }
+
+    @ExceptionHandler(TaxRateNotFoundException.class)
+    public ResponseEntity<ProblemDetail> taxRateNotFound(final TaxRateNotFoundException failure,
+                                                         final HttpServletRequest request) {
+        return respond(problems.create(HttpStatus.NOT_FOUND, ApiErrorCode.TAX_RATE_NOT_FOUND,
+                failure.getMessage(), request.getRequestURI()));
+    }
+
+    @ExceptionHandler(InvalidTaxRateException.class)
+    public ResponseEntity<ProblemDetail> invalidTaxRate(final InvalidTaxRateException failure,
+                                                        final HttpServletRequest request) {
+        return respond(problems.invalid(failure.errors().stream()
+                        .map(error -> new FieldViolation(error.field(), error.message()))
+                        .toList(), failure.getMessage(), request.getRequestURI()));
+    }
+
+    @ExceptionHandler(TaxRateRuleViolation.class)
+    public ResponseEntity<ProblemDetail> taxRateRule(final TaxRateRuleViolation failure,
+                                                     final HttpServletRequest request) {
+        if (failure.rule() == TaxRateRule.FOUR_EYES_REQUIRED) {
+            return respond(problems.create(HttpStatus.FORBIDDEN,
+                    ApiErrorCode.FOUR_EYES_REQUIRED, failure.getMessage(),
+                    request.getRequestURI()));
+        }
+        return respond(problems.create(HttpStatus.CONFLICT, ApiErrorCode.TAX_RATE_CONFLICT,
+                failure.getMessage(), request.getRequestURI()));
+    }
+
+    @ExceptionHandler(TaxRateConflictException.class)
+    public ResponseEntity<ProblemDetail> taxRateConflict(final TaxRateConflictException failure,
+                                                         final HttpServletRequest request) {
+        return respond(problems.create(HttpStatus.CONFLICT, ApiErrorCode.TAX_RATE_CONFLICT,
+                failure.getMessage(), request.getRequestURI()));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ProblemDetail> unreadable(final HttpServletRequest request) {
+        return respond(problems.invalid(List.of(), UNREADABLE, request.getRequestURI()));
     }
 
     @ExceptionHandler(PersistenceException.class)

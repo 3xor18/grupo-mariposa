@@ -21,6 +21,7 @@ function fn() {
       eventMillis: 30000,
       quietMillis: 3000
     },
+    taxRateLeadDays: parseInt(prop('tax.rate.lead.days', '18250')),
     runId: java.lang.System.currentTimeMillis() + ''
   };
   var Gateway = Java.type('mariposa.e2e.KafkaGateway');

@@ -17,7 +17,8 @@ public record Order(
         List<Violation> violations,
         FailureDetails failure,
         OrderTimeline timeline,
-        String traceId) {
+        String traceId,
+        Instant taxRateEffectiveFrom) {
 
     public Order {
         Objects.requireNonNull(identity, "identity");

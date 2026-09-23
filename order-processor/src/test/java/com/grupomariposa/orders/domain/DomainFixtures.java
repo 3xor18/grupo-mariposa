@@ -1,5 +1,6 @@
 package com.grupomariposa.orders.domain;
 
+import com.grupomariposa.orders.domain.model.AppliedTaxRates;
 import com.grupomariposa.orders.domain.model.ClientProfile;
 import com.grupomariposa.orders.domain.model.ClientSegment;
 import com.grupomariposa.orders.domain.model.ClientStatus;
@@ -17,6 +18,8 @@ import com.grupomariposa.orders.domain.model.Rate;
 import com.grupomariposa.orders.domain.model.RequestedItem;
 import com.grupomariposa.orders.domain.model.ResolvedItem;
 import com.grupomariposa.orders.domain.model.TaxCategory;
+import com.grupomariposa.orders.domain.model.TaxRatePeriod;
+import com.grupomariposa.orders.domain.model.TaxRateSchedule;
 import com.grupomariposa.orders.domain.model.TaxRateTable;
 import com.grupomariposa.orders.domain.model.TaxRegime;
 import com.grupomariposa.orders.domain.policy.EligibilityPolicy;
@@ -25,6 +28,8 @@ import com.grupomariposa.orders.domain.policy.MarketTaxPolicy;
 import com.grupomariposa.orders.domain.policy.WholesaleVolumeDiscountPolicy;
 import com.grupomariposa.orders.domain.service.OrderEvaluator;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -40,6 +45,8 @@ public final class DomainFixtures {
             Markets.PE, rates(18, 10, 0),
             Markets.CL, rates(19, 19, 0),
             Markets.EC, rates(15, 5, 0)));
+    public static final Instant SEED_FROM = Instant.parse("2000-01-01T00:00:00Z");
+    public static final AppliedTaxRates APPLIED_RATES = new AppliedTaxRates(TAX_RATES, SEED_FROM);
     public static final CurrencyCatalog CURRENCIES = new CurrencyCatalog(Map.of(
             Currencies.MXN, 2, Currencies.COP, 2, Currencies.PEN, 2, Currencies.CLP, 0,
             Currencies.USD, 2));
@@ -98,7 +105,8 @@ public final class DomainFixtures {
                 List.of(new ResolvedItem(item(PRD_001, 24, firstPrice),
                                 Lookup.found(product(PRD_001, TaxCategory.STANDARD))),
                         new ResolvedItem(item(PRD_008, 12, secondPrice),
-                                Lookup.found(product(PRD_008, TaxCategory.STANDARD)))));
+                                Lookup.found(product(PRD_008, TaxCategory.STANDARD)))),
+                APPLIED_RATES);
     }
 
     public static EvaluationInput goldenInput() {
@@ -107,7 +115,7 @@ public final class DomainFixtures {
                 new ResolvedItem(item(PRD_001, 24, "35.5"),
                         Lookup.found(product(PRD_001, TaxCategory.STANDARD))),
                 new ResolvedItem(item(PRD_008, 12, "82.0"),
-                        Lookup.found(product(PRD_008, TaxCategory.STANDARD)))));
+                        Lookup.found(product(PRD_008, TaxCategory.STANDARD)))), APPLIED_RATES);
     }
 
     public static Map<TaxCategory, Rate> rates(final int standard, final int reduced,
@@ -117,8 +125,19 @@ public final class DomainFixtures {
                 TaxCategory.EXEMPT, Rate.ofPercent(exempt));
     }
 
+    public static TaxRateSchedule schedule() {
+        final List<TaxRatePeriod> periods = new ArrayList<>();
+        for (final MarketCode market : MARKETS.supportedMarkets()) {
+            for (final TaxCategory category : TaxCategory.values()) {
+                periods.add(new TaxRatePeriod(market, category,
+                        TAX_RATES.rateFor(market, category), SEED_FROM, null));
+            }
+        }
+        return new TaxRateSchedule(periods);
+    }
+
     public static LinePricer linePricer() {
-        return new LinePricer(new MarketTaxPolicy(TAX_RATES),
+        return new LinePricer(new MarketTaxPolicy(),
                 new WholesaleVolumeDiscountPolicy(WHOLESALE_DISCOUNT));
     }
 

@@ -2,7 +2,8 @@
 
 Worker Java 21 / Spring Boot 3.5 que consume `orders.created.v1`, valida, enriquece con `clients-api` y
 `products-api`, decide `APPROVED` / `REJECTED`, persiste en MongoDB y publica `orders.processed.v1` mediante
-un outbox transaccional. Expone la lectura en `GET /orders/{orderId}` y `GET /orders`.
+un outbox transaccional. Expone la lectura en `GET /orders/{orderId}` y `GET /orders`, y la administración de
+tasas de impuesto con vigencia en `/tax-rates` (ADR 0008).
 Diseño: [`docs/architecture-proposal.md`](../docs/architecture-proposal.md) y [`docs/adr`](../docs/adr).
 
 ## Ejecutar
@@ -55,7 +56,10 @@ Las propiedades son inmutables: un cambio en el config server se aplica con un r
 |---|---|---|
 | `PLATFORM_MARKETS` | `MX:MXN:es-MX,CO:COP:es-CO,PE:PEN:es-PE,CL:CLP:es-CL,EC:USD:es-EC` | catálogo `mercado:moneda:locale` |
 | `PLATFORM_CURRENCIES` | `MXN:2,COP:2,PEN:2,CLP:0,USD:2` | decimales por moneda (ISO 4217) |
-| `PRICING_TAX_<MKT>_{STANDARD,REDUCED,EXEMPT}` | MX 0.16/0.08/0.00, CO 0.19/0.05/0.00, PE 0.18/0.10/0.00, CL 0.19/0.19/0.00, EC 0.15/0.05/0.00 | tabla de impuestos (0..1, completa por mercado del catálogo) |
+| `PRICING_TAX_<MKT>_{STANDARD,REDUCED,EXEMPT}` | MX 0.16/0.08/0.00, CO 0.19/0.05/0.00, PE 0.18/0.10/0.00, CL 0.19/0.19/0.00, EC 0.15/0.05/0.00 | semilla y respaldo de la colección `tax_rates` (0..1, completa por mercado del catálogo) |
+| `TAX_RATES_SEED_FROM` | `2000-01-01T00:00:00Z` | inicio de los períodos sembrados desde `PRICING_TAX_*` |
+| `TAX_RATES_REFRESH_INTERVAL` | `30s` | cada cuánto cada pod recarga `tax_rates` |
+| `TAX_RATES_ALLOW_PAST_VALID_FROM` | `false` | permite proponer tasas con `validFrom` pasado (sólo pruebas) |
 | `PRICING_WHOLESALE_DISCOUNT_RATE` / `PRICING_WHOLESALE_DISCOUNT_MIN_QUANTITY` | `0.03` / `20` | descuento mayorista |
 
 ### Mercados y monedas
@@ -150,6 +154,7 @@ Clientes y productos se cachean en Redis con la versión de la entidad (ADR
 
 ## Seguridad y datos personales
 
+- `/tax-rates/**` exige `orders-admin`, y quien aprueba una tasa debe ser distinto de quien la propuso.
 - `GET /orders/**` exige `orders-reader` u `orders-admin`; `/actuator/**` exige `orders-admin`, salvo
   health y `/actuator/prometheus`, que quedan sin autenticación para el scraping dentro de la red interna
   (no deben exponerse fuera del cluster). Swagger/OpenAPI sólo se publican con `API_DOCS_ENABLED=true`.
