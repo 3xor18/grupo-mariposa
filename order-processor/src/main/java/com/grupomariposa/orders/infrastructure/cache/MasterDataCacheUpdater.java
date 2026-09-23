@@ -29,6 +29,10 @@ public final class MasterDataCacheUpdater {
         clients.ignored();
     }
 
+    public void clientChangeFailed() {
+        clients.failed();
+    }
+
     public CacheWrite productChanged(final MarketCode market,
                                      final Versioned<ProductProfile> change) {
         return products.apply(CachingProductCatalog.entryId(market, change.value().productId()),
@@ -42,5 +46,9 @@ public final class MasterDataCacheUpdater {
 
     public void productChangeIgnored() {
         products.ignored();
+    }
+
+    public void productChangeFailed() {
+        products.failed();
     }
 }

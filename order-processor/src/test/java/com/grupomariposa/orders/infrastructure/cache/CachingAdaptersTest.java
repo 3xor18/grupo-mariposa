@@ -98,6 +98,20 @@ class CachingAdaptersTest {
         assertThat(ignored("products")).isOne();
     }
 
+    @Test
+    void should_count_changes_dropped_after_retries() {
+        updater.clientChangeFailed();
+        updater.productChangeFailed();
+
+        assertThat(outcome("clients", "error")).isOne();
+        assertThat(outcome("products", "error")).isOne();
+    }
+
+    private double outcome(final String cache, final String outcome) {
+        return registry.counter(CacheMetrics.INVALIDATIONS, CacheMetrics.CACHE_TAG, cache,
+                CacheMetrics.OUTCOME_TAG, outcome).count();
+    }
+
     private double ignored(final String cache) {
         return registry.counter(CacheMetrics.INVALIDATIONS, CacheMetrics.CACHE_TAG, cache,
                 CacheMetrics.OUTCOME_TAG, CacheMetrics.IGNORED).count();

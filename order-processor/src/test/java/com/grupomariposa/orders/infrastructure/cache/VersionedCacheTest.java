@@ -120,7 +120,9 @@ class VersionedCacheTest {
         assertThat(cache.apply(ID, change)).isEqualTo(CacheWrite.APPLIED);
         assertThat(cache.apply(ID, change)).isEqualTo(CacheWrite.STALE);
         assertThat(cache.apply(ID, change)).isEqualTo(CacheWrite.FAILED);
+        assertThat(outcome("error")).isZero();
         cache.ignored();
+        cache.failed();
 
         assertThat(outcome("applied")).isOne();
         assertThat(outcome("stale")).isOne();

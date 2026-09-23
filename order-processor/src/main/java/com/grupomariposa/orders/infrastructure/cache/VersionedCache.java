@@ -64,6 +64,10 @@ public final class VersionedCache<T> {
         metrics.ignored();
     }
 
+    public void failed() {
+        metrics.failed();
+    }
+
     private Optional<T> read(final String key) {
         try {
             return store.read(key).flatMap(codec::decode);
