@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 import com.grupomariposa.orders.domain.Currencies;
+import com.grupomariposa.orders.domain.DomainFixtures;
 import com.grupomariposa.orders.domain.Markets;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -76,7 +77,8 @@ class ModelInvariantsTest {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> new Decision.Rejected(List.of(), List.of(), Totals.zero(2)));
         assertThatIllegalArgumentException().isThrownBy(() -> new EvaluationInput(
-                new MarketCode("MX"), -1, Lookup.notFound(), List.of()));
+                new MarketCode("MX"), -1, Lookup.notFound(), List.of(),
+                DomainFixtures.APPLIED_RATES));
     }
 
     @Test
@@ -107,6 +109,6 @@ class ModelInvariantsTest {
                 violations.isEmpty() ? OrderStatus.APPROVED : OrderStatus.REJECTED,
                 Markets.MX, Currencies.MXN, null, ClientSnapshot.unresolved("CLI-1"),
                 List.of(), Totals.zero(2), violations, null, new OrderTimeline(null, NOW, NOW),
-                null);
+                null, null);
     }
 }

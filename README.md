@@ -7,6 +7,10 @@ con idempotencia, control de concurrencia y tolerancia a fallos parciales.
 > **Empieza por aquí:** [`docs/guide/guia-grupo-mariposa.html`](docs/guide/guia-grupo-mariposa.html) es una guía visual
 > e interactiva (en español) del flujo completo, cada microservicio, endpoints, eventos, pantallas y la demo.
 > Descárgala o clona el repo y ábrela en el navegador; GitHub no renderiza HTML.
+>
+> **Especificaciones (Spec-Driven Design):** [`specs/`](specs/README.md) define qué debe hacer la plataforma
+> (constitución + requisitos `REQ-*` con escenarios y trazabilidad a tests). Todo cambio parte de una
+> propuesta en `specs/changes/`.
 
 ```mermaid
 flowchart LR
@@ -72,11 +76,13 @@ Este comando:
 | http://localhost:8180 | Keycloak |
 | http://localhost:8085 | Kafka UI |
 | http://localhost:3001 | Grafana (dashboard "Grupo Mariposa — Procesamiento de pedidos") |
+| http://localhost:3001/d/mariposa-demo | Grafana, tablero de demostración en vivo (ver `./mariposa.sh demo-traffic`) |
 | http://localhost:9090 | Prometheus (con reglas de alerta) |
 | http://localhost:16686 | Jaeger (trazas) |
 | http://localhost:8888 | Config server (requiere credenciales del `.env`) |
 
-Todos los puertos se publican sólo en `127.0.0.1`. Los usuarios demo (`analyst`, `admin`, `viewer`) y el cliente
+Todos los puertos se publican sólo en `127.0.0.1`. Los usuarios demo (`analyst`, `admin`, `viewer` y `auditor`,
+este último sólo con `orders-admin` para aprobar tasas propuestas por `admin`) y el cliente
 `orders-cli` (password grant, tokens de 15 minutos para herramientas) existen **sólo en el realm local**
 (`infra/keycloak/realm-mariposa.json`); en staging y producción el realm no los incluye y los usuarios vienen del
 proveedor de identidad corporativo.
@@ -120,6 +126,44 @@ los cuatro servicios.
 - Un país nuevo es un PR a `config-repo` (`platform.markets`, `platform.currencies` y las tasas `PRICING_TAX_*`)
   más sus datos de productos y clientes; `order-processor` no arranca si falta alguna tasa de un mercado del
   catálogo. Un mercado fuera del catálogo termina en la DLT como `VALIDATION`.
+- La tabla muestra las tasas semilla. Los cambios con fecha se hacen con la API `/tax-rates` (ADR 0008).
+
+## Tasas de impuesto con vigencia (ADR 0008)
+
+- Las tasas viven en la colección `tax_rates` de la base `orders` como períodos `validFrom`/`validTo`. Al arrancar,
+  `order-processor` siembra desde `PRICING_TAX_*` las combinaciones que falten; `config-repo` queda como semilla y
+  respaldo.
+- **La tasa se elige por `occurredAt`** del pedido, no por la hora de procesamiento. Cada pedido guarda la tasa
+  por línea y `taxRateEffectiveFrom`.
+- API con rol `orders-admin` y **cuatro ojos**: quien propone no puede aprobar (`403 FOUR_EYES_REQUIRED`). Al
+  aprobar, el período abierto anterior se cierra en `validFrom`; un solape o un hueco responde `409`.
+- Cada pod recarga la tabla cada `TAX_RATES_REFRESH_INTERVAL` (30 s) y el que aprueba lo hace de inmediato.
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| `GET` | `/tax-rates?market=&category=&status=` | lista períodos y propuestas |
+| `POST` | `/tax-rates` | propone `{ market, category, rate, validFrom, validTo?, changeReason }` |
+| `POST` | `/tax-rates/{id}/approve` | aprueba (otro usuario) |
+| `POST` | `/tax-rates/{id}/reject` | rechaza |
+
+```bash
+curl -s -X POST localhost:8080/tax-rates -H "Authorization: Bearer $(./mariposa.sh token admin)" \
+  -H 'Content-Type: application/json' \
+  -d '{"market":"CO","category":"STANDARD","rate":0.21,"validFrom":"2027-01-01T05:00:00Z","changeReason":"Reforma"}'
+curl -s -X POST localhost:8080/tax-rates/<id>/approve -H "Authorization: Bearer $(./mariposa.sh token auditor)"
+```
+
+Contrato en [`contracts/http/order-processor.openapi.yaml`](contracts/http/order-processor.openapi.yaml).
+
+## Tablero de demostración
+
+```bash
+./mariposa.sh demo-traffic 10     # 10 minutos de pedidos variados; DEMO_CHAOS=true agrega fallas
+```
+
+Abre http://localhost:3001/d/mariposa-demo: pedidos por estado y mercado, rechazos por motivo, montos aprobados,
+líneas y latencia. `orders_amount_total{currency,market}` suma los montos aprobados en la moneda de cada mercado:
+es un **KPI de demostración**, no un dato contable (no convierte entre monedas).
 
 ## Datos maestros y caché (ADR 0007)
 
@@ -162,12 +206,12 @@ curl -H "Authorization: Bearer $(./mariposa.sh token)" localhost:8080/orders/ORD
 
 | Componente | Comando | Qué incluye | Cobertura |
 |---|---|---|---|
-| order-processor | `./mvnw verify` | 316 unitarias, 20 de integración con Testcontainers (Kafka, Mongo RS, Redis, WireMock), ArchUnit, contratos, Checkstyle, SpotBugs | 100 % dominio y aplicación, 98,5 % global (gate) |
+| order-processor | `./mvnw verify` | 508 unitarias, 39 de integración con Testcontainers (Kafka, Mongo RS, Redis, WireMock), ArchUnit, contratos, Checkstyle, SpotBugs | 100 % dominio y aplicación, 98,5 % global (gate) |
 | products-api | `go test ./... -race` | unitarias, handler, contrato OpenAPI, apagado controlado | 100 % en paquetes de producción |
 | clients-api | `npm run lint && npm run test:cov` | unitarias, e2e con Supertest, contrato con Ajv | 100 % líneas, ramas y funciones (gate) |
 | order-tracker | `docker build --target test order-tracker` | bloc, widgets, responsive, PKCE, carreras de respuestas | 100 % líneas |
 | config-server | `./mvnw verify` | arranque, seguridad, servicio de configuración | 100 % (gate) |
-| Plataforma | `./mariposa.sh e2e` | 45 escenarios Karate (APIs, flujo, DLT, idempotencia, concurrencia, resiliencia, mercados, invalidación de caché) + 8 Playwright (escritorio y móvil) | — |
+| Plataforma | `./mariposa.sh e2e` | 48 escenarios Karate (APIs, flujo, DLT, idempotencia, concurrencia, resiliencia, mercados, invalidación de caché, tasas con vigencia) + 8 Playwright (escritorio y móvil) | — |
 | Carga | `./load/event-burst.sh` y `load/k6/apis.js` | ver `docs/load-test-results.md` | — |
 
 **Simulación de fallos**: `products-api` y `clients-api` aceptan reglas `FAULT_RULES=id:tipo[:veces]` (`429`, `500`,
@@ -197,7 +241,7 @@ Precedencia en todos los servicios: **variable de entorno > config server > valo
 | `REDIS_PASSWORD` | Redis |
 | `KEYCLOAK_ADMIN_*`, `KEYCLOAK_PUBLIC_URL` | administración y URL pública de Keycloak |
 | `ORDER_PROCESSOR_CLIENT_SECRET` | client credentials de `order-processor` |
-| `DEMO_USER_PASSWORD` | contraseña de `analyst`, `admin` y `viewer` |
+| `DEMO_USER_PASSWORD` | contraseña de `analyst`, `admin`, `viewer` y `auditor` |
 | `PII_ENCRYPTION_KEY` | llave AES-256 (base64) para cifrar datos personales en MongoDB |
 | `CONFIG_SERVER_USERNAME` / `CONFIG_SERVER_PASSWORD` | acceso al config server |
 | `GRAFANA_ADMIN_*` | Grafana |
@@ -251,8 +295,9 @@ Documentos: [propuesta](docs/architecture-proposal.md) · [ADRs](docs/adr) ·
 - Sin Schema Registry: los contratos son JSON Schema versionados y validados en tests y CI.
 - El reproceso de la DLT es manual (re-publicar el mensaje original, que es seguro por diseño).
 - Con `CONFIG_SERVER_FAIL_FAST=true`, si el config server está caído no arrancan nuevas instancias.
-- **Tasas sin vigencia**: se aplica la tasa configurada al procesar y cambiarla requiere reinicio (TODO-2 del
-  [roadmap](docs/roadmap.md)).
+- **Tabla de tasas por pod**: cada pod recarga las tasas cada 30 s; una tasa aprobada a menos de ese intervalo de
+  su `validFrom` puede calcularse distinto en dos pods durante unos segundos (TODO-6 del
+  [roadmap](docs/roadmap.md), ADR 0008).
 - **Ventana de invalidación**: entre el cambio de un cliente o producto y la actualización de la caché queda la
   latencia del evento (milisegundos a segundos); si el evento se pierde, el TTL de respaldo la acota (ADR 0007).
 - **Catálogo por PR**: agregar un mercado no requiere código, pero sí un PR revisado a `config-repo` y un reinicio

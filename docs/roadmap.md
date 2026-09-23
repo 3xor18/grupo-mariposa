@@ -6,8 +6,11 @@ tiene el problema que resuelve, el diseño propuesto, qué componentes toca y un
 | ID | Mejora | Motivación | Prioridad | Estado |
 |---|---|---|---|---|
 | TODO-1 | Mercados configurables en lugar de enums | Más países de Latinoamérica | Alta | **DONE** ([ADR 0006](adr/0006-configurable-market-catalog.md)) |
-| TODO-2 | Tasas de impuesto en una colección con vigencia | Cambios regulatorios con fecha | Alta | Pendiente |
+| TODO-2 | Tasas de impuesto en una colección con vigencia | Cambios regulatorios con fecha | Alta | **DONE** ([ADR 0008](adr/0008-effective-dated-tax-rates.md)) |
 | TODO-3 | Caché de clientes con invalidación por eventos | Latencia y carga sobre `clients-api` | Media | **DONE** ([ADR 0007](adr/0007-master-data-change-events-and-cache.md)) |
+| TODO-4 | Descuentos configurables con vigencia | Promociones y acuerdos comerciales sin despliegue | Media | Pendiente |
+| TODO-5 | Reservas de stock al aprobar | No aprobar pedidos sin inventario | Media | Pendiente |
+| TODO-6 | Consistencia de la tabla de tasas entre pods | Todos los pods con la misma tabla al iniciar un período | Baja | Pendiente |
 
 ---
 
@@ -50,7 +53,13 @@ clientes: sin cambios de código, con tests parametrizados que cargan un catálo
 
 ---
 
-## TODO-2 — Tasas de impuesto en una colección con vigencia
+## TODO-2 — Tasas de impuesto en una colección con vigencia — DONE
+
+> **Hecho** en [ADR 0008](adr/0008-effective-dated-tax-rates.md): colección `tax_rates` en la base `orders`,
+> tasa elegida por `occurredAt`, `taxRateEffectiveFrom` en cada pedido, API `/tax-rates` con rol `orders-admin` y
+> aprobación de otra persona (`403 FOUR_EYES_REQUIRED`), tabla en memoria de cada pod refrescada cada 30 s y
+> `config-repo` como semilla y respaldo. Se eligió refresco por intervalo en lugar del evento
+> `pricing.tax-rates.changed.v1` (ver TODO-6). Lo que sigue describe la situación y el diseño originales.
 
 **Situación actual.** Las tasas viven en `config-repo`. Ventajas: cambio por PR revisado y auditado, historial en
 git, rollback inmediato, validación completa al arrancar, y cada línea del pedido guarda la tasa aplicada
@@ -101,3 +110,56 @@ el negocio exige cero ventana para clientes bloqueados, se mantiene la consulta 
 
 **Criterio de terminado.** Bloquear un cliente en `clients-api` hace que el siguiente pedido de ese cliente sea
 rechazado aunque su perfil estuviera en caché (test de integración con Kafka y Redis reales).
+
+---
+
+## TODO-4 — Descuentos configurables con vigencia
+
+**Situación actual.** Hay una sola regla: 3 % por línea con 20 unidades o más para clientes `WHOLESALE`
+(`PRICING_WHOLESALE_DISCOUNT_*` en `config-repo`). Cambiarla exige un PR y un reinicio, y no admite promociones por
+mercado, producto o fecha.
+
+**Diseño propuesto.**
+1. Colección `discount_rules` con el mismo modelo de ADR 0008: período `validFrom`/`validTo`, propuesta y
+   aprobación de otra persona, `changeReason` y semilla desde `config-repo`.
+2. Reglas por mercado, segmento de cliente, categoría o producto y cantidad mínima; prioridad explícita y **una
+   sola regla por línea** para que el resultado sea predecible.
+3. El dominio recibe las reglas vigentes al `occurredAt` del pedido por un puerto `DiscountRuleSource`; cada línea
+   guarda la regla aplicada (`discountRuleId`) además de la tasa.
+
+**Criterio de terminado.** Una promoción programada para una fecha se aplica sólo a pedidos con `occurredAt` desde
+esa fecha, sin despliegue, y el pedido muestra qué regla la originó.
+
+---
+
+## TODO-5 — Reservas de stock al aprobar
+
+**Situación actual.** `order-processor` aprueba si el cliente y los productos están activos; no conoce el
+inventario, así que puede aprobar pedidos que no se pueden cumplir.
+
+**Diseño propuesto.**
+1. `products-api` (o un servicio de inventario) expone `POST /reservations` idempotente por `orderId`, con
+   vencimiento, y publica `stock.changed.v1`.
+2. `order-processor` reserva antes de aprobar; sin stock rechaza con `OUT_OF_STOCK`. Si la reserva no responde,
+   el pedido va a `TECHNICAL_FAILURE` reprocesable, como las demás dependencias.
+3. Una reserva sin confirmar se libera al vencer (saga con compensación, sin transacción distribuida).
+
+**Criterio de terminado.** Dos pedidos concurrentes por la última unidad: uno se aprueba y el otro se rechaza con
+`OUT_OF_STOCK` (test de integración con dependencias reales).
+
+---
+
+## TODO-6 — Consistencia de la tabla de tasas entre pods
+
+**Situación actual.** Cada pod recarga `tax_rates` cada `TAX_RATES_REFRESH_INTERVAL` (30 s) y el que aprueba lo
+hace de inmediato. Si una tasa se aprueba a menos de un intervalo de su `validFrom`, durante unos segundos dos pods
+pueden calcular el mismo instante con tablas distintas.
+
+**Diseño propuesto.**
+1. Exigir en la API una anticipación mínima configurable (`validFrom ≥ ahora + 2 × intervalo`).
+2. Publicar `pricing.tax-rates.changed.v1` desde un outbox al aprobar para que todos los pods recarguen al
+   instante; el intervalo queda como red de seguridad.
+3. Exponer la versión de la tabla cargada como métrica por pod y alertar si difieren más de un intervalo.
+
+**Criterio de terminado.** Una aprobación se refleja en todos los pods en menos de un segundo y una propuesta sin
+la anticipación mínima responde `400`.

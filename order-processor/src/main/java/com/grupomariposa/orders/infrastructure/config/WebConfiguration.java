@@ -8,6 +8,8 @@ import com.grupomariposa.orders.infrastructure.web.OrdersApiProperties;
 import com.grupomariposa.orders.infrastructure.web.OrdersController;
 import com.grupomariposa.orders.infrastructure.web.ProblemFactory;
 import com.grupomariposa.orders.infrastructure.web.ProblemProperties;
+import com.grupomariposa.orders.infrastructure.web.TaxRateWebMapper;
+import com.grupomariposa.orders.infrastructure.web.TaxRatesController;
 import com.grupomariposa.orders.infrastructure.web.security.ProblemSecurityHandler;
 import com.grupomariposa.orders.infrastructure.web.security.RealmRoleConverter;
 import com.grupomariposa.orders.infrastructure.web.security.SecurityModeGuard;
@@ -41,6 +43,7 @@ public class WebConfiguration {
     };
     private static final String ACTUATOR_PATHS = "/actuator/**";
     private static final String ORDERS_PATHS = OrdersController.BASE_PATH + "/**";
+    private static final String TAX_RATE_PATHS = TaxRatesController.BASE_PATH + "/**";
     private static final String ALL_PATHS = "/**";
     private static final String BEARER = "bearer";
     private static final String JWT = "JWT";
@@ -55,6 +58,11 @@ public class WebConfiguration {
     @Bean
     public OrderResponseMapper orderResponseMapper() {
         return new OrderResponseMapper();
+    }
+
+    @Bean
+    public TaxRateWebMapper taxRateWebMapper() {
+        return new TaxRateWebMapper();
     }
 
     @Bean
@@ -112,6 +120,8 @@ public class WebConfiguration {
                 .requestMatchers(ACTUATOR_PATHS).hasRole(properties.adminRole())
                 .requestMatchers(HttpMethod.GET, OrdersController.BASE_PATH, ORDERS_PATHS)
                 .hasAnyRole(properties.readerRole(), properties.adminRole())
+                .requestMatchers(TaxRatesController.BASE_PATH, TAX_RATE_PATHS)
+                .hasRole(properties.adminRole())
                 .anyRequest().authenticated();
     }
 

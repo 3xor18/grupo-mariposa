@@ -91,7 +91,7 @@ class ProcessOrderServiceTest {
         final EvaluationInput golden = goldenInput();
         when(enricher.enrich(command)).thenReturn(
                 new EvaluationInput(Markets.MX, DomainFixtures.digits(Markets.MX),
-                        Lookup.notFound(), golden.items()));
+                        Lookup.notFound(), golden.items(), DomainFixtures.APPLIED_RATES));
         when(store.save(any(), eq(OUTPUT_EVENT_ID))).thenReturn(new SaveResult.Saved());
 
         final ProcessingOutcome outcome = service.process(command);

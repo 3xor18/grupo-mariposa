@@ -23,7 +23,10 @@
         "RATE_LIMITED",
         "INTERNAL_ERROR",
         "SERVICE_UNAVAILABLE",
-        "BAD_GATEWAY"
+        "BAD_GATEWAY",
+        "TAX_RATE_NOT_FOUND",
+        "TAX_RATE_CONFLICT",
+        "FOUR_EYES_REQUIRED"
       ]
     },
     "detail": { "type": "string" },

@@ -4,11 +4,15 @@ import com.grupomariposa.orders.application.command.OrderCommand;
 import com.grupomariposa.orders.application.error.UnexpectedProcessingException;
 import com.grupomariposa.orders.application.port.out.ClientDirectory;
 import com.grupomariposa.orders.application.port.out.ProductCatalog;
+import com.grupomariposa.orders.application.port.out.TaxRateSource;
+import com.grupomariposa.orders.domain.model.AppliedTaxRates;
 import com.grupomariposa.orders.domain.model.ClientProfile;
 import com.grupomariposa.orders.domain.model.CurrencyCatalog;
 import com.grupomariposa.orders.domain.model.EvaluationInput;
 import com.grupomariposa.orders.domain.model.Lookup;
 import com.grupomariposa.orders.domain.model.ResolvedItem;
+import com.grupomariposa.orders.domain.model.TaxRateSchedule;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -27,15 +31,17 @@ public final class OrderEnricher {
     private final Executor executor;
     private final Semaphore permits;
     private final CurrencyCatalog currencies;
+    private final TaxRateSource taxRates;
 
     public OrderEnricher(final ClientDirectory clientDirectory,
                          final ProductCatalog productCatalog,
                          final Executor executor, final int maxConcurrentLookups,
-                         final CurrencyCatalog currencies) {
+                         final CurrencyCatalog currencies, final TaxRateSource taxRates) {
         this.clientDirectory = Objects.requireNonNull(clientDirectory, "clientDirectory");
         this.productCatalog = Objects.requireNonNull(productCatalog, "productCatalog");
         this.executor = Objects.requireNonNull(executor, "executor");
         this.currencies = Objects.requireNonNull(currencies, "currencies");
+        this.taxRates = Objects.requireNonNull(taxRates, "taxRates");
         this.permits = new Semaphore(maxConcurrentLookups, true);
     }
 
@@ -52,12 +58,20 @@ public final class OrderEnricher {
                     items.stream().map(OrderEnricher::await).toList();
             return new EvaluationInput(command.market(),
                     currencies.fractionDigitsOf(command.currency()), resolvedClient,
-                    resolvedItems);
+                    resolvedItems, ratesFor(command));
         } catch (RuntimeException failure) {
             client.cancel(true);
             items.forEach(item -> item.cancel(true));
             throw failure;
         }
+    }
+
+    private AppliedTaxRates ratesFor(final OrderCommand command) {
+        final TaxRateSchedule schedule = taxRates.approvedSchedule();
+        final Instant ordered = command.occurredAt() == null
+                ? command.reception().receivedAt() : command.occurredAt();
+        final Instant start = schedule.earliestStart();
+        return schedule.ratesAt(command.market(), ordered.isBefore(start) ? start : ordered);
     }
 
     private <T> CompletableFuture<T> lookup(final Supplier<T> call) {

@@ -52,3 +52,20 @@ Usa los datos semilla exclusivos `CLI-70001` y `PRD-020` (mercado MX). Cada esce
 
 Además: un `If-Match` viejo responde `412 PRECONDITION_FAILED` sin cambiar la versión, y `analyst` recibe `403`
 en ambos `PATCH`.
+
+## Tasas de impuesto con vigencia (`tax-rates.feature`, ADR 0008)
+
+Usa Ecuador, categoría `REDUCED`, con `PRD-019` (5 × 8.40 = 42.00 neto) y `CLI-60001`.
+
+1. `analyst` recibe `403` al leer o proponer tasas: la API exige `orders-admin`.
+2. Lee la tasa vigente (período aprobado abierto) y propone otra con `validFrom` **lejos en el futuro**
+   (`TAX_RATE_LEAD_DAYS`, 50 años por defecto).
+3. `admin` intenta aprobar su propia propuesta → `403 FOUR_EYES_REQUIRED`; `auditor` (sólo `orders-admin`) la
+   aprueba → `200`, y el período anterior queda cerrado en `validFrom`.
+4. Un pedido con `occurredAt` una hora después de `validFrom` usa la tasa nueva y trae
+   `taxRateEffectiveFrom = validFrom`; uno un segundo antes usa la tasa anterior.
+5. Una propuesta rechazada no se puede aprobar (`409 TAX_RATE_CONFLICT`), un id inexistente es `404` y un
+   `validFrom` pasado es `400`.
+
+Como cada corrida usa un `validFrom` posterior al de la anterior y todos los demás escenarios usan
+`occurredAt` de 2026, la suite se puede repetir sin limpiar la colección y sin cambiar los totales esperados.

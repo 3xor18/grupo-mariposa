@@ -19,7 +19,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 class MarketTaxPolicyTest {
 
-    private final TaxPolicy policy = new MarketTaxPolicy(DomainFixtures.TAX_RATES);
+    private final TaxPolicy policy = new MarketTaxPolicy();
 
     @ParameterizedTest(name = "{0} {1} -> {2}%")
     @CsvSource({
@@ -29,7 +29,8 @@ class MarketTaxPolicyTest {
     })
     void should_apply_market_rate_for_category(final MarketCode market, final TaxCategory category,
                                                final int percent) {
-        assertThat(policy.rateFor(market, wholesaleClient(market), category))
+        assertThat(policy.rateFor(DomainFixtures.TAX_RATES, market, wholesaleClient(market),
+                category))
                 .isEqualTo(Rate.ofPercent(percent));
     }
 
@@ -40,7 +41,8 @@ class MarketTaxPolicyTest {
                 ClientStatus.ACTIVE);
 
         for (final TaxCategory category : TaxCategory.values()) {
-            assertThat(policy.rateFor(market, exempt, category).value()).isZero();
+            assertThat(policy.rateFor(DomainFixtures.TAX_RATES, market, exempt,
+                    category).value()).isZero();
         }
     }
 
@@ -49,7 +51,8 @@ class MarketTaxPolicyTest {
     void should_tax_non_exempt_regimes(final TaxRegime regime) {
         final var taxed = client(Markets.MX, ClientSegment.RETAIL, regime, ClientStatus.ACTIVE);
 
-        assertThat(policy.rateFor(Markets.MX, taxed, TaxCategory.STANDARD))
+        assertThat(policy.rateFor(DomainFixtures.TAX_RATES, Markets.MX, taxed,
+                TaxCategory.STANDARD))
                 .isEqualTo(Rate.ofPercent(16));
     }
 }

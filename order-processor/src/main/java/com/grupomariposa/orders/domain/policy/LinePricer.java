@@ -8,6 +8,7 @@ import com.grupomariposa.orders.domain.model.OrderLine;
 import com.grupomariposa.orders.domain.model.ProductProfile;
 import com.grupomariposa.orders.domain.model.Rate;
 import com.grupomariposa.orders.domain.model.RequestedItem;
+import com.grupomariposa.orders.domain.model.TaxRateTable;
 import java.util.Objects;
 
 public final class LinePricer {
@@ -22,12 +23,12 @@ public final class LinePricer {
 
     public OrderLine price(final MarketCode market, final int fractionDigits,
                            final ClientProfile client, final RequestedItem item,
-                           final ProductProfile product) {
+                           final ProductProfile product, final TaxRateTable rates) {
         final Money gross = Money.ofUnits(item.unitPrice(), item.quantity(), fractionDigits);
         final Rate discountRate = discountPolicy.rateFor(client, item.quantity());
         final Money discount = gross.times(discountRate);
         final Money net = gross.minus(discount);
-        final Rate taxRate = taxPolicy.rateFor(market, client, product.taxCategory());
+        final Rate taxRate = taxPolicy.rateFor(rates, market, client, product.taxCategory());
         final Money tax = net.times(taxRate);
         final LineAmounts amounts =
                 new LineAmounts(gross, discountRate, discount, net, taxRate, tax, net.plus(tax));

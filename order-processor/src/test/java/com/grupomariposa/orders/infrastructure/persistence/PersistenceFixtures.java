@@ -34,16 +34,16 @@ public final class PersistenceFixtures {
     public static Order approvedOrder() {
         final EvaluationInput input = goldenInput();
         final Decision decision = DomainFixtures.evaluator().evaluate(input);
-        return ASSEMBLER.decided(ApplicationFixtures.goldenCommand(), input.client(), decision);
+        return ASSEMBLER.decided(ApplicationFixtures.goldenCommand(), input, decision);
     }
 
     public static Order rejectedOrder() {
         final EvaluationInput golden = goldenInput();
         final EvaluationInput input = new EvaluationInput(Markets.MX,
                 DomainFixtures.digits(Markets.MX), Lookup.notFound(),
-                golden.items());
+                golden.items(), DomainFixtures.APPLIED_RATES);
         final Decision decision = DomainFixtures.evaluator().evaluate(input);
-        return ASSEMBLER.decided(ApplicationFixtures.goldenCommand(), input.client(), decision);
+        return ASSEMBLER.decided(ApplicationFixtures.goldenCommand(), input, decision);
     }
 
     public static Order technicalFailure() {

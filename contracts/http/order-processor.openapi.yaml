@@ -1,10 +1,12 @@
 openapi: 3.1.0
 info:
-  title: Orders query API (order-processor)
-  version: 1.0.0
+  title: Orders query and tax rate administration API (order-processor)
+  version: 1.1.0
   description: |
-    Read side of processed orders. Owner: order-processor team.
-    Consumed by the order-tracker PWA. Additive changes only within v1.
+    Read side of processed orders and administration of effective-dated tax rates.
+    Owner: order-processor team. Orders are consumed by the order-tracker PWA; tax rates are
+    operated by users with the realm role orders-admin under four-eyes approval.
+    Additive changes only within v1.
 servers:
   - url: http://localhost:8080
 security:
@@ -86,13 +88,150 @@ paths:
           $ref: '#/components/responses/Problem'
         '500':
           $ref: '#/components/responses/Problem'
+  /tax-rates:
+    get:
+      operationId: listTaxRates
+      summary: List tax rate periods and proposals, by market and category, newest first
+      description: Requires the realm role orders-admin.
+      parameters:
+        - name: market
+          in: query
+          schema:
+            $ref: '#/components/schemas/Market'
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/TaxCategory'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/TaxRateStatus'
+      responses:
+        '200':
+          description: Tax rates matching the filters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaxRate'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: proposeTaxRate
+      summary: Propose a tax rate that starts at validFrom, pending approval
+      description: |
+        Requires the realm role orders-admin. The proposer is taken from the token
+        (preferred_username) and can never approve its own proposal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxRateProposal'
+            example:
+              market: CO
+              category: STANDARD
+              rate: 0.21
+              validFrom: '2027-01-01T05:00:00Z'
+              changeReason: Reforma tributaria 2027
+      responses:
+        '201':
+          description: Proposal stored with status PROPOSED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxRate'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /tax-rates/{id}/approve:
+    post:
+      operationId: approveTaxRate
+      summary: Approve a proposed tax rate
+      description: |
+        Requires the realm role orders-admin and a user other than the proposer
+        (403 FOUR_EYES_REQUIRED otherwise). An open-ended approved period that starts earlier
+        is closed at validFrom; overlaps or gaps answer 409 TAX_RATE_CONFLICT.
+      parameters:
+        - $ref: '#/components/parameters/TaxRateId'
+      responses:
+        '200':
+          description: Tax rate approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxRate'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /tax-rates/{id}/reject:
+    post:
+      operationId: rejectTaxRate
+      summary: Reject a proposed tax rate
+      description: Requires the realm role orders-admin. Only PROPOSED rates can be rejected.
+      parameters:
+        - $ref: '#/components/parameters/TaxRateId'
+      responses:
+        '200':
+          description: Tax rate rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxRate'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Keycloak token with realm role orders-reader
+      description: |
+        Keycloak token. Orders need the realm role orders-reader (or orders-admin);
+        tax rates need orders-admin.
+  parameters:
+    TaxRateId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 64
   responses:
     Problem:
       description: Error following RFC 9457
@@ -183,6 +322,13 @@ components:
           format: date-time
         traceId:
           type: [string, 'null']
+        taxRateEffectiveFrom:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Start of the most recent tax rate period applied to the order market at occurredAt
+            (receivedAt when occurredAt is missing). Null for orders priced before the tax rate
+            schedule existed.
     ClientSnapshot:
       type: object
       required: [clientId]
@@ -303,3 +449,80 @@ components:
           type: integer
         totalPages:
           type: integer
+    TaxCategory:
+      type: string
+      enum: [STANDARD, REDUCED, EXEMPT]
+    TaxRateStatus:
+      type: string
+      enum: [PROPOSED, APPROVED, REJECTED]
+    TaxRateValue:
+      type: number
+      minimum: 0
+      maximum: 1
+      description: Fraction applied to the net subtotal of a line, up to four decimals
+    TaxRateProposal:
+      type: object
+      required: [market, category, rate, validFrom, changeReason]
+      properties:
+        market:
+          $ref: '#/components/schemas/Market'
+        category:
+          $ref: '#/components/schemas/TaxCategory'
+        rate:
+          $ref: '#/components/schemas/TaxRateValue'
+        validFrom:
+          type: string
+          format: date-time
+          description: Must be in the future unless the environment allows past dates
+        validTo:
+          type: [string, 'null']
+          format: date-time
+          description: Exclusive end; null keeps the rate open-ended
+        changeReason:
+          type: string
+          minLength: 1
+    TaxRate:
+      type: object
+      required:
+        - id
+        - market
+        - category
+        - rate
+        - validFrom
+        - status
+        - proposedBy
+        - proposedAt
+        - changeReason
+        - version
+      properties:
+        id:
+          type: string
+        market:
+          $ref: '#/components/schemas/Market'
+        category:
+          $ref: '#/components/schemas/TaxCategory'
+        rate:
+          $ref: '#/components/schemas/TaxRateValue'
+        validFrom:
+          type: string
+          format: date-time
+        validTo:
+          type: [string, 'null']
+          format: date-time
+        status:
+          $ref: '#/components/schemas/TaxRateStatus'
+        proposedBy:
+          type: string
+        proposedAt:
+          type: string
+          format: date-time
+        reviewedBy:
+          type: [string, 'null']
+        reviewedAt:
+          type: [string, 'null']
+          format: date-time
+        changeReason:
+          type: string
+        version:
+          type: integer
+          minimum: 0

@@ -41,7 +41,7 @@ public final class OrderEvaluator {
                                 final ResolvedItem resolved) {
         final ProductProfile product = resolved.product().value().orElseThrow();
         return linePricer.price(input.market(), input.fractionDigits(), client,
-                resolved.item(), product);
+                resolved.item(), product, input.taxRates().table());
     }
 
     private static List<OrderLine> unpricedLines(final EvaluationInput input) {

@@ -8,6 +8,7 @@ import com.grupomariposa.orders.application.port.out.OrderStore;
 import com.grupomariposa.orders.application.port.out.OutboxStore;
 import com.grupomariposa.orders.application.port.out.ProcessingObserver;
 import com.grupomariposa.orders.application.port.out.ProductCatalog;
+import com.grupomariposa.orders.application.port.out.TaxRateSource;
 import com.grupomariposa.orders.application.port.out.TimeProvider;
 import com.grupomariposa.orders.application.service.OrderAssembler;
 import com.grupomariposa.orders.application.service.OrderEnricher;
@@ -82,10 +83,9 @@ public class ApplicationConfiguration {
     }
 
     @Bean
-    public OrderEvaluator orderEvaluator(final TaxRateTable taxRates,
-                                         final DiscountRule wholesaleDiscountRule) {
+    public OrderEvaluator orderEvaluator(final DiscountRule wholesaleDiscountRule) {
         return new OrderEvaluator(new EligibilityPolicy(), new LinePricer(
-                new MarketTaxPolicy(taxRates),
+                new MarketTaxPolicy(),
                 new WholesaleVolumeDiscountPolicy(wholesaleDiscountRule)));
     }
 
@@ -111,9 +111,10 @@ public class ApplicationConfiguration {
                                        final ProductCatalog productCatalog,
                                        final ManagedVirtualThreadExecutor lookupExecutor,
                                        final ProcessingProperties properties,
-                                       final CurrencyCatalog currencies) {
+                                       final CurrencyCatalog currencies,
+                                       final TaxRateSource taxRateSource) {
         return new OrderEnricher(clientDirectory, productCatalog, lookupExecutor.executor(),
-                properties.maxConcurrentLookups(), currencies);
+                properties.maxConcurrentLookups(), currencies, taxRateSource);
     }
 
     @Bean

@@ -10,6 +10,9 @@ public enum ApiErrorCode {
     METHOD_NOT_ALLOWED,
     UNAUTHORIZED,
     FORBIDDEN,
+    TAX_RATE_NOT_FOUND,
+    TAX_RATE_CONFLICT,
+    FOUR_EYES_REQUIRED,
     INTERNAL_ERROR;
 
     private static final char UNDERSCORE = '_';

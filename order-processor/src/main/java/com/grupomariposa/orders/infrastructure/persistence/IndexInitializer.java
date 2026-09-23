@@ -1,9 +1,13 @@
 package com.grupomariposa.orders.infrastructure.persistence;
 
+import static org.springframework.data.mongodb.core.query.Criteria.where;
+
+import com.grupomariposa.orders.domain.model.TaxRateStatus;
 import com.grupomariposa.orders.infrastructure.persistence.document.Fields;
 import com.grupomariposa.orders.infrastructure.persistence.document.InboxDocument;
 import com.grupomariposa.orders.infrastructure.persistence.document.OrderDocument;
 import com.grupomariposa.orders.infrastructure.persistence.document.OutboxDocument;
+import com.grupomariposa.orders.infrastructure.persistence.document.TaxRateDocument;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
@@ -16,6 +20,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.index.Index;
 import org.springframework.data.mongodb.core.index.IndexInfo;
 import org.springframework.data.mongodb.core.index.IndexOperations;
+import org.springframework.data.mongodb.core.index.PartialIndexFilter;
 
 public final class IndexInitializer implements SmartInitializingSingleton {
 
@@ -28,6 +33,8 @@ public final class IndexInitializer implements SmartInitializingSingleton {
     private static final String ORDERS_BY_MARKET = "orders_market_processed";
     private static final String ORDERS_BY_CLIENT = "orders_client";
     private static final String ORDERS_BY_PROCESSED = "orders_processed";
+    private static final String TAX_RATES_APPROVED = "tax_rates_approved_start";
+    private static final String TAX_RATES_BY_KEY = "tax_rates_key_status";
     private static final String COLL_MOD = "collMod";
     private static final String INDEX = "index";
     private static final String NAME = "name";
@@ -53,7 +60,21 @@ public final class IndexInitializer implements SmartInitializingSingleton {
                 .on(Fields.EVENT_VERSION, Sort.Direction.ASC).named(OUTBOX_BY_ORDER));
         ensureTtl(OutboxDocument.COLLECTION, OUTBOX_TTL, Fields.PUBLISHED_AT,
                 properties.outboxRetention());
+        ensureTaxRateIndexes();
         LOG.info("MongoDB indexes verified");
+    }
+
+    public void ensureTaxRateIndexes() {
+        final IndexOperations taxRates = mongo.indexOps(TaxRateDocument.class);
+        taxRates.createIndex(new Index().on(Fields.MARKET, Sort.Direction.ASC)
+                .on(TaxRateDocument.CATEGORY, Sort.Direction.ASC)
+                .on(TaxRateDocument.VALID_FROM, Sort.Direction.ASC).unique()
+                .partial(PartialIndexFilter.of(where(Fields.STATUS)
+                        .is(TaxRateStatus.APPROVED.name())))
+                .named(TAX_RATES_APPROVED));
+        taxRates.createIndex(new Index().on(Fields.MARKET, Sort.Direction.ASC)
+                .on(TaxRateDocument.CATEGORY, Sort.Direction.ASC)
+                .on(Fields.STATUS, Sort.Direction.ASC).named(TAX_RATES_BY_KEY));
     }
 
     private void ensureTtl(final String collection, final String name, final String field,
