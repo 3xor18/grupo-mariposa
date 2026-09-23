@@ -104,6 +104,25 @@ class HttpAdaptersTest {
     }
 
     @Test
+    void should_read_client_version_from_body_before_etag() {
+        API.stubFor(get("/clients/CLI-99821").willReturn(okJson(
+                CLIENT_BODY.replace("\"extra\"", "\"version\":7,\"extra\""))
+                .withHeader("ETag", "\"3\"")));
+
+        assertThat(clients.findVersionedClient("CLI-99821").value())
+                .hasValueSatisfying(client -> assertThat(client.version()).isEqualTo(7L));
+    }
+
+    @Test
+    void should_read_product_version_from_weak_etag_when_body_has_none() {
+        API.stubFor(get(urlPathEqualTo("/products/PRD-001")).willReturn(okJson(PRODUCT_BODY)
+                .withHeader("ETag", "W/\"12\"")));
+
+        assertThat(products.findVersionedProduct("PRD-001", Markets.MX).value())
+                .hasValueSatisfying(product -> assertThat(product.version()).isEqualTo(12L));
+    }
+
+    @Test
     void should_treat_404_as_business_not_found() {
         API.stubFor(get("/clients/CLI-404").willReturn(aResponse().withStatus(404)));
 

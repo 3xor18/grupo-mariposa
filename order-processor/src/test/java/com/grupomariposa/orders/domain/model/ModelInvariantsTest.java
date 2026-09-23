@@ -35,6 +35,12 @@ class ModelInvariantsTest {
     }
 
     @Test
+    void should_map_found_lookups_and_keep_not_found() {
+        assertThat(Lookup.found("abc").map(String::length)).isEqualTo(Lookup.found(3));
+        assertThat(Lookup.<String>notFound().map(String::length)).isEqualTo(Lookup.notFound());
+    }
+
+    @Test
     void should_build_violations_with_catalog_messages() {
         assertThat(Violation.of(RejectionCode.CLIENT_NOT_FOUND))
                 .isEqualTo(new Violation(RejectionCode.CLIENT_NOT_FOUND,
