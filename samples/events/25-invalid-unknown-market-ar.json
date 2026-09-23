@@ -1,0 +1,13 @@
+{
+  "eventId": "01J8ZP6M5E4RH0K7Y2N9A3TQ25",
+  "eventVersion": 1,
+  "occurredAt": "2026-09-23T14:08:00Z",
+  "orderId": "ORD-AR-000701",
+  "market": "AR",
+  "currency": "ARS",
+  "clientId": "CLI-99821",
+  "channel": "C1",
+  "items": [
+    { "productId": "PRD-001", "quantity": 5, "unitPrice": 1500 }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "eventId": "01J8ZP6M5E4RH0K7Y2N9A3TQ22",
+  "eventVersion": 1,
+  "occurredAt": "2026-09-23T14:05:00Z",
+  "orderId": "ORD-CL-000501",
+  "market": "CL",
+  "currency": "CLP",
+  "clientId": "CLI-50001",
+  "channel": "C1",
+  "items": [
+    { "productId": "PRD-015", "quantity": 24, "unitPrice": 1990 },
+    { "productId": "PRD-016", "quantity": 10, "unitPrice": 1290 }
+  ]
+}
