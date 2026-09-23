@@ -1,5 +1,6 @@
 import { aClient } from '../../../test/support/clients';
 import { MarketCatalog, parseMarkets } from '../../shared/markets/market-catalog';
+import { ClientChangedEvent, ClientChangeEvents } from '../application/client-changed.event';
 import { ClientNotFoundError } from '../domain/client-not-found.error';
 import { ClientStatus } from '../domain/client-status.enum';
 import { ClientVersionConflictError } from '../domain/client-version-conflict.error';
@@ -10,12 +11,20 @@ import { InMemoryClientRepository } from './in-memory-client.repository';
 const NOW = new Date('2026-09-23T10:00:00.000Z');
 
 describe('InMemoryClientRepository', () => {
-  const repository = (): InMemoryClientRepository =>
-    new InMemoryClientRepository(
+  let append: jest.Mock<undefined, [ClientChangedEvent]>;
+  const repository = (): InMemoryClientRepository => {
+    const events: ClientChangeEvents = { append };
+    return new InMemoryClientRepository(
       [aClient()],
+      events,
       () => 'event-1',
       () => NOW,
     );
+  };
+
+  beforeEach(() => {
+    append = jest.fn<undefined, [ClientChangedEvent]>();
+  });
 
   it('should_find_seeded_client_by_id_and_return_null_otherwise', async () => {
     const clients = repository();
@@ -24,48 +33,51 @@ describe('InMemoryClientRepository', () => {
     await expect(clients.findById('cli-1')).resolves.toBeNull();
   });
 
-  it('should_apply_changes_bump_version_and_record_the_change_event', async () => {
+  it('should_apply_changes_bump_version_and_emit_the_change_event', async () => {
     const clients = repository();
 
     const updated = await clients.update({
       clientId: 'CLI-1',
       changes: { status: ClientStatus.BLOCKED },
-      expectedVersion: 1,
+      precondition: { acceptedVersions: [1] },
     });
 
     expect(updated).toEqual(aClient({ status: ClientStatus.BLOCKED, version: 2 }));
     await expect(clients.findById('CLI-1')).resolves.toEqual(updated);
-    expect(clients.events).toEqual([
-      {
-        eventId: 'event-1',
-        occurredAt: '2026-09-23T10:00:00.000Z',
-        clientId: 'CLI-1',
-        version: 2,
-        status: 'BLOCKED',
-        segment: 'RETAIL',
-        taxRegime: 'EXEMPT',
-        market: 'PE',
-        name: 'Test client',
-      },
-    ]);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(append).toHaveBeenCalledWith({
+      eventId: 'event-1',
+      occurredAt: '2026-09-23T10:00:00.000Z',
+      clientId: 'CLI-1',
+      version: 2,
+      status: 'BLOCKED',
+      segment: 'RETAIL',
+      taxRegime: 'EXEMPT',
+      market: 'PE',
+    });
   });
 
-  it('should_update_unconditionally_when_no_version_is_expected', async () => {
+  it('should_return_the_current_client_without_bump_or_event_when_nothing_changes', async () => {
     const clients = repository();
 
-    await clients.update({ clientId: 'CLI-1', changes: { segment: Segment.WHOLESALE } });
-    const second = await clients.update({ clientId: 'CLI-1', changes: {} });
+    const unchanged = await clients.update({
+      clientId: 'CLI-1',
+      changes: { status: ClientStatus.ACTIVE, segment: Segment.RETAIL },
+    });
 
-    expect(second).toMatchObject({ segment: Segment.WHOLESALE, version: 3 });
+    expect(unchanged).toEqual(aClient());
+    expect(append).not.toHaveBeenCalled();
   });
 
-  it('should_reject_stale_versions_without_recording_events', async () => {
-    const clients = repository();
-
+  it('should_reject_versions_not_listed_in_the_precondition', async () => {
     await expect(
-      clients.update({ clientId: 'CLI-1', changes: {}, expectedVersion: 5 }),
-    ).rejects.toEqual(new ClientVersionConflictError('CLI-1', 5, 1));
-    expect(clients.events).toEqual([]);
+      repository().update({
+        clientId: 'CLI-1',
+        changes: { segment: Segment.WHOLESALE },
+        precondition: { acceptedVersions: [2, 3] },
+      }),
+    ).rejects.toEqual(new ClientVersionConflictError('CLI-1', 1));
+    expect(append).not.toHaveBeenCalled();
   });
 
   it('should_reject_unknown_clients', async () => {
@@ -75,23 +87,21 @@ describe('InMemoryClientRepository', () => {
   });
 
   it('should_use_uuid_v7_and_system_clock_by_default', async () => {
-    const clients = new InMemoryClientRepository([aClient()]);
+    const clients = new InMemoryClientRepository([aClient()], { append });
 
-    await clients.update({ clientId: 'CLI-1', changes: {} });
+    await clients.update({ clientId: 'CLI-1', changes: { segment: Segment.WHOLESALE } });
 
-    expect(clients.events[0]?.eventId).toMatch(/^[\da-f]{8}-[\da-f]{4}-7[\da-f]{3}-/);
+    expect(append.mock.calls[0]?.[0].eventId).toMatch(/^[\da-f]{8}-[\da-f]{4}-7[\da-f]{3}-/);
   });
 });
 
 describe('client seed', () => {
   it('should_cover_five_markets_with_unique_ids_and_initial_versions', () => {
     const ids = new Set(CLIENT_SEED.map((client) => client.id));
-    const markets = [...new Set(CLIENT_SEED.map((client) => client.market))].sort((a, b) =>
-      a.localeCompare(b),
-    );
+    const markets = new Set(CLIENT_SEED.map((client) => client.market));
 
     expect(ids.size).toBe(CLIENT_SEED.length);
-    expect(markets).toEqual(['CL', 'CO', 'EC', 'MX', 'PE']);
+    expect(markets).toEqual(new Set(['CL', 'CO', 'EC', 'MX', 'PE']));
     expect(CLIENT_SEED.every((client) => client.version === 1)).toBe(true);
     expect(DEMO_CACHE_CLIENTS.map((client) => client.id)).toEqual(['CLI-70001']);
   });

@@ -20,7 +20,6 @@ describe('clientChangedEvent', () => {
       segment: 'RETAIL',
       taxRegime: 'EXEMPT',
       market: 'CL',
-      name: 'Test client',
     });
     expect(validate(event)).toBe(true);
     expect(validate.errors ?? []).toEqual([]);

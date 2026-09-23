@@ -1,5 +1,7 @@
 import { Client } from '../domain/client';
 
+export const CLIENT_CHANGE_EVENTS = Symbol('CLIENT_CHANGE_EVENTS');
+
 export interface ClientChangedEvent {
   readonly eventId: string;
   readonly occurredAt: string;
@@ -9,7 +11,16 @@ export interface ClientChangedEvent {
   readonly segment: string;
   readonly taxRegime: string;
   readonly market: string;
-  readonly name: string;
+}
+
+export interface ClientChangeEvents {
+  append(event: ClientChangedEvent): void;
+}
+
+export class DiscardedClientChangeEvents implements ClientChangeEvents {
+  append(): void {
+    return undefined;
+  }
 }
 
 export function clientChangedEvent(
@@ -26,6 +37,5 @@ export function clientChangedEvent(
     segment: client.segment,
     taxRegime: client.taxRegime,
     market: client.market,
-    name: client.name,
   };
 }
