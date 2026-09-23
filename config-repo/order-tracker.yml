@@ -2,3 +2,4 @@ api-base-url: /api
 keycloak:
   realm: mariposa
   client-id: order-tracker
+market-names: MX:México,CO:Colombia,PE:Perú,CL:Chile,EC:Ecuador

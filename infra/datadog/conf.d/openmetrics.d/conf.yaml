@@ -13,11 +13,13 @@ instances:
     namespace: mariposa
     metrics:
       - http_.*
+      - outbox_.*
     tags:
       - service:products-api
   - openmetrics_endpoint: http://clients-api:3000/metrics
     namespace: mariposa
     metrics:
       - http_.*
+      - outbox_.*
     tags:
       - service:clients-api

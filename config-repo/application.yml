@@ -1,0 +1,3 @@
+platform:
+  markets: MX:MXN:es-MX,CO:COP:es-CO,PE:PEN:es-PE,CL:CLP:es-CL,EC:USD:es-EC
+  currencies: MXN:2,COP:2,PEN:2,CLP:0,USD:2

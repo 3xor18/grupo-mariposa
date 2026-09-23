@@ -17,6 +17,12 @@ x-config-dependency: &config-dependency
   config-server:
     condition: service_healthy
 
+x-master-data-dependency: &master-data-dependency
+  mongo-users:
+    condition: service_completed_successfully
+  kafka-init:
+    condition: service_completed_successfully
+
 services:
   mongo:
     image: mongo:7.0.26
@@ -24,15 +30,11 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?run ./mariposa.sh init}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?run ./mariposa.sh init}
-      MONGO_APP_DATABASE: orders
-      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME:?run ./mariposa.sh init}
-      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?run ./mariposa.sh init}
     volumes:
       - mongo-data:/data/db
       - mongo-config:/data/configdb
       - ./infra/mongo/mongo-entrypoint.sh:/opt/mariposa/mongo-entrypoint.sh:ro
       - ./infra/mongo/replica-set-healthcheck.sh:/opt/mariposa/replica-set-healthcheck.sh:ro
-      - ./infra/mongo/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "127.0.0.1:27017:27017"
     healthcheck:
@@ -42,6 +44,31 @@ services:
       retries: 30
       start_period: 20s
     mem_limit: 1g
+    logging: *default-logging
+
+  mongo-users:
+    image: mongo:7.0.26
+    entrypoint: ["mongosh", "--quiet", "mongodb://mongo:27017/admin?replicaSet=rs0"]
+    command: ["--file", "/opt/mariposa/ensure-users.js"]
+    environment:
+      MONGO_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?run ./mariposa.sh init}
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?run ./mariposa.sh init}
+      MONGO_APP_DATABASE: orders
+      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME:?run ./mariposa.sh init}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?run ./mariposa.sh init}
+      MONGO_CLIENTS_DATABASE: clients
+      MONGO_CLIENTS_USERNAME: ${MONGO_CLIENTS_USERNAME:?run ./mariposa.sh init}
+      MONGO_CLIENTS_PASSWORD: ${MONGO_CLIENTS_PASSWORD:?run ./mariposa.sh init}
+      MONGO_PRODUCTS_DATABASE: products
+      MONGO_PRODUCTS_USERNAME: ${MONGO_PRODUCTS_USERNAME:?run ./mariposa.sh init}
+      MONGO_PRODUCTS_PASSWORD: ${MONGO_PRODUCTS_PASSWORD:?run ./mariposa.sh init}
+    volumes:
+      - ./infra/mongo/ensure-users.js:/opt/mariposa/ensure-users.js:ro
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    mem_limit: 256m
     logging: *default-logging
 
   kafka:
@@ -182,14 +209,18 @@ services:
       context: ./products-api
     environment:
       <<: *config-client
+      MONGODB_URI: "mongodb://${MONGO_PRODUCTS_USERNAME:?run ./mariposa.sh init}:\
+        ${MONGO_PRODUCTS_PASSWORD:?run ./mariposa.sh init}@mongo:27017/products?\
+        replicaSet=rs0&authSource=products"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     ports:
       - "127.0.0.1:8081:8081"
     depends_on:
-      <<: *config-dependency
+      <<: [*config-dependency, *master-data-dependency]
       keycloak:
         condition: service_healthy
     stop_grace_period: 15s
-    mem_limit: 64m
+    mem_limit: 128m
     logging: *default-logging
 
   clients-api:
@@ -197,10 +228,14 @@ services:
       context: ./clients-api
     environment:
       <<: *config-client
+      MONGODB_URI: "mongodb://${MONGO_CLIENTS_USERNAME:?run ./mariposa.sh init}:\
+        ${MONGO_CLIENTS_PASSWORD:?run ./mariposa.sh init}@mongo:27017/clients?\
+        replicaSet=rs0&authSource=clients"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     ports:
       - "127.0.0.1:8082:3000"
     depends_on:
-      <<: *config-dependency
+      <<: [*config-dependency, *master-data-dependency]
       keycloak:
         condition: service_healthy
     stop_grace_period: 20s
@@ -227,11 +262,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
-      <<: *config-dependency
-      mongo:
-        condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
+      <<: [*config-dependency, *master-data-dependency]
       redis:
         condition: service_healthy
       keycloak:

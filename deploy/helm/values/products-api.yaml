@@ -8,9 +8,9 @@ podSecurityContext:
 resources:
   requests:
     cpu: 50m
-    memory: 32Mi
-  limits:
     memory: 64Mi
+  limits:
+    memory: 128Mi
 env:
   PORT: "8081"
   AUTH_ENABLED: "true"
@@ -21,11 +21,15 @@ env:
   CONFIG_APP_NAME: products-api
   CONFIG_SERVER_USERNAME: config-reader
   CONFIG_SERVER_FAIL_FAST: "true"
+  KAFKA_TOPIC_CHANGES: products.changed.v1
 externalSecret:
   enabled: true
-  remoteKey: grupo-mariposa/config-server
+  remoteKey: grupo-mariposa/products-api
   keys:
-    - CONFIG_SERVER_PASSWORD
+    - MONGODB_URI
+    - secretKey: CONFIG_SERVER_PASSWORD
+      remoteKey: grupo-mariposa/config-server
+      property: CONFIG_SERVER_PASSWORD
 networkPolicy:
   enabled: true
   allowedFrom:

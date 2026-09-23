@@ -33,6 +33,14 @@
       {
         "name": "clients-reader",
         "description": "Read the client master data"
+      },
+      {
+        "name": "clients-admin",
+        "description": "Change the client master data"
+      },
+      {
+        "name": "products-admin",
+        "description": "Change the product catalog"
       }
     ]
   },
@@ -201,7 +209,9 @@
         "orders-reader",
         "orders-admin",
         "products-reader",
-        "clients-reader"
+        "clients-reader",
+        "products-admin",
+        "clients-admin"
       ]
     },
     {

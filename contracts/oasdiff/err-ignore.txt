@@ -25,3 +25,11 @@ GET /orders/{orderId} added the new `PEN` enum value to the `currency` response 
 GET /orders/{orderId} added the new `PRODUCT_NOT_ACTIVE` enum value to the `reason` response property for the response status `200`
 GET /orders/{orderId} added the new `PRODUCT_NOT_FOUND` enum value to the `reason` response property for the response status `200`
 GET /orders/{orderId} added the new `undefined` enum value to the `reason` response property for the response status `200`
+GET /orders removed the enum value `CO` from the `query` request parameter `market`
+GET /orders removed the enum value `MX` from the `query` request parameter `market`
+GET /orders removed the enum value `PE` from the `query` request parameter `market`
+GET /orders added the pattern `^[A-Z]{2}$` to the `query` request parameter `market`
+GET /products/{productId} removed the enum value `CO` from the `query` request parameter `market`
+GET /products/{productId} removed the enum value `MX` from the `query` request parameter `market`
+GET /products/{productId} removed the enum value `PE` from the `query` request parameter `market`
+GET /products/{productId} added the pattern `^[A-Z]{2}$` to the `query` request parameter `market`

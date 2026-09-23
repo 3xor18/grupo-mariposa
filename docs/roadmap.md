@@ -3,15 +3,20 @@
 Mejoras identificadas y priorizadas para cuando la plataforma crezca. No bloquean la primera versión, pero cada una
 tiene el problema que resuelve, el diseño propuesto, qué componentes toca y un criterio de terminado.
 
-| ID | Mejora | Motivación | Prioridad |
-|---|---|---|---|
-| TODO-1 | Mercados configurables en lugar de enums | Se agregarán más países de Latinoamérica | Alta, antes del cuarto país |
-| TODO-2 | Tasas de impuesto en una colección con vigencia | Cambios regulatorios con fecha de entrada en vigor | Alta, junto con TODO-1 |
-| TODO-3 | Caché de clientes con invalidación por eventos | Reducir latencia y carga sobre `clients-api` | Media |
+| ID | Mejora | Motivación | Prioridad | Estado |
+|---|---|---|---|---|
+| TODO-1 | Mercados configurables en lugar de enums | Más países de Latinoamérica | Alta | **DONE** ([ADR 0006](adr/0006-configurable-market-catalog.md)) |
+| TODO-2 | Tasas de impuesto en una colección con vigencia | Cambios regulatorios con fecha | Alta | Pendiente |
+| TODO-3 | Caché de clientes con invalidación por eventos | Latencia y carga sobre `clients-api` | Media | **DONE** ([ADR 0007](adr/0007-master-data-change-events-and-cache.md)) |
 
 ---
 
-## TODO-1 — Mercados configurables
+## TODO-1 — Mercados configurables — DONE
+
+> **Hecho** en [ADR 0006](adr/0006-configurable-market-catalog.md): catálogo `platform.markets` /
+> `platform.currencies` en `config-repo/application.yml`, `MarketCode` validado contra el catálogo, contratos con
+> `pattern`, redondeo a los decimales de cada moneda y CL (CLP, 0 decimales) y EC (USD) habilitados sin cambios de
+> código de mercado. Lo que sigue describe la situación y el diseño originales.
 
 **Situación actual.** El enunciado pide soportar *inicialmente* MX, CO y PE. Hoy el mercado es una lista fija
 (`enum`) en los cinco lugares donde se usa:
@@ -69,7 +74,12 @@ de negocio no puede editarlas.
 
 ---
 
-## TODO-3 — Caché de clientes con invalidación por eventos
+## TODO-3 — Caché de clientes con invalidación por eventos — DONE
+
+> **Hecho** en [ADR 0007](adr/0007-master-data-change-events-and-cache.md): bases propias para `clients-api` y
+> `products-api`, `PATCH` con `If-Match`, outbox a `clients.changed.v1` / `products.changed.v1`, caché de clientes
+> (TTL 60 s) y productos (TTL 10 min) invalidada por versión. Lo que sigue describe la situación y el diseño
+> originales.
 
 **Situación actual.** Los productos se cachean en Redis (TTL de 5 min); los clientes **no**. Un cliente puede pasar a
 `BLOCKED` en cualquier momento, y con una caché sólo por tiempo podríamos aprobar pedidos de un cliente ya bloqueado
