@@ -3,6 +3,7 @@ package com.grupomariposa.orders.infrastructure.config;
 import com.grupomariposa.orders.application.port.out.IdGenerator;
 import com.grupomariposa.orders.application.port.out.TaxRateRepository;
 import com.grupomariposa.orders.application.port.out.TimeProvider;
+import com.grupomariposa.orders.application.service.TaxRateAdminService;
 import com.grupomariposa.orders.application.service.TaxRateSeedService;
 import com.grupomariposa.orders.domain.model.MarketCatalog;
 import com.grupomariposa.orders.domain.model.TaxRateTable;
@@ -64,5 +65,16 @@ public class PricingConfiguration {
                                              final IndexInitializer indexes) {
         return new TaxRateBootstrap(seeder, source, taxRateTable, markets,
                 properties.seedFrom(), sanitizer, indexes::ensureTaxRateIndexes);
+    }
+
+    @Bean
+    public TaxRateAdminService taxRateAdministration(final TaxRateRepository repository,
+                                                     final RefreshingTaxRateSource source,
+                                                     final IdGenerator idGenerator,
+                                                     final TimeProvider timeProvider,
+                                                     final MarketCatalog markets,
+                                                     final TaxRateProperties properties) {
+        return new TaxRateAdminService(repository, source, idGenerator, timeProvider, markets,
+                properties.allowPastValidFrom());
     }
 }
