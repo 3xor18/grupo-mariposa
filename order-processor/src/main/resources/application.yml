@@ -190,6 +190,11 @@ app:
       topic-partitions: ${KAFKA_TOPIC_MASTER_DATA_PARTITIONS:3}
       consumer-group: ${KAFKA_CACHE_CONSUMER_GROUP:order-processor-cache}
       concurrency: ${KAFKA_MASTER_DATA_CONCURRENCY:1}
+      retry:
+        initial-interval: ${KAFKA_MASTER_DATA_RETRY_INITIAL_INTERVAL:500ms}
+        multiplier: ${KAFKA_MASTER_DATA_RETRY_MULTIPLIER:2.0}
+        max-interval: ${KAFKA_MASTER_DATA_RETRY_MAX_INTERVAL:10s}
+        max-attempts: ${KAFKA_MASTER_DATA_RETRY_MAX_ATTEMPTS:6}
   http:
     clients:
       base-url: ${CLIENTS_API_URL:http://localhost:8082}

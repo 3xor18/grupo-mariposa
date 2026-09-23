@@ -60,8 +60,16 @@ public final class VersionedCache<T> {
         }
     }
 
+    public Optional<T> peek(final String id) {
+        return read(keyOf(id));
+    }
+
     public void ignored() {
         metrics.ignored();
+    }
+
+    public void failed() {
+        metrics.failed();
     }
 
     private Optional<T> read(final String key) {

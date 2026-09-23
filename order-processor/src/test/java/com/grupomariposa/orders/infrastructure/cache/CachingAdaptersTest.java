@@ -1,9 +1,11 @@
 package com.grupomariposa.orders.infrastructure.cache;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -27,6 +29,7 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class CachingAdaptersTest {
 
@@ -96,6 +99,51 @@ class CachingAdaptersTest {
 
         assertThat(ignored("clients")).isOne();
         assertThat(ignored("products")).isOne();
+    }
+
+    @Test
+    void should_keep_the_cached_name_when_a_client_event_omits_it() {
+        final ClientProfile unnamed = new ClientProfile("CLI-1", null, ClientStatus.BLOCKED,
+                ClientSegment.RETAIL, TaxRegime.GENERAL, Markets.CO);
+        final ClientProfile cachedActive = new ClientProfile("CLI-1", "Cliente",
+                ClientStatus.ACTIVE, ClientSegment.RETAIL, TaxRegime.GENERAL, Markets.CO);
+        final CacheCodec<ClientProfile> codec = CacheCodecs.clients(new ObjectMapper(),
+                new AesGcmPiiCipher(PiiKeys.single("k1",
+                        Base64.getEncoder().encodeToString(new byte[KEY_BYTES]))));
+        when(store.read("clients:CLI-1")).thenReturn(Optional.of(codec.encode(cachedActive)));
+        final ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+        when(store.put(eq("clients:CLI-1"), eq(9L), payload.capture(), eq(CLIENT_TTL)))
+                .thenReturn(true);
+
+        assertThat(updater.clientChanged(new Versioned<>(unnamed, 9L)))
+                .isEqualTo(CacheWrite.APPLIED);
+        assertThat(codec.decode(payload.getValue())).contains(CLIENT);
+    }
+
+    @Test
+    void should_evict_when_a_nameless_client_event_has_no_cached_name() {
+        final ClientProfile unnamed = new ClientProfile("CLI-3", null, ClientStatus.ACTIVE,
+                ClientSegment.RETAIL, TaxRegime.GENERAL, Markets.CO);
+        when(store.read("clients:CLI-3")).thenReturn(Optional.empty());
+        when(store.evict("clients:CLI-3", 2L, CLIENT_TTL)).thenReturn(true);
+
+        assertThat(updater.clientChanged(new Versioned<>(unnamed, 2L)))
+                .isEqualTo(CacheWrite.APPLIED);
+        verify(store, never()).put(anyString(), anyLong(), anyString(), eq(CLIENT_TTL));
+    }
+
+    @Test
+    void should_count_changes_dropped_after_retries() {
+        updater.clientChangeFailed();
+        updater.productChangeFailed();
+
+        assertThat(outcome("clients", "error")).isOne();
+        assertThat(outcome("products", "error")).isOne();
+    }
+
+    private double outcome(final String cache, final String outcome) {
+        return registry.counter(CacheMetrics.INVALIDATIONS, CacheMetrics.CACHE_TAG, cache,
+                CacheMetrics.OUTCOME_TAG, outcome).count();
     }
 
     private double ignored(final String cache) {

@@ -120,13 +120,24 @@ class VersionedCacheTest {
         assertThat(cache.apply(ID, change)).isEqualTo(CacheWrite.APPLIED);
         assertThat(cache.apply(ID, change)).isEqualTo(CacheWrite.STALE);
         assertThat(cache.apply(ID, change)).isEqualTo(CacheWrite.FAILED);
+        assertThat(outcome("error")).isZero();
         cache.ignored();
+        cache.failed();
 
         assertThat(outcome("applied")).isOne();
         assertThat(outcome("stale")).isOne();
         assertThat(outcome("error")).isOne();
         assertThat(outcome("ignored")).isOne();
         assertThat(errors("event")).isOne();
+    }
+
+    @Test
+    void should_peek_cached_entries_without_counting_hits() {
+        when(store.read(KEY)).thenReturn(Optional.of(codec.encode(ACTIVE)), Optional.empty());
+
+        assertThat(cache.peek(ID)).contains(ACTIVE);
+        assertThat(cache.peek(ID)).isEmpty();
+        assertThat(count(CacheMetrics.HITS)).isZero();
     }
 
     @Test

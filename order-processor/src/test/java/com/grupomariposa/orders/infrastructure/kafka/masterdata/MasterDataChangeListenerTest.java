@@ -1,6 +1,7 @@
 package com.grupomariposa.orders.infrastructure.kafka.masterdata;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -45,6 +46,27 @@ class MasterDataChangeListenerTest {
         verify(updater).clientChangeIgnored();
         verify(updater).productChangeIgnored();
         verify(updater, never()).clientRemoved(any(), anyLong());
+    }
+
+    @Test
+    void should_throw_a_retryable_failure_when_the_cache_write_fails() {
+        when(updater.clientChanged(any())).thenReturn(CacheWrite.FAILED);
+
+        assertThatThrownBy(() -> listener.onClientChanged(record("clients.changed.v1",
+                MasterDataEventReaderTest.CLIENT))).isInstanceOf(CacheUpdateFailure.class)
+                .hasMessageContaining("clients.changed.v1-0@0");
+    }
+
+    @Test
+    void should_count_changes_skipped_after_exhausting_retries() {
+        final MasterDataChangeRecoverer recoverer =
+                new MasterDataChangeRecoverer(updater, "clients.changed.v1");
+
+        recoverer.accept(record("clients.changed.v1", "{}"), new CacheUpdateFailure("x"));
+        recoverer.accept(record("products.changed.v1", "{}"), new CacheUpdateFailure("x"));
+
+        verify(updater).clientChangeFailed();
+        verify(updater).productChangeFailed();
     }
 
     private static ConsumerRecord<String, byte[]> record(final String topic, final String json) {

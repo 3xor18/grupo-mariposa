@@ -16,11 +16,12 @@ public final class PlatformCatalogParser {
 
     private static final String ENTRY_SEPARATOR = ",";
     private static final String FIELD_SEPARATOR = ":";
-    private static final Pattern DIGITS = Pattern.compile("^\\d{1,2}$");
+    private static final Pattern DIGITS = Pattern.compile("^[0-4]$");
+    private static final Pattern LOCALE = Pattern.compile("^[a-z]{2}-[A-Z]{2}$");
     private static final int CURRENCY_FIELDS = 2;
     private static final int MARKET_FIELDS = 3;
     private static final String MALFORMED_CURRENCY =
-            "platform.currencies entry '%s' must look like CODE:DECIMALS";
+            "platform.currencies entry '%s' must look like CODE:DIGITS with DIGITS 0..4";
     private static final String MALFORMED_MARKET =
             "platform.markets entry '%s' must look like CODE:CURRENCY:LOCALE";
     private static final String DUPLICATED_CURRENCY = "Currency %s is configured more than once";
@@ -41,7 +42,7 @@ public final class PlatformCatalogParser {
     static CurrencyCatalog currencies(final String raw) {
         final Map<CurrencyCode, Integer> digits = new LinkedHashMap<>();
         for (final String entry : entries(raw)) {
-            final String[] fields = entry.split(FIELD_SEPARATOR, -1);
+            final String[] fields = fields(entry);
             if (fields.length != CURRENCY_FIELDS || !DIGITS.matcher(fields[1]).matches()) {
                 throw new IllegalStateException(MALFORMED_CURRENCY.formatted(entry));
             }
@@ -63,7 +64,7 @@ public final class PlatformCatalogParser {
     }
 
     private static MarketDefinition market(final String entry) {
-        final String[] fields = entry.split(FIELD_SEPARATOR, -1);
+        final String[] fields = fields(entry);
         if (fields.length != MARKET_FIELDS) {
             throw new IllegalStateException(MALFORMED_MARKET.formatted(entry));
         }
@@ -71,11 +72,15 @@ public final class PlatformCatalogParser {
                 new IllegalStateException(MALFORMED_MARKET.formatted(entry)));
         final CurrencyCode currency = CurrencyCode.parse(fields[1]).orElseThrow(() ->
                 new IllegalStateException(MALFORMED_MARKET.formatted(entry)));
-        final Locale locale = Locale.forLanguageTag(fields[2]);
-        if (locale.getLanguage().isEmpty()) {
+        if (!LOCALE.matcher(fields[2]).matches()) {
             throw new IllegalStateException(INVALID_LOCALE.formatted(entry));
         }
-        return new MarketDefinition(code, currency, locale);
+        return new MarketDefinition(code, currency, Locale.forLanguageTag(fields[2]));
+    }
+
+    private static String[] fields(final String entry) {
+        return Arrays.stream(entry.split(FIELD_SEPARATOR, -1)).map(String::trim)
+                .toArray(String[]::new);
     }
 
     private static List<String> entries(final String raw) {

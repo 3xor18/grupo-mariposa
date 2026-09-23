@@ -40,9 +40,6 @@ public final class CacheMetrics {
     public void error(final CacheOperation operation) {
         Counter.builder(ERRORS).tag(CACHE_TAG, cache).tag(OPERATION_TAG, operation.tagValue())
                 .register(registry).increment();
-        if (operation == CacheOperation.EVENT) {
-            invalidation(ERROR);
-        }
     }
 
     public void invalidation(final CacheWrite result) {
@@ -51,6 +48,10 @@ public final class CacheMetrics {
 
     public void ignored() {
         invalidation(IGNORED);
+    }
+
+    public void failed() {
+        invalidation(ERROR);
     }
 
     private void invalidation(final String outcome) {

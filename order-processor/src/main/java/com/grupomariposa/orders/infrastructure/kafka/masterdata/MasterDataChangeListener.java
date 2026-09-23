@@ -13,6 +13,7 @@ public final class MasterDataChangeListener {
 
     public static final String CLIENTS_LISTENER_ID = "clients-changed-listener";
     public static final String PRODUCTS_LISTENER_ID = "products-changed-listener";
+    private static final String WRITE_FAILED = "Cache update failed for %s-%d@%d";
     private static final Logger LOG = LoggerFactory.getLogger(MasterDataChangeListener.class);
 
     private final MasterDataEventReader reader;
@@ -46,14 +47,21 @@ public final class MasterDataChangeListener {
 
     private void handle(final ConsumerRecord<String, byte[]> consumerRecord,
                         final Function<byte[], MasterDataChange> read, final Runnable ignored) {
+        final MasterDataChange change;
         try {
-            final CacheWrite result = read.apply(consumerRecord.value()).applyTo(updater);
-            LOG.debug("Master data change {}-{}@{} {}", consumerRecord.topic(),
-                    consumerRecord.partition(), consumerRecord.offset(), result);
+            change = read.apply(consumerRecord.value());
         } catch (MalformedChangeEvent malformed) {
             ignored.run();
             LOG.warn("Ignored malformed master data change {}-{}@{}: {}", consumerRecord.topic(),
                     consumerRecord.partition(), consumerRecord.offset(), malformed.getMessage());
+            return;
         }
+        final CacheWrite result = change.applyTo(updater);
+        if (result == CacheWrite.FAILED) {
+            throw new CacheUpdateFailure(WRITE_FAILED.formatted(consumerRecord.topic(),
+                    consumerRecord.partition(), consumerRecord.offset()));
+        }
+        LOG.debug("Master data change {}-{}@{} {}", consumerRecord.topic(),
+                consumerRecord.partition(), consumerRecord.offset(), result);
     }
 }

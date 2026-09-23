@@ -21,6 +21,8 @@ import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderMessageMapper;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.OrderMessageReader;
 import com.grupomariposa.orders.infrastructure.kafka.inbound.RetryableRecordFailure;
 import com.grupomariposa.orders.infrastructure.kafka.masterdata.MasterDataChangeListener;
+import com.grupomariposa.orders.infrastructure.kafka.masterdata.MasterDataChangeRecoverer;
+import com.grupomariposa.orders.infrastructure.kafka.masterdata.MasterDataErrorHandlers;
 import com.grupomariposa.orders.infrastructure.kafka.masterdata.MasterDataEventReader;
 import com.grupomariposa.orders.infrastructure.kafka.masterdata.MasterDataListenerSettings;
 import com.grupomariposa.orders.infrastructure.kafka.outbound.KafkaEventPublisher;
@@ -42,7 +44,6 @@ import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.KafkaAdmin;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
-import org.springframework.kafka.listener.CommonLoggingErrorHandler;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 
@@ -109,17 +110,20 @@ public class KafkaConfiguration {
     public ConcurrentKafkaListenerContainerFactory<Object, Object>
             masterDataListenerContainerFactory(
             final ConcurrentKafkaListenerContainerFactoryConfigurer configurer,
-            final ConsumerFactory<Object, Object> consumerFactory) {
+            final ConsumerFactory<Object, Object> consumerFactory,
+            final MasterDataProperties properties, final MasterDataCacheUpdater updater) {
         final ConcurrentKafkaListenerContainerFactory<Object, Object> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         configurer.configure(factory, consumerFactory);
-        factory.setCommonErrorHandler(new CommonLoggingErrorHandler());
+        factory.setCommonErrorHandler(
+                MasterDataErrorHandlers.create(properties.retry(),
+                        new MasterDataChangeRecoverer(updater, properties.clientsChangedTopic())));
         return factory;
     }
 
     @Bean
-    public MasterDataChangeListener masterDataChangeListener(final ObjectMapper objectMapper,
-                                                             final MasterDataCacheUpdater updater) {
+    public MasterDataChangeListener masterDataChangeListener(
+            final ObjectMapper objectMapper, final MasterDataCacheUpdater updater) {
         return new MasterDataChangeListener(new MasterDataEventReader(objectMapper), updater);
     }
 

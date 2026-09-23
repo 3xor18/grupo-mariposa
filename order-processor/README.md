@@ -60,6 +60,10 @@ Las propiedades son inmutables: un cambio en el config server se aplica con un r
 
 ### Mercados y monedas
 
+Gramática (igual en todos los servicios): entradas separadas por coma y campos por `:`, con espacios
+recortados; mercado `CODE:CURRENCY:LOCALE` con `^[A-Z]{2}$`, `^[A-Z]{3}$` y `^[a-z]{2}-[A-Z]{2}$`; moneda
+`CODE:DIGITS` con `DIGITS` entre 0 y 4; sin duplicados y con la moneda de cada mercado declarada.
+
 El mercado es un código ISO 3166 de dos letras (`MarketCode`) validado contra el catálogo de plataforma
 (ADR [0006](../docs/adr/0006-configurable-market-catalog.md)): cada mercado declara su moneda y locale, y cada
 moneda sus decimales. Un catálogo mal escrito, una moneda sin decimales o un mercado sin tasas detienen el
@@ -97,6 +101,7 @@ a `orders.processing.dlt` con categoría `VALIDATION`. Agregar un país es sólo
 | `KAFKA_MASTER_DATA_ENABLED` | `true` | arranca los listeners de cambios de datos maestros |
 | `KAFKA_TOPIC_CLIENTS_CHANGED` / `KAFKA_TOPIC_PRODUCTS_CHANGED` / `KAFKA_TOPIC_MASTER_DATA_PARTITIONS` | `clients.changed.v1` / `products.changed.v1` / `3` | tópicos compactados de cambios (particiones sólo si `KAFKA_CREATE_TOPICS=true`) |
 | `KAFKA_CACHE_CONSUMER_GROUP` / `KAFKA_MASTER_DATA_CONCURRENCY` | `order-processor-cache` / `1` | consumo de cambios |
+| `KAFKA_MASTER_DATA_RETRY_INITIAL_INTERVAL` / `_MULTIPLIER` / `_MAX_INTERVAL` / `_MAX_ATTEMPTS` | `500ms` / `2.0` / `10s` / `6` | reintento de un cambio cuando Redis no acepta la escritura |
 | `OUTBOX_RELAY_ENABLED` / `OUTBOX_RELAY_INTERVAL` / `OUTBOX_BATCH_SIZE` / `OUTBOX_LEASE` / `OUTBOX_SEND_TIMEOUT` | `true` / `250ms` / `100` / `30s` / `15s` | relay |
 | `OUTBOX_RETRY_INITIAL_BACKOFF` / `OUTBOX_RETRY_MAX_BACKOFF` | `1s` / `60s` | reintento de publicación |
 | `API_DEFAULT_PAGE_SIZE` / `API_MAX_PAGE_SIZE` / `API_MAX_OFFSET` | `20` / `100` / `10000` | paginación de `GET /orders` (`page * size` acotado) |
@@ -130,10 +135,18 @@ Clientes y productos se cachean en Redis con la versión de la entidad (ADR
   `order-processor-cache`, con su propia container factory y `CommonLoggingErrorHandler`. Un evento completo
   sobrescribe la entrada; uno sin estado completo la borra dejando la versión como tope. Un evento mal formado
   se registra, cuenta como `ignored` y se salta: nunca bloquea la partición ni afecta el procesamiento de pedidos.
+- `clients.changed.v1` no trae el nombre (PII): el estado del evento es completo para la elegibilidad y se
+  conserva el nombre cifrado que ya estaba en caché; si no hay entrada previa se deja sólo la versión y la
+  siguiente lectura trae el perfil completo de la API.
+- Si Redis rechaza la escritura de un evento, el listener lanza un error reintentable y el contenedor reintenta
+  con backoff exponencial acotado (las escrituras son idempotentes por versión). Agotados los intentos se
+  registra, cuenta como `error` y se sigue con el siguiente registro; el TTL cubre la ventana.
 - El TTL (`CACHE_CLIENTS_TTL` 60 s, `CACHE_PRODUCTS_TTL` 10 min) es la red de seguridad si se pierde un evento.
   Si Redis falla, la lectura va directo a la API y el pedido sigue.
 - Métricas: `orders_cache_hits_total`, `orders_cache_misses_total`, `orders_cache_errors_total{cache,operation}`
-  y `orders_cache_invalidations_total{cache,outcome=applied|stale|ignored|error}`.
+  y `orders_cache_invalidations_total{cache,outcome=applied|stale|ignored|error}` (`error` una vez por evento
+  descartado tras los reintentos; cada intento fallido suma en `orders_cache_errors_total{operation="event"}`).
+  Los TTL deben ser duraciones positivas.
 
 ## Seguridad y datos personales
 

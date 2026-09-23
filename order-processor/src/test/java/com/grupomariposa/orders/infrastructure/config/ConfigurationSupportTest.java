@@ -54,12 +54,13 @@ class ConfigurationSupportTest {
     @Test
     void should_parse_the_platform_catalog() {
         final MarketCatalog catalog = PlatformCatalogParser.parse(new PlatformProperties(
-                " MX:MXN:es-MX, CL:CLP:es-CL ,EC:USD:es-EC", "MXN:2,CLP:0,USD:2"));
+                " MX : MXN : es-MX, CL:CLP:es-CL ,EC:USD:es-EC", " MXN : 2 ,CLP:0,USD:4"));
 
         assertThat(catalog.supportedMarkets()).containsExactly(Markets.MX, Markets.CL,
                 Markets.EC);
         assertThat(catalog.fractionDigitsOf(Markets.CL)).isZero();
         assertThat(catalog.accepts(Markets.EC, Currencies.USD)).isTrue();
+        assertThat(catalog.fractionDigitsOf(Markets.EC)).isEqualTo(4);
     }
 
     @ParameterizedTest(name = "markets={0} currencies={1}")
@@ -74,7 +75,18 @@ class ConfigurationSupportTest {
         "MX:MXN:es-MX|MXN:two",
         "MX:MXN:es-MX|mxn:2",
         "MX:MXN:es-MX|MXN:2,MXN:2",
-        "MX:MXN:es-MX|MXN:9"
+        "MX:MXN:es-MX|MXN:9",
+        "MX:MXN:es-MX|MXN:5",
+        "MX:MXN:es-MX|MXN:-1",
+        "MX:MXN:es-MX|MXN:02",
+        "MX:MXN:es-MX|MXNN:2",
+        "mx:MXN:es-MX|MXN:2",
+        "MX:MXN:es|MXN:2",
+        "MX:MXN:es_MX|MXN:2",
+        "MX:MXN:ES-mx|MXN:2",
+        "MX:MXN:es-MX:x|MXN:2",
+        "MX:MXN:es-MX,CL:CLP:es-CL|MXN:2",
+        "MX:MXN:es-MX|MXN:2:1"
     })
     void should_fail_fast_on_malformed_platform_catalog(final String markets,
                                                        final String currencies) {
