@@ -2,12 +2,11 @@ package com.grupomariposa.orders.application.service;
 
 import com.grupomariposa.orders.application.command.OrderCommand;
 import com.grupomariposa.orders.application.port.out.TimeProvider;
-import com.grupomariposa.orders.domain.model.ClientProfile;
 import com.grupomariposa.orders.domain.model.ClientSnapshot;
 import com.grupomariposa.orders.domain.model.CurrencyCatalog;
 import com.grupomariposa.orders.domain.model.Decision;
+import com.grupomariposa.orders.domain.model.EvaluationInput;
 import com.grupomariposa.orders.domain.model.FailureDetails;
-import com.grupomariposa.orders.domain.model.Lookup;
 import com.grupomariposa.orders.domain.model.Order;
 import com.grupomariposa.orders.domain.model.OrderIdentity;
 import com.grupomariposa.orders.domain.model.OrderLine;
@@ -27,13 +26,14 @@ public final class OrderAssembler {
         this.currencies = Objects.requireNonNull(currencies, "currencies");
     }
 
-    public Order decided(final OrderCommand command, final Lookup<ClientProfile> client,
+    public Order decided(final OrderCommand command, final EvaluationInput input,
                          final Decision decision) {
         return new Order(identity(command), decision.status(), command.market(),
                 command.currency(), command.channel(),
-                ClientSnapshot.of(command.clientId(), client),
+                ClientSnapshot.of(command.clientId(), input.client()),
                 decision.lines(), decision.totals(), decision.violations(), null,
-                timeline(command), command.reception().traceId());
+                timeline(command), command.reception().traceId(),
+                input.taxRates().effectiveFrom());
     }
 
     public Order technicalFailure(final OrderCommand command, final FailureDetails failure) {
@@ -43,7 +43,7 @@ public final class OrderAssembler {
                 ClientSnapshot.unresolved(command.clientId()),
                 lines, Totals.zero(currencies.fractionDigitsOf(command.currency())), List.of(),
                 failure, timeline(command),
-                command.reception().traceId());
+                command.reception().traceId(), null);
     }
 
     private static OrderIdentity identity(final OrderCommand command) {

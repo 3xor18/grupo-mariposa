@@ -45,9 +45,14 @@ class ObservabilityTest {
         observer.outcome(new ProcessingOutcome.VersionConflict("O", "E", 1, "W"));
         observer.outcome(new ProcessingOutcome.TechnicalFailure("O", "E", "PERSISTENCE", true));
 
-        assertThat(count(MetricsProcessingObserver.PROCESSED, "status", "APPROVED")).isOne();
-        assertThat(count(MetricsProcessingObserver.REJECTED, "reason", "CLIENT_NOT_FOUND"))
-                .isOne();
+        assertThat(registry.counter(MetricsProcessingObserver.PROCESSED, "status", "APPROVED",
+                "market", "MX").count()).isOne();
+        assertThat(registry.counter(MetricsProcessingObserver.REJECTED, "reason",
+                "CLIENT_NOT_FOUND", "market", "MX").count()).isOne();
+        assertThat(registry.counter(MetricsProcessingObserver.AMOUNT, "currency", "MXN",
+                "market", "MX").count()).isEqualTo(2100.11);
+        assertThat(registry.counter(MetricsProcessingObserver.LINES, "market", "MX").count())
+                .isEqualTo(2.0);
         assertThat(registry.counter(MetricsProcessingObserver.DUPLICATES).count()).isOne();
         assertThat(registry.counter(MetricsProcessingObserver.STALE).count()).isOne();
         assertThat(registry.counter(MetricsProcessingObserver.CONFLICTS).count()).isOne();

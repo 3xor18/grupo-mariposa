@@ -229,6 +229,10 @@ app:
       enabled: ${CACHE_PRODUCTS_ENABLED:${CACHE_ENABLED:true}}
       ttl: ${CACHE_PRODUCTS_TTL:10m}
       key-prefix: ${CACHE_PRODUCTS_KEY_PREFIX:products}
+  tax-rates:
+    seed-from: ${TAX_RATES_SEED_FROM:2000-01-01T00:00:00Z}
+    refresh-interval: ${TAX_RATES_REFRESH_INTERVAL:30s}
+    allow-past-valid-from: ${TAX_RATES_ALLOW_PAST_VALID_FROM:false}
   persistence:
     transaction-attempts: ${MONGO_TX_ATTEMPTS:5}
     transaction-retry-backoff: ${MONGO_TX_RETRY_BACKOFF:20ms}

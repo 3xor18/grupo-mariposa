@@ -12,6 +12,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.grupomariposa.orders.application.FixedTaxRateSource;
 import com.grupomariposa.orders.application.command.OrderCommand;
 import com.grupomariposa.orders.application.error.ErrorCategory;
 import com.grupomariposa.orders.application.error.ExternalTransientException;
@@ -49,6 +50,8 @@ class OrderEnricherTest {
     private final ProductCatalog products = mock(ProductCatalog.class);
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final AtomicBoolean clientStarted = new AtomicBoolean();
+    private static final FixedTaxRateSource TAX_RATES =
+            new FixedTaxRateSource(DomainFixtures.schedule());
 
     @AfterEach
     void shutdown() {
@@ -99,7 +102,7 @@ class OrderEnricherTest {
     @Test
     void should_fail_as_unexpected_when_interrupted_waiting_for_permit() {
         final OrderEnricher direct = new OrderEnricher(clients, products, Runnable::run, 1,
-                DomainFixtures.CURRENCIES);
+                DomainFixtures.CURRENCIES, TAX_RATES);
         Thread.currentThread().interrupt();
 
         assertThatThrownBy(() -> direct.enrich(goldenCommand()))
@@ -146,7 +149,7 @@ class OrderEnricherTest {
                 .thenThrow(new ExternalTransientException("clients-api", "503", null));
 
         assertThatThrownBy(() -> new OrderEnricher(clients, products, clientFirst, 4,
-                DomainFixtures.CURRENCIES)
+                DomainFixtures.CURRENCIES, TAX_RATES)
                 .enrich(goldenCommand())).isInstanceOf(ExternalTransientException.class);
         deferred.forEach(Runnable::run);
 
@@ -154,7 +157,8 @@ class OrderEnricherTest {
     }
 
     private OrderEnricher enricher(final int permits) {
-        return new OrderEnricher(clients, products, executor, permits, DomainFixtures.CURRENCIES);
+        return new OrderEnricher(clients, products, executor, permits, DomainFixtures.CURRENCIES,
+                TAX_RATES);
     }
 
     private static OrderCommand commandWithItems(final int count) {
