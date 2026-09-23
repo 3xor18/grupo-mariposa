@@ -5,7 +5,7 @@ Feature: master data changes invalidate the order-processor cache through change
     * def patchEntity = read('common/patch-entity.feature')
     * def ensureStatus = read('common/ensure-status.feature')
     * def orderUntil = read('common/order-until.feature')
-    * def orderPrefix = function(suffix) { return 'ORD-MX-E2EC' + runId + suffix + '-' }
+    * def newOrderPrefix = function(suffix) { return 'ORD-MX-E2EC' + runId + suffix + '-' }
     * def payload = function(record) { return karate.fromString(record.value) }
     * def quoted = function(version) { return '"' + version + '"' }
     * def clientUrl = clientsUrl + '/clients/CLI-70001'
@@ -18,8 +18,8 @@ Feature: master data changes invalidate the order-processor cache through change
     * def before = call getEntity { resourceUrl: '#(clientUrl)' }
     And match before.etag == quoted(before.entity.version)
     * def clientOrder = { clientId: 'CLI-70001' }
-    * def warm = { orderPrefix: '#(orderPrefix("W"))', fields: '#(clientOrder)' }
-    * call orderUntil karate.merge(warm, { expectedStatus: 'APPROVED', attempts: 1 })
+    * def warm = ({ orderPrefix: newOrderPrefix('W'), fields: clientOrder })
+    * call orderUntil karate.merge(warm, { expectedStatus: 'APPROVED' })
     * def changesMark = kafka.mark(topics.clientsChanged)
     * def block = { resourceUrl: '#(clientUrl)', body: { status: 'BLOCKED' } }
     * def blocked = call patchEntity karate.merge(block, { ifMatch: before.etag })
@@ -29,13 +29,16 @@ Feature: master data changes invalidate the order-processor cache through change
     * def events = kafka.readAfter(changesMark, 'CLI-70001', 1, waits.eventMillis)
     * def expectedEvent = { status: 'BLOCKED', version: '#(blocked.entity.version)' }
     And match payload(events[0]) contains expectedEvent
-    * def reject = { orderPrefix: '#(orderPrefix("B"))', fields: '#(clientOrder)' }
+    * def reject = ({ orderPrefix: newOrderPrefix('B'), fields: clientOrder })
     * def rejected = call orderUntil karate.merge(reject, { expectedStatus: 'REJECTED' })
     And match rejected.order.reason == 'CLIENT_NOT_ACTIVE'
+    * def unblockMark = kafka.mark(topics.clientsChanged)
     * def unblock = { resourceUrl: '#(clientUrl)', body: { status: 'ACTIVE' } }
     * def active = call patchEntity karate.merge(unblock, { ifMatch: blocked.etag })
     And match active.status == 200
-    * def approve = { orderPrefix: '#(orderPrefix("U"))', fields: '#(clientOrder)' }
+    * def unblockEvents = kafka.readAfter(unblockMark, 'CLI-70001', 1, waits.eventMillis)
+    And match payload(unblockEvents[0]) contains { status: 'ACTIVE' }
+    * def approve = ({ orderPrefix: newOrderPrefix('U'), fields: clientOrder })
     * call orderUntil karate.merge(approve, { expectedStatus: 'APPROVED' })
 
   Scenario: discontinuing a cached product rejects the next order and reactivating approves again
@@ -44,8 +47,8 @@ Feature: master data changes invalidate the order-processor cache through change
     * def before = call getEntity productArgs
     * def items = [{ productId: 'PRD-020', quantity: 2, unitPrice: 10.0 }]
     * def productOrder = { items: '#(items)' }
-    * def warm = { orderPrefix: '#(orderPrefix("PW"))', fields: '#(productOrder)' }
-    * call orderUntil karate.merge(warm, { expectedStatus: 'APPROVED', attempts: 1 })
+    * def warm = ({ orderPrefix: newOrderPrefix('PW'), fields: productOrder })
+    * call orderUntil karate.merge(warm, { expectedStatus: 'APPROVED' })
     * def changesMark = kafka.mark(topics.productsChanged)
     * def discontinue = karate.merge(productArgs, { body: { status: 'DISCONTINUED' } })
     * def discontinued = call patchEntity karate.merge(discontinue, { ifMatch: before.etag })
@@ -54,16 +57,21 @@ Feature: master data changes invalidate the order-processor cache through change
     * def events = kafka.readAfter(changesMark, productKey, 1, waits.eventMillis)
     * def expectedEvent = { status: 'DISCONTINUED', version: '#(discontinued.entity.version)' }
     And match payload(events[0]) contains expectedEvent
-    * def reject = { orderPrefix: '#(orderPrefix("PB"))', fields: '#(productOrder)' }
+    * def reject = ({ orderPrefix: newOrderPrefix('PB'), fields: productOrder })
     * def rejected = call orderUntil karate.merge(reject, { expectedStatus: 'REJECTED' })
     And match rejected.order.reason == 'PRODUCT_NOT_ACTIVE'
+    * def reactivateMark = kafka.mark(topics.productsChanged)
     * def reactivate = karate.merge(productArgs, { body: { status: 'ACTIVE' } })
     * def active = call patchEntity karate.merge(reactivate, { ifMatch: discontinued.etag })
     And match active.status == 200
-    * def approve = { orderPrefix: '#(orderPrefix("PU"))', fields: '#(productOrder)' }
+    * def reactivated = kafka.readAfter(reactivateMark, productKey, 1, waits.eventMillis)
+    And match payload(reactivated[0]) contains { status: 'ACTIVE' }
+    * def approve = ({ orderPrefix: newOrderPrefix('PU'), fields: productOrder })
     * call orderUntil karate.merge(approve, { expectedStatus: 'APPROVED' })
 
   Scenario: a stale If-Match is rejected with 412 and the version does not change
+    * def bump = { resourceUrl: '#(clientUrl)', body: { segment: 'WHOLESALE' } }
+    * call patchEntity bump
     * def current = call getEntity { resourceUrl: '#(clientUrl)' }
     * def staleTag = quoted(current.entity.version - 1)
     * def change = { resourceUrl: '#(clientUrl)', body: { segment: 'WHOLESALE' } }

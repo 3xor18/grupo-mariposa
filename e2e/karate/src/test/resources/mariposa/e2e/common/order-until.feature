@@ -3,6 +3,7 @@ Feature: Publish fresh orders until one ends in the expected status (eventually 
 
   Scenario:
     * def maxAttempts = karate.get('attempts', 5)
+    * def backoffMillis = karate.get('backoffMillis', 400)
     * def orderEvent = read('classpath:mariposa/e2e/common/order-event.js')
     * def waitFinal = 'classpath:mariposa/e2e/common/wait-final.feature'
     * def publish = 'classpath:mariposa/e2e/common/publish-order.feature'
@@ -24,6 +25,7 @@ Feature: Publish fresh orders until one ends in the expected status (eventually 
           if (last.status == expectedStatus) {
             return last;
           }
+          java.lang.Thread.sleep(backoffMillis * attempt);
         }
         return last;
       }
