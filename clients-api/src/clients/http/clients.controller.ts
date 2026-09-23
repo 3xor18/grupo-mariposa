@@ -6,12 +6,13 @@ import { ROUTES } from '../../shared/constants/routes.constants';
 import { FaultInjectionKey } from '../../shared/fault-injection/fault-injection-key.decorator';
 import { GetClientUseCase } from '../application/get-client.use-case';
 import { UpdateClientUseCase } from '../application/update-client.use-case';
+import { VersionPrecondition } from '../domain/client';
 import { ClientResponse } from './client.response';
 import { toClientResponse } from './client-response.mapper';
 import { ApiGetClient, ApiUpdateClient } from './clients.openapi';
 import { CLIENT_ID_PARAM, GetClientParams } from './get-client.params';
 import { RequireChangesPipe, toClientChanges, UpdateClientRequest } from './update-client.request';
-import { EtagInterceptor, ExpectedVersion } from './versioning';
+import { EtagInterceptor, IfMatch } from './versioning';
 
 const CLIENT_ID_ROUTE = `:${CLIENT_ID_PARAM}`;
 
@@ -38,12 +39,12 @@ export class ClientsController {
   async update(
     @Param() params: GetClientParams,
     @Body(RequireChangesPipe) request: UpdateClientRequest,
-    @ExpectedVersion() expectedVersion: number | undefined,
+    @IfMatch() precondition: VersionPrecondition | undefined,
   ): Promise<ClientResponse> {
     const command = {
       clientId: params.clientId,
       changes: toClientChanges(request),
-      ...(expectedVersion === undefined ? {} : { expectedVersion }),
+      ...(precondition === undefined ? {} : { precondition }),
     };
     return toClientResponse(await this.updateClient.execute(command));
   }
