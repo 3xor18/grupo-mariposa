@@ -12,6 +12,7 @@ import {
 
 export const TEST_ISSUER = 'http://localhost:8180/realms/mariposa';
 export const TEST_ROLE = 'clients-reader';
+export const TEST_ADMIN_ROLE = 'clients-admin';
 export const TEST_AUDIENCE = 'clients-api';
 export const TEST_CLIENT = 'order-processor';
 const KEY_ID = 'test-key';

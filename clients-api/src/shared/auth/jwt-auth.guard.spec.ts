@@ -5,6 +5,8 @@ import { DisabledAccessTokenVerifier } from './access-token-verifier';
 import { createAccessTokenVerifier } from './auth.module';
 import { JoseAccessTokenVerifier } from './jose-access-token-verifier';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { AccessRole, REQUIRED_ACCESS_ROLE_KEY } from './access-role';
+import { IS_PUBLIC_KEY } from './public.decorator';
 import { AuthenticatedRequest, Principal } from './principal';
 
 function contextFor(request: Partial<AuthenticatedRequest>): ExecutionContext {
@@ -17,11 +19,15 @@ function contextFor(request: Partial<AuthenticatedRequest>): ExecutionContext {
 
 describe('JwtAuthGuard', () => {
   const verifier = {
-    authenticate: jest.fn<Promise<Principal | undefined>, [string | undefined]>(),
+    authenticate: jest.fn<Promise<Principal | undefined>, [string | undefined, AccessRole?]>(),
   };
 
-  function guard(isPublic: boolean | undefined): JwtAuthGuard {
-    const reflector = { getAllAndOverride: jest.fn().mockReturnValue(isPublic) };
+  function guard(isPublic: boolean | undefined, role?: AccessRole): JwtAuthGuard {
+    const metadata: Record<string, unknown> = {
+      [IS_PUBLIC_KEY]: isPublic,
+      [REQUIRED_ACCESS_ROLE_KEY]: role,
+    };
+    const reflector = { getAllAndOverride: jest.fn((key: string) => metadata[key]) };
     return new JwtAuthGuard(reflector as unknown as Reflector, verifier);
   }
 
@@ -42,8 +48,18 @@ describe('JwtAuthGuard', () => {
     const request: Partial<AuthenticatedRequest> = { headers: { authorization: 'Bearer x.y.z' } };
 
     await expect(guard(undefined).canActivate(contextFor(request))).resolves.toBe(true);
-    expect(verifier.authenticate).toHaveBeenCalledWith('Bearer x.y.z');
+    expect(verifier.authenticate).toHaveBeenCalledWith('Bearer x.y.z', AccessRole.READER);
     expect(request.principal).toEqual({ id: 'order-processor' });
+  });
+
+  it('should_request_the_admin_role_when_route_requires_it', async () => {
+    verifier.authenticate.mockResolvedValueOnce({ id: 'backoffice' });
+    const request: Partial<AuthenticatedRequest> = { headers: { authorization: 'Bearer a.b.c' } };
+
+    await expect(guard(false, AccessRole.ADMIN).canActivate(contextFor(request))).resolves.toBe(
+      true,
+    );
+    expect(verifier.authenticate).toHaveBeenCalledWith('Bearer a.b.c', AccessRole.ADMIN);
   });
 
   it('should_leave_principal_empty_when_authentication_is_disabled', async () => {
