@@ -67,8 +67,9 @@ func (f *fakeStore) Release(_ context.Context, id, _ string, attempts int, at ti
 	return f.releaseErr == nil, f.releaseErr
 }
 
-func (f *fakeStore) CountUnpublished(context.Context) (int64, error) {
-	return int64(len(f.released)), f.countErr
+func (f *fakeStore) Backlog(context.Context) (outbox.Backlog, error) {
+	return outbox.Backlog{Pending: int64(len(f.released)), Oldest: now.Add(-time.Minute)},
+		f.countErr
 }
 
 type fakePublisher struct {
@@ -91,11 +92,14 @@ func (p *fakePublisher) Publish(ctx context.Context, messages []outbox.Message) 
 
 type fakeRecorder struct {
 	pending   int64
+	oldestAge time.Duration
 	published int
 	failed    int
 }
 
-func (r *fakeRecorder) OutboxPending(count int64) { r.pending = count }
+func (r *fakeRecorder) OutboxBacklog(count int64, age time.Duration) {
+	r.pending, r.oldestAge = count, age
+}
 func (r *fakeRecorder) OutboxPublished(count int) { r.published += count }
 func (r *fakeRecorder) OutboxFailed(count int)    { r.failed += count }
 
@@ -150,7 +154,7 @@ func assertClaim(t *testing.T, claim outbox.Claim) {
 
 func assertCycleSideEffects(t *testing.T, recorder *fakeRecorder, publisher *fakePublisher) {
 	t.Helper()
-	if *recorder != (fakeRecorder{pending: 1, published: 1, failed: 1}) {
+	if *recorder != (fakeRecorder{pending: 1, oldestAge: time.Minute, published: 1, failed: 1}) {
 		t.Fatalf("unexpected metrics %+v", recorder)
 	}
 	if string(publisher.messages[0].Key) != "MX:PRD-001" || !publisher.deadline {
@@ -161,8 +165,9 @@ func assertCycleSideEffects(t *testing.T, recorder *fakeRecorder, publisher *fak
 func TestCycleWithNothingToPublish(t *testing.T) {
 	store, publisher, recorder := &fakeStore{}, &fakePublisher{}, &fakeRecorder{}
 	published, err := newRelay(store, publisher, recorder, &bytes.Buffer{}).Cycle(t.Context())
-	if err != nil || published != 0 || len(publisher.messages) != 0 {
-		t.Fatalf("want idle cycle, got %d err=%v", published, err)
+	if err != nil || published != 0 || len(publisher.messages) != 0 || recorder.oldestAge != 0 {
+		t.Fatalf("want idle cycle with no backlog age, got %d err=%v %+v", published, err,
+			recorder)
 	}
 }
 
