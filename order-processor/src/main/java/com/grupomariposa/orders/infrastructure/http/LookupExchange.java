@@ -6,7 +6,7 @@ import com.grupomariposa.orders.domain.model.Lookup;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -37,7 +37,8 @@ public final class LookupExchange {
     }
 
     public <B, T> Lookup<T> fetch(final RestClient.RequestHeadersSpec<?> request,
-                                  final Class<B> bodyType, final Function<B, T> mapper) {
+                                  final Class<B> bodyType,
+                                  final BiFunction<B, HttpHeaders, T> mapper) {
         try {
             return request.exchange((ignored, response) ->
                     interpret(response, bodyType, mapper), true);
@@ -55,10 +56,12 @@ public final class LookupExchange {
 
     private <B, T> Lookup<T> interpret(final ConvertibleClientHttpResponse response,
                                        final Class<B> bodyType,
-                                       final Function<B, T> mapper) throws IOException {
+                                       final BiFunction<B, HttpHeaders, T> mapper)
+            throws IOException {
         final HttpStatusCode status = response.getStatusCode();
         if (status.is2xxSuccessful()) {
-            return Lookup.found(mapper.apply(readBody(response, bodyType)));
+            return Lookup.found(mapper.apply(readBody(response, bodyType),
+                    response.getHeaders()));
         }
         if (status.value() == HttpStatus.NOT_FOUND.value()) {
             return Lookup.notFound();
