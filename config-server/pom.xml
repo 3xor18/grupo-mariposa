@@ -24,7 +24,7 @@
         <tomcat.version>10.1.60</tomcat.version>
         <bouncycastle.version>1.86</bouncycastle.version>
         <spring-cloud.version>2025.0.3</spring-cloud.version>
-        <jacoco.version>0.8.13</jacoco.version>
+        <jacoco.version>0.8.15</jacoco.version>
         <aws-sdk.version>2.31.51</aws-sdk.version>
     </properties>
 
