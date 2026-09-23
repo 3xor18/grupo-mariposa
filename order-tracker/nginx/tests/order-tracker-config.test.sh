@@ -147,6 +147,12 @@ test_market_names_are_optional() {
 test_invalid_catalogs_are_rejected() {
   check "lowercase market" "$(status_of run_local PLATFORM_MARKETS=mx:MXN:es-MX)" "1"
   check "missing locale" "$(status_of run_local PLATFORM_MARKETS=MX:MXN)" "1"
+  check "language only locale" "$(status_of run_local PLATFORM_MARKETS=MX:MXN:es)" "1"
+  check "underscore locale" "$(status_of run_local PLATFORM_MARKETS=MX:MXN:es_MX)" "1"
+  check "duplicated market" \
+    "$(status_of run_local PLATFORM_MARKETS=MX:MXN:es-MX,MX:MXN:es-MX)" "1"
+  check "reports duplicated market" \
+    "$(grep -c 'declares MX more than once' "$WORK/stderr")" "1"
   check "digits out of range" "$(status_of run_local PLATFORM_CURRENCIES=MXN:2,CLP:9)" "1"
   check "undeclared currency" \
     "$(status_of run_local PLATFORM_MARKETS=MX:MXN:es-MX,EC:USD:es-EC)" "1"
