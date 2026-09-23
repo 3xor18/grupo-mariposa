@@ -320,6 +320,7 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USERNAME:?run ./mariposa.sh init}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?run ./mariposa.sh init}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/demo-entrevista.json
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro

@@ -243,6 +243,8 @@ Uso: ./mariposa.sh <comando>
   mongo [expresión]    consulta la base orders
   test                 corre las pruebas de los componentes
   e2e                  corre Karate + Playwright contra la plataforma levantada
+  demo-traffic [min]   genera pedidos variados en vivo para el tablero de Grafana (DEMO_CHAOS=true
+                       agrega fallas de dependencias)
 EOF
 }
 
@@ -267,6 +269,7 @@ main() {
     mongo) cmd_mongo "$@" ;;
     test) cmd_test ;;
     e2e) cmd_e2e ;;
+    demo-traffic) bash "${ROOT_DIR}/load/demo-traffic.sh" "$@" ;;
     *) usage ;;
   esac
 }
