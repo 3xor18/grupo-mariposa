@@ -1,25 +1,28 @@
+import 'package:order_tracker/core/markets/market_catalog.dart';
 import 'package:order_tracker/core/money/money.dart';
 import 'package:order_tracker/core/money/unit_price.dart';
 import 'package:order_tracker/features/orders/data/dto/order_dto.dart';
 import 'package:order_tracker/features/orders/data/dto/order_page_dto.dart';
 import 'package:order_tracker/features/orders/data/mappers/order_codes.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_line.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_summary.dart';
 
 extension OrderDtoMapper on OrderDto {
-  Order toDomain() {
+  Order toDomain(MarketCatalog catalog) {
+    final digits = catalog.fractionDigitsOf(currency);
     return Order(
       orderId: orderId,
       eventVersion: eventVersion,
       status: OrderStatusCodes.toDomain(status),
-      market: MarketCodes.toDomain(market),
+      market: MarketCode(market),
       currency: currency,
       channel: channel,
       client: client.toDomain(),
-      lines: lines.map((line) => line.toDomain(currency)).toList(growable: false),
-      totals: totals.toDomain(currency),
+      lines: lines.map((line) => line.toDomain(currency, digits)).toList(growable: false),
+      totals: totals.toDomain(currency, digits),
       reason: reason,
       violations: violations.map((violation) => violation.toDomain()).toList(growable: false),
       failure: failure?.toDomain(),
@@ -45,15 +48,20 @@ extension ClientSnapshotDtoMapper on ClientSnapshotDto {
 }
 
 extension OrderLineDtoMapper on OrderLineDto {
-  OrderLine toDomain(String currency) {
-    Money? money(String? amount) => amount == null ? null : Money.parse(amount, currency: currency);
+  OrderLine toDomain(String currency, int digits) {
+    Money? money(String? amount) {
+      return amount == null
+          ? null
+          : Money.parse(amount, currency: currency, fractionDigits: digits);
+    }
+
     return OrderLine(
       productId: productId,
       name: name,
       sku: sku,
       taxCategory: taxCategory,
       quantity: quantity,
-      unitPrice: UnitPrice.parse(unitPrice, currency: currency),
+      unitPrice: UnitPrice.parse(unitPrice, currency: currency, currencyDigits: digits),
       grossSubtotal: money(grossSubtotal),
       discountRate: discountRate,
       discount: money(discount),
@@ -66,8 +74,11 @@ extension OrderLineDtoMapper on OrderLineDto {
 }
 
 extension TotalsDtoMapper on TotalsDto {
-  OrderTotals toDomain(String currency) {
-    Money money(String amount) => Money.parse(amount, currency: currency);
+  OrderTotals toDomain(String currency, int digits) {
+    Money money(String amount) {
+      return Money.parse(amount, currency: currency, fractionDigits: digits);
+    }
+
     return OrderTotals(
       grossSubtotal: money(grossSubtotal),
       discount: money(discount),
@@ -89,14 +100,18 @@ extension FailureDtoMapper on FailureDto {
 }
 
 extension OrderSummaryDtoMapper on OrderSummaryDto {
-  OrderSummary toDomain() {
+  OrderSummary toDomain(MarketCatalog catalog) {
     return OrderSummary(
       orderId: orderId,
       status: OrderStatusCodes.toDomain(status),
-      market: MarketCodes.toDomain(market),
+      market: MarketCode(market),
       clientId: clientId,
       eventVersion: eventVersion,
-      grandTotal: Money.parse(grandTotal, currency: currency),
+      grandTotal: Money.parse(
+        grandTotal,
+        currency: currency,
+        fractionDigits: catalog.fractionDigitsOf(currency),
+      ),
       reason: reason,
       processedAt: processedAt,
     );
@@ -104,9 +119,9 @@ extension OrderSummaryDtoMapper on OrderSummaryDto {
 }
 
 extension OrderPageDtoMapper on OrderPageDto {
-  OrderPage toDomain() {
+  OrderPage toDomain(MarketCatalog catalog) {
     return OrderPage(
-      items: items.map((item) => item.toDomain()).toList(growable: false),
+      items: items.map((item) => item.toDomain(catalog)).toList(growable: false),
       page: page,
       size: size,
       totalElements: totalElements,

@@ -3,6 +3,7 @@ import 'package:order_tracker/core/config/app_config.dart';
 import 'package:order_tracker/core/format/app_formatters.dart';
 import 'package:order_tracker/core/http/api_client.dart';
 import 'package:order_tracker/core/http/authenticated_http_client.dart';
+import 'package:order_tracker/core/markets/market_catalog.dart';
 import 'package:order_tracker/core/platform/browser_location.dart';
 import 'package:order_tracker/core/platform/key_value_store.dart';
 import 'package:order_tracker/features/auth/data/auth_repository_impl.dart';
@@ -20,6 +21,7 @@ final class AppDependencies {
     required this.searchOrder,
     required this.listOrders,
     required this.formatters,
+    required this.catalog,
     this._onDispose,
   });
 
@@ -41,12 +43,13 @@ final class AppDependencies {
       AuthenticatedHttpClient(httpClient, authRepository),
       config.apiBaseUri(appUri: location.current),
     );
-    final orderRepository = OrderRepositoryImpl(OrdersApi(apiClient));
+    final orderRepository = OrderRepositoryImpl(OrdersApi(apiClient), config.catalog);
     return AppDependencies(
       authRepository: authRepository,
       searchOrder: SearchOrder(orderRepository),
       listOrders: ListOrders(orderRepository),
-      formatters: AppFormatters(),
+      formatters: AppFormatters(config.catalog),
+      catalog: config.catalog,
       onDispose: () async {
         httpClient.close();
         await authRepository.dispose();
@@ -58,6 +61,7 @@ final class AppDependencies {
   final SearchOrder searchOrder;
   final ListOrders listOrders;
   final AppFormatters formatters;
+  final MarketCatalog catalog;
   final Future<void> Function()? _onDispose;
 
   Future<void> dispose() async => _onDispose?.call();

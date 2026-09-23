@@ -39,7 +39,7 @@ class OrderHeaderCard extends StatelessWidget {
             Wrap(
               spacing: AppSpacing.xl,
               runSpacing: AppSpacing.md,
-              children: _facts(context.read<AppFormatters>()),
+              children: _facts(context.read<AppFormatters>(), context.marketName(order.market)),
             ),
           ],
         ),
@@ -47,7 +47,7 @@ class OrderHeaderCard extends StatelessWidget {
     );
   }
 
-  List<Widget> _facts(AppFormatters formatters) {
+  List<Widget> _facts(AppFormatters formatters, String marketName) {
     final client = order.client;
     final clientName = client.name;
     final channel = order.channel;
@@ -61,7 +61,7 @@ class OrderHeaderCard extends StatelessWidget {
             : AppStrings.clientWithId(clientName, client.clientId),
       ),
       if (segment != null) LabeledValue(label: AppStrings.segment, value: segment),
-      LabeledValue(label: AppStrings.market, value: order.market.label),
+      LabeledValue(label: AppStrings.market, value: marketName),
       LabeledValue(label: AppStrings.eventVersion, value: '${order.eventVersion}'),
       if (channel != null) LabeledValue(label: AppStrings.channel, value: channel),
       if (occurredAt != null)

@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import 'package:order_tracker/features/orders/domain/entities/market.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
 
 final class OrdersFilter extends Equatable {
@@ -9,11 +9,11 @@ final class OrdersFilter extends Equatable {
   static const firstPage = 0;
 
   final OrderStatus? status;
-  final Market? market;
+  final MarketCode? market;
 
   OrdersFilter withStatus(OrderStatus? value) => OrdersFilter(status: value, market: market);
 
-  OrdersFilter withMarket(Market? value) => OrdersFilter(status: status, market: value);
+  OrdersFilter withMarket(MarketCode? value) => OrdersFilter(status: status, market: value);
 
   @override
   List<Object?> get props => [status, market];

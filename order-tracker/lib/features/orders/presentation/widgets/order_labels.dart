@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:order_tracker/core/l10n/app_strings.dart';
+import 'package:order_tracker/core/markets/market_catalog.dart';
 import 'package:order_tracker/core/theme/status_palette.dart';
-import 'package:order_tracker/features/orders/domain/entities/market.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
 
 extension OrderStatusPresentation on OrderStatus {
@@ -33,13 +35,6 @@ extension OrderStatusPresentation on OrderStatus {
   };
 }
 
-extension MarketPresentation on Market {
-  static const List<Market> filterable = [Market.mx, Market.co, Market.pe];
-
-  String get label => switch (this) {
-    Market.mx => AppStrings.marketMx,
-    Market.co => AppStrings.marketCo,
-    Market.pe => AppStrings.marketPe,
-    Market.unknown => AppStrings.marketUnknown,
-  };
+extension MarketLabels on BuildContext {
+  String marketName(MarketCode market) => read<MarketCatalog>().nameOf(market.value);
 }

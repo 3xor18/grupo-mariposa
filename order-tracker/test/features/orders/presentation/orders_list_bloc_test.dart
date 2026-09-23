@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:order_tracker/core/error/app_failure.dart';
 import 'package:order_tracker/core/result/result.dart';
-import 'package:order_tracker/features/orders/domain/entities/market.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_summary.dart';
@@ -110,12 +110,12 @@ void main() {
     act: (bloc) async {
       bloc
         ..add(const OrdersListStatusToggled(OrderStatus.rejected))
-        ..add(const OrdersListMarketToggled(Market.co))
+        ..add(const OrdersListMarketToggled(MarketCode('CO')))
         ..add(const OrdersListStatusToggled(OrderStatus.rejected));
       await pumpEventQueue();
     },
     verify: (bloc) {
-      expect(bloc.state.filter, const OrdersFilter(market: Market.co));
+      expect(bloc.state.filter, const OrdersFilter(market: MarketCode('CO')));
       expect(bloc.state.status, loaded);
     },
   );
@@ -124,8 +124,8 @@ void main() {
     'should untoggle the selected market',
     setUp: () => answer((_, _) => Ok(firstPage)),
     build: buildBloc,
-    seed: () => loadedState(filter: const OrdersFilter(market: Market.mx)),
-    act: (bloc) => bloc.add(const OrdersListMarketToggled(Market.mx)),
+    seed: () => loadedState(filter: const OrdersFilter(market: MarketCode('MX'))),
+    act: (bloc) => bloc.add(const OrdersListMarketToggled(MarketCode('MX'))),
     verify: (bloc) => expect(bloc.state.filter, const OrdersFilter()),
   );
 

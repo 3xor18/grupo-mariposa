@@ -7,6 +7,7 @@ import 'package:order_tracker/core/theme/app_theme.dart';
 import 'package:order_tracker/features/orders/domain/repositories/order_repository.dart';
 import 'package:order_tracker/features/orders/domain/usecases/list_orders.dart';
 import 'package:order_tracker/features/orders/domain/usecases/search_order.dart';
+import '../fixtures/market_fixtures.dart';
 
 const phoneSize = Size(390, 844);
 const tabletSize = Size(1024, 768);
@@ -31,7 +32,8 @@ extension PumpApp on WidgetTester {
     await pumpWidget(
       MultiRepositoryProvider(
         providers: [
-          RepositoryProvider(create: (_) => AppFormatters()),
+          RepositoryProvider(create: (_) => AppFormatters(testCatalog)),
+          RepositoryProvider.value(value: testCatalog),
           RepositoryProvider(create: (_) => SearchOrder(repository)),
           RepositoryProvider(create: (_) => ListOrders(repository)),
         ],

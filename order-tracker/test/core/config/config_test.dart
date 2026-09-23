@@ -8,6 +8,7 @@ import 'package:order_tracker/core/config/app_config.dart';
 import 'package:order_tracker/core/config/config_loader.dart';
 import 'package:order_tracker/core/json/json_map.dart';
 
+import '../../fixtures/market_fixtures.dart';
 import '../../helpers/mocks.dart';
 
 void main() {
@@ -17,6 +18,7 @@ void main() {
     realm: 'mariposa',
     clientId: 'order-tracker',
     redirectUri: 'http://localhost:8090/',
+    catalog: testCatalog,
     enableSemantics: true,
   );
   final appUri = Uri.parse('http://localhost:8090/?code=abc');
@@ -26,12 +28,13 @@ void main() {
   group('AppConfig', () {
     test('should parse the runtime configuration', () {
       final parsed = AppConfig.fromJson(
-        const JsonMap({
+        JsonMap({
           'apiBaseUrl': '/api',
           'keycloakUrl': 'http://localhost:8180/',
           'realm': 'mariposa',
           'clientId': 'order-tracker',
           'redirectUri': 'http://localhost:8090/',
+          ...testCatalogJson(),
           'enableSemantics': true,
         }),
       );
@@ -40,12 +43,13 @@ void main() {
 
     test('should keep semantics disabled unless configured', () {
       final parsed = AppConfig.fromJson(
-        const JsonMap({
+        JsonMap({
           'apiBaseUrl': '/api',
           'keycloakUrl': 'http://localhost:8180',
           'realm': 'mariposa',
           'clientId': 'order-tracker',
           'redirectUri': 'http://localhost:8090/',
+          ...testCatalogJson(),
         }),
       );
       expect(parsed.enableSemantics, isFalse);
@@ -80,9 +84,11 @@ void main() {
             'realm': 'mariposa',
             'clientId': 'order-tracker',
             'redirectUri': 'http://localhost:8090/',
+            ...testCatalogJson(),
             'enableSemantics': true,
           }),
           200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
         ),
       );
       expect(await loader.load(appUri: appUri, cacheBuster: '42'), config);

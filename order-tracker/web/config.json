@@ -4,5 +4,13 @@
   "realm": "mariposa",
   "clientId": "order-tracker",
   "redirectUri": "http://localhost:8090/",
-  "enableSemantics": true
+  "enableSemantics": true,
+  "markets": [
+    { "code": "MX", "currency": "MXN", "locale": "es-MX", "name": "México" },
+    { "code": "CO", "currency": "COP", "locale": "es-CO", "name": "Colombia" },
+    { "code": "PE", "currency": "PEN", "locale": "es-PE", "name": "Perú" },
+    { "code": "CL", "currency": "CLP", "locale": "es-CL", "name": "Chile" },
+    { "code": "EC", "currency": "USD", "locale": "es-EC", "name": "Ecuador" }
+  ],
+  "currencies": { "MXN": 2, "COP": 2, "PEN": 2, "CLP": 0, "USD": 2 }
 }
