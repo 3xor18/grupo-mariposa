@@ -43,12 +43,12 @@ type Query struct {
 }
 
 type UpdateCommand struct {
-	ProductID       string
-	Market          string
-	Name            *string
-	Status          *string
-	TaxCategory     *string
-	ExpectedVersion *int64
+	ProductID    string
+	Market       string
+	Name         *string
+	Status       *string
+	TaxCategory  *string
+	Precondition *product.Precondition
 }
 
 type Violation struct {
@@ -97,11 +97,11 @@ func (s *Service) GetProduct(ctx context.Context, query Query) (product.Product,
 func (s *Service) UpdateProduct(ctx context.Context, cmd UpdateCommand) (product.Product, error) {
 	v := &validator{markets: s.markets}
 	request := product.UpdateRequest{
-		ID:              v.id(cmd.ProductID),
-		Market:          v.market(cmd.Market),
-		Patch:           v.patch(cmd),
-		ExpectedVersion: cmd.ExpectedVersion,
-		NewEvent:        s.events.Build,
+		ID:           v.id(cmd.ProductID),
+		Market:       v.market(cmd.Market),
+		Patch:        v.patch(cmd),
+		Precondition: cmd.Precondition,
+		NewEvent:     s.events.Build,
 	}
 	if err := v.err(); err != nil {
 		return product.Product{}, err

@@ -15,6 +15,18 @@ import (
 )
 
 const (
+	stageMatch      = "$match"
+	stageSort       = "$sort"
+	stageGroup      = "$group"
+	stageReplace    = "$replaceWith"
+	stageLimit      = "$limit"
+	accFirst        = "$first"
+	accSum          = "$sum"
+	accMin          = "$min"
+	varRoot         = "$$ROOT"
+	fieldRef        = "$"
+	groupOldest     = "oldest"
+	groupPending    = "pending"
 	statusPending   = "PENDING"
 	statusInFlight  = "IN_FLIGHT"
 	statusPublished = "PUBLISHED"
@@ -73,15 +85,15 @@ func (s *Store) Claim(ctx context.Context, claim outbox.Claim) ([]outbox.Pending
 
 func (s *Store) candidates(ctx context.Context, claim outbox.Claim) ([]outboxDocument, error) {
 	cursor, err := s.outbox.Aggregate(ctx, mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{fieldStatus: bson.M{opIn: unpublished()}}}},
-		{{Key: "$sort", Value: bson.D{{Key: fieldKey, Value: ascending},
+		{{Key: stageMatch, Value: bson.M{fieldStatus: bson.M{opIn: unpublished()}}}},
+		{{Key: stageSort, Value: bson.D{{Key: fieldKey, Value: ascending},
 			{Key: fieldVersion, Value: ascending}}}},
-		{{Key: "$group", Value: bson.M{fieldID: "$" + fieldKey,
-			"oldest": bson.M{"$first": "$$ROOT"}}}},
-		{{Key: "$replaceWith", Value: "$oldest"}},
-		{{Key: "$match", Value: claimable(claim.Now)}},
-		{{Key: "$sort", Value: bson.D{{Key: fieldCreatedAt, Value: ascending}}}},
-		{{Key: "$limit", Value: claim.Limit}},
+		{{Key: stageGroup, Value: bson.M{fieldID: fieldRef + fieldKey,
+			groupOldest: bson.M{accFirst: varRoot}}}},
+		{{Key: stageReplace, Value: fieldRef + groupOldest}},
+		{{Key: stageMatch, Value: claimable(claim.Now)}},
+		{{Key: stageSort, Value: bson.D{{Key: fieldCreatedAt, Value: ascending}}}},
+		{{Key: stageLimit, Value: claim.Limit}},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("find outbox candidates: %w", err)
@@ -128,9 +140,25 @@ func (s *Store) Release(ctx context.Context, id, owner string, attempts int,
 	return modifiedOne(result, wrap("release outbox event", err))
 }
 
-func (s *Store) CountUnpublished(ctx context.Context) (int64, error) {
-	count, err := s.outbox.CountDocuments(ctx, bson.M{fieldStatus: bson.M{opIn: unpublished()}})
-	return count, wrap("count unpublished outbox events", err)
+type backlogRow struct {
+	Pending int64     `bson:"pending"`
+	Oldest  time.Time `bson:"oldest"`
+}
+
+func (s *Store) Backlog(ctx context.Context) (outbox.Backlog, error) {
+	cursor, err := s.outbox.Aggregate(ctx, mongo.Pipeline{
+		{{Key: stageMatch, Value: bson.M{fieldStatus: bson.M{opIn: unpublished()}}}},
+		{{Key: stageGroup, Value: bson.M{fieldID: nil, groupPending: bson.M{accSum: 1},
+			groupOldest: bson.M{accMin: fieldRef + fieldCreatedAt}}}},
+	})
+	if err != nil {
+		return outbox.Backlog{}, fmt.Errorf("measure outbox backlog: %w", err)
+	}
+	var rows []backlogRow
+	if err := cursor.All(ctx, &rows); err != nil || len(rows) == 0 {
+		return outbox.Backlog{}, wrap("decode outbox backlog", err)
+	}
+	return outbox.Backlog{Pending: rows[0].Pending, Oldest: rows[0].Oldest}, nil
 }
 
 func unpublished() []string {

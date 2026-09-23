@@ -7,23 +7,18 @@ import (
 	"maps"
 	"net/http"
 	"slices"
-	"strconv"
-	"strings"
 
 	"github.com/grupomariposa/platform/products-api/internal/catalog"
 )
 
 const (
 	maxUpdateBodyBytes = 16 << 10
-	ifMatchAny         = "*"
 	jsonNull           = "null"
 	fieldIfMatch       = "If-Match"
 	messageNotObject   = "must be a JSON object of at most 16 KiB"
 	messageNotString   = "must be a string"
 	messageUnknown     = "is not a supported field"
-	messageBadIfMatch  = `must be a version such as "3"`
-	versionBits        = 64
-	minVersion         = 1
+	messageBadIfMatch  = "must be * or a comma-separated list of entity tags"
 )
 
 var errNotSingleObject = errors.New("body must be a single JSON object")
@@ -34,11 +29,11 @@ func decodeUpdate(w http.ResponseWriter, r *http.Request) (catalog.UpdateCommand
 		Market:    r.URL.Query().Get(queryMarket),
 	}
 	var invalid []fieldError
-	version, ok := parseIfMatch(r.Header.Get(headerIfMatch))
-	if !ok {
+	condition, err := parseIfMatch(r.Header)
+	if err != nil {
 		invalid = append(invalid, fieldError{Field: fieldIfMatch, Message: messageBadIfMatch})
 	}
-	cmd.ExpectedVersion = version
+	cmd.Precondition = condition.precondition
 	fields, err := readObject(w, r)
 	if err != nil {
 		return cmd, append(invalid, fieldError{Field: catalog.FieldBody, Message: messageNotObject})
@@ -81,17 +76,4 @@ func assign(cmd *catalog.UpdateCommand, name string, raw json.RawMessage) *field
 	}
 	*target = &value
 	return nil
-}
-
-func parseIfMatch(header string) (*int64, bool) {
-	header = strings.TrimSpace(header)
-	if header == "" || header == ifMatchAny {
-		return nil, true
-	}
-	unquoted := strings.TrimSuffix(strings.TrimPrefix(header, etagQuote), etagQuote)
-	version, err := strconv.ParseInt(unquoted, versionBase, versionBits)
-	if err != nil || version < minVersion {
-		return nil, false
-	}
-	return &version, true
 }

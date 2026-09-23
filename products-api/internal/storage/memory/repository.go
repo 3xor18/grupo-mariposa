@@ -56,7 +56,10 @@ func (r *Repository) Update(ctx context.Context, request product.UpdateRequest,
 	if !request.Matches(current) {
 		return product.Product{}, product.ErrVersionConflict
 	}
-	updated := current.Apply(request.Patch)
+	updated, changed := current.Apply(request.Patch)
+	if !changed {
+		return current, nil
+	}
 	if _, err := request.NewEvent(updated); err != nil {
 		return product.Product{}, fmt.Errorf("build change event: %w", err)
 	}

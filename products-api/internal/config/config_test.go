@@ -59,7 +59,7 @@ func TestLoadDefaults(t *testing.T) {
 		Kafka: config.Kafka{Brokers: []string{"kafka:9092", "kafka-2:9092"},
 			Topic: "products.changed.v1"},
 		Outbox: config.Outbox{Interval: 250 * time.Millisecond, BatchSize: 100,
-			Lease: 30 * time.Second, RetryDelay: time.Second},
+			Lease: 30 * time.Second, RetryDelay: time.Second, Retention: 7 * 24 * time.Hour},
 		ProblemTypeBase: "https://contracts.grupomariposa.dev/problems/",
 		LogLevel:        slog.LevelInfo,
 	}
@@ -91,11 +91,12 @@ func TestLoadOverrides(t *testing.T) {
 			Rules:   []fault.Rule{{ID: "PRD-012", Kind: fault.KindServiceUnavailable, Times: 2}},
 			Timeout: 10 * time.Millisecond,
 		},
-		Storage: config.Storage{Driver: "memory", Database: "catalog",
+		Storage: config.Storage{Driver: "memory", Seed: true, Database: "catalog",
 			Timeout: 7 * time.Millisecond},
-		Kafka: config.Kafka{Topic: "catalog.changed"},
+		Kafka: config.Kafka{Topic: "catalog.changed", TLS: true},
 		Outbox: config.Outbox{Interval: time.Millisecond, BatchSize: 5,
-			Lease: 2 * time.Millisecond, RetryDelay: 3 * time.Millisecond},
+			Lease: 2 * time.Millisecond, RetryDelay: 3 * time.Millisecond,
+			Retention: 90 * time.Minute},
 		ProblemTypeBase: "https://errors.example/",
 		LogLevel:        slog.LevelDebug,
 	}
@@ -131,6 +132,8 @@ func overrideEnv() map[string]string {
 		config.EnvMongoTimeoutMS: "7", config.EnvKafkaTopic: "catalog.changed",
 		config.EnvOutboxIntervalMS: "1", config.EnvOutboxBatchSize: "5",
 		config.EnvOutboxLeaseMS: "2", config.EnvOutboxRetryDelayMS: "3",
+		config.EnvSeedEnabled: "true", config.EnvKafkaTLSEnabled: "true",
+		config.EnvOutboxRetention: "90m", config.EnvPlatformCurrencies: "BRL:2",
 	}
 }
 
@@ -189,6 +192,13 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		{name: "jwks_relative", key: config.EnvAuthJWKSURL, raw: "/relative"},
 		{name: "problem_base_relative", key: config.EnvProblemTypeBaseURL, raw: "problems"},
 		{name: "markets_invalid", key: config.EnvPlatformMarkets, raw: "MX:MXN"},
+		{name: "currencies_invalid", key: config.EnvPlatformCurrencies, raw: "MXN:9"},
+		{name: "currency_undeclared", key: config.EnvPlatformCurrencies, raw: "MXN:2"},
+		{name: "retention_invalid", key: config.EnvOutboxRetention, raw: "soon"},
+		{name: "retention_zero", key: config.EnvOutboxRetention, raw: "0d"},
+		{name: "retention_bad_days", key: config.EnvOutboxRetention, raw: "xd"},
+		{name: "seed_not_boolean", key: config.EnvSeedEnabled, raw: "maybe"},
+		{name: "tls_not_boolean", key: config.EnvKafkaTLSEnabled, raw: "maybe"},
 		{name: "driver_unknown", key: config.EnvStorageDriver, raw: "postgres"},
 		{name: "batch_size_too_big", key: config.EnvOutboxBatchSize, raw: "1001"},
 		{name: "lease_zero", key: config.EnvOutboxLeaseMS, raw: "0"},
@@ -215,6 +225,11 @@ func TestLoadGuards(t *testing.T) {
 	}{
 		{name: "should_reject_blank_audience", wantKey: config.EnvAuthAudience,
 			extra: map[string]string{config.EnvAuthAudience: " "}},
+		{name: "should_refuse_seed_in_production", wantKey: config.EnvSeedEnabled,
+			extra: map[string]string{config.EnvAppEnvironment: "production",
+				config.EnvSeedEnabled: "true", config.EnvKafkaTLSEnabled: "true"}},
+		{name: "should_require_kafka_tls_in_production", wantKey: config.EnvKafkaTLSEnabled,
+			extra: map[string]string{config.EnvAppEnvironment: "production"}},
 		{name: "should_refuse_memory_in_production", wantKey: config.EnvStorageDriver,
 			extra: map[string]string{config.EnvAppEnvironment: "production",
 				config.EnvStorageDriver: "memory"}},
@@ -238,7 +253,8 @@ func TestLoadGuards(t *testing.T) {
 
 func TestLoadAllowsGuardedSettingsOutsideRestrictions(t *testing.T) {
 	cases := []map[string]string{
-		{config.EnvAppEnvironment: "production"},
+		{config.EnvAppEnvironment: "production", config.EnvKafkaTLSEnabled: "true"},
+		{config.EnvAppEnvironment: "staging", config.EnvSeedEnabled: "true"},
 		{config.EnvAppEnvironment: "staging", config.EnvFaultInjectionEnabled: "true"},
 		{config.EnvAuthEnabled: "false", config.EnvAuthAudience: ""},
 	}

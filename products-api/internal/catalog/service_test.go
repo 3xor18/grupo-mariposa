@@ -42,7 +42,7 @@ func (s *stubRepository) Update(_ context.Context, r product.UpdateRequest,
 
 func catalogOf(t *testing.T) market.Catalog {
 	t.Helper()
-	markets, err := market.Parse(market.DefaultMarkets)
+	markets, err := market.Parse(market.DefaultMarkets, market.DefaultCurrencies)
 	if err != nil {
 		t.Fatalf("catalog: %v", err)
 	}
@@ -113,10 +113,10 @@ func TestGetProductValidation(t *testing.T) {
 func TestUpdateProductBuildsRequest(t *testing.T) {
 	updated := product.Product{ID: "PRD-001", Market: "EC", Version: 4}
 	repo := &stubRepository{found: updated}
-	name, status, tax, version := "Nuevo", "DISCONTINUED", "EXEMPT", int64(3)
+	name, status, tax, version := "Nuevo", "DISCONTINUED", "EXEMPT", "3"
 	got, err := newService(t, repo).UpdateProduct(context.Background(), catalog.UpdateCommand{
 		ProductID: "PRD-001", Market: "EC", Name: &name, Status: &status, TaxCategory: &tax,
-		ExpectedVersion: &version,
+		Precondition: &product.Precondition{StrongTags: []string{version}},
 	})
 	if err != nil || got != updated {
 		t.Fatalf("want %+v, got %+v err=%v", updated, got, err)
@@ -124,7 +124,7 @@ func TestUpdateProductBuildsRequest(t *testing.T) {
 	r := repo.request
 	if r.ID != "PRD-001" || r.Market != "EC" || *r.Patch.Name != name ||
 		*r.Patch.Status != product.StatusDiscontinued || *r.Patch.TaxCategory != product.TaxExempt ||
-		*r.ExpectedVersion != version || r.NewEvent == nil {
+		r.Precondition.StrongTags[0] != version || r.NewEvent == nil {
 		t.Fatalf("unexpected request %+v", r)
 	}
 }
@@ -244,7 +244,7 @@ func TestChangeEventMatchesContract(t *testing.T) {
 		t.Fatalf("decode schema: %v", err)
 	}
 	for _, p := range seed.Products() {
-		event, err := events().Build(p.Apply(product.Patch{}))
+		event, err := events().Build(p)
 		if err != nil {
 			t.Fatalf("build: %v", err)
 		}

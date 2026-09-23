@@ -12,10 +12,11 @@ MongoDB, publishing `products.changed.v1` through a transactional outbox. Contra
 ## Run
 
 ```bash
-AUTH_ENABLED=false STORAGE_DRIVER=memory go run ./cmd/products-api
+AUTH_ENABLED=false STORAGE_DRIVER=memory SEED_ENABLED=true go run ./cmd/products-api
 
 docker build -t products-api .
-docker run --rm -p 8081:8081 -e AUTH_ENABLED=false -e STORAGE_DRIVER=memory products-api
+docker run --rm -p 8081:8081 -e AUTH_ENABLED=false -e STORAGE_DRIVER=memory \
+  -e SEED_ENABLED=true products-api
 curl -i "http://localhost:8081/products/PRD-001?market=CL"
 curl -i -X PATCH -H 'If-Match: "1"' -d '{"status":"DISCONTINUED"}' \
   "http://localhost:8081/products/PRD-020?market=MX"
@@ -73,9 +74,17 @@ All routes answer `GET` and `HEAD`; the product route also answers `PATCH`.
 
 `market` must belong to the catalog (`PLATFORM_MARKETS`), otherwise `400 VALIDATION_ERROR`.
 `PATCH` takes a JSON object with at least one of `status`, `taxCategory`, `name` (unknown or
-non-string fields are rejected) and an optional `If-Match` with the current version (`"3"`, `3` or
-`*`). A stale version returns `412 PRECONDITION_FAILED`. The response carries the new `version`
-and `ETag`. Faults from `FAULT_RULES` only apply to reads.
+non-string fields are rejected). The response carries the current `version` and `ETag`. A patch
+whose values already match the product is a no-op: `200` with the current version, no version
+bump and no change event. Faults from `FAULT_RULES` only apply to reads.
+
+`If-Match` follows RFC 9110 strong comparison:
+
+- absent or `*`: unconditional;
+- otherwise a comma-separated list of entity tags; a strong tag `"N"` (or bare `N`) matches when
+  `N` is the current version; weak tags `W/"N"` never match;
+- a valid list without a match (including `"abc"`) returns `412 PRECONDITION_FAILED`;
+- a malformed header (empty item, unbalanced quote, `W/` without quotes) returns `400`.
 
 Any other method on these paths returns `405 METHOD_NOT_ALLOWED` with an `Allow` header; unknown
 paths return `404 RESOURCE_NOT_FOUND` with a static detail (request input is never reflected).
@@ -95,7 +104,8 @@ Every problem carries `Cache-Control: no-store`; every response carries
 Metrics: `http_server_requests_total` and `http_server_request_duration_seconds`, labelled by
 `method` (normalized to `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS` or `OTHER` to
 keep cardinality bounded), `route` (the matched pattern) and `status`; plus `outbox_pending`,
-`outbox_published_total` and `outbox_publish_failures_total` from the relay.
+`outbox_oldest_age_seconds`, `outbox_published_total` and `outbox_publish_failures_total` from
+the relay.
 
 ## Configuration
 
@@ -160,19 +170,28 @@ Fault injection is refused at startup when `APP_ENV=production` (case-insensitiv
 | Variable | Default | Description |
 |---|---|---|
 | `PLATFORM_MARKETS` | the five markets | `CODE:CURRENCY:LOCALE,...`, validated at startup |
+| `PLATFORM_CURRENCIES` | `MXN:2,COP:2,PEN:2,CLP:0,USD:2` | `CODE:DIGITS` (0-4) |
+| `SEED_ENABLED` | `false` | insert missing seed rows at startup; refused in production |
 | `STORAGE_DRIVER` | `mongo` | `memory` only for local runs and tests; refused in production |
 | `MONGODB_URI` | required (secret) | connection string, replica set needed for transactions |
 | `MONGODB_DATABASE` | `products` | database with `products` and `outbox` |
 | `MONGODB_TIMEOUT_MS` | `5000` | operation and server selection timeout, also readiness ping |
 | `KAFKA_BOOTSTRAP_SERVERS` | required with `mongo` | comma-separated brokers |
 | `KAFKA_TOPIC_CHANGES` | `products.changed.v1` | topic of the change events |
+| `KAFKA_TLS_ENABLED` | `false` | TLS 1.2+ to the brokers; must be `true` in production |
 | `OUTBOX_RELAY_INTERVAL_MS` | `250` | relay polling interval |
 | `OUTBOX_BATCH_SIZE` | `100` | events claimed per cycle (max 1000) |
 | `OUTBOX_LEASE_MS` | `30000` | lease of a claimed event; publishing is bounded by half of it |
 | `OUTBOX_RETRY_DELAY_MS` | `1000` | wait before retrying an event whose publication failed |
+| `OUTBOX_RETENTION` | `7d` | TTL of published events (`d`, `h`, `m`, `s` units) |
 
 The default catalog is `MX:MXN:es-MX,CO:COP:es-CO,PE:PEN:es-PE,CL:CLP:es-CL,EC:USD:es-EC`
-(config key `platform.markets`, shared by the four services).
+(config keys `platform.markets` and `platform.currencies`, shared by the four services). Entries
+are trimmed; codes must match `^[A-Z]{2}$`, currencies `^[A-Z]{3}$`, locales `^[a-z]{2}-[A-Z]{2}$`;
+duplicates and markets whose currency is not declared stop the startup.
+
+With `APP_ENV=production` the service refuses `STORAGE_DRIVER=memory`, `SEED_ENABLED=true`,
+`FAULT_INJECTION_ENABLED=true` and `KAFKA_TLS_ENABLED=false`.
 
 ### Centralized configuration (Spring Cloud Config Server)
 
@@ -266,8 +285,10 @@ internal/app            composition root, server lifecycle, drain and shutdown, 
   through `product.Writer`; the MongoDB adapter implements both and the memory adapter keeps
   serving unit tests. A `PATCH` runs in one MongoDB transaction that re-reads the product, checks
   `If-Match`, increments `version` and inserts the `products.changed.v1` event (UUIDv7 id, key
-  `market:productId`) into `outbox`. Seed rows are upserted with `$setOnInsert`, so restarts never
-  overwrite changes made through the API. `{productId, market}` is a unique index.
+  `market:productId`) into `outbox`; a no-op patch writes nothing. With `SEED_ENABLED=true` seed
+  rows are upserted with `$setOnInsert`, so restarts never overwrite changes made through the
+  API. `{productId, market}` is a unique index; published outbox events expire through a TTL
+  index on `publishedAt` (`OUTBOX_RETENTION`, updated in place when the value changes).
 - **Outbox relay.** A background goroutine claims events with a lease (`IN_FLIGHT`, owner,
   `leaseUntil`), only the oldest unpublished version per key so a key is never published out of
   order, publishes them with an idempotent producer (`acks=all`), and marks them `PUBLISHED`

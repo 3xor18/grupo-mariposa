@@ -95,6 +95,7 @@ func baseEnv(extra ...string) map[string]string {
 		config.EnvAuthEnabled:          "false",
 		config.EnvShutdownDrainDelayMS: "0",
 		config.EnvStorageDriver:        config.StorageMemory,
+		config.EnvSeedEnabled:          "true",
 	}
 	for i := 0; i+1 < len(extra); i += 2 {
 		env[extra[i]] = extra[i+1]
@@ -178,6 +179,13 @@ func TestServesProductsAndReadiness(t *testing.T) {
 	}
 	if code := inst.stop(t); code != app.ExitOK {
 		t.Fatalf("want clean exit, got %d", code)
+	}
+}
+
+func TestSeedingIsOptIn(t *testing.T) {
+	inst := start(t, baseEnv(config.EnvSeedEnabled, "false"))
+	if code, _ := get(t, inst.url+"/products/PRD-001?market=MX"); code != http.StatusNotFound {
+		t.Fatalf("without seeding the catalog must be empty, got %d", code)
 	}
 }
 

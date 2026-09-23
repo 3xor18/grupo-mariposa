@@ -22,6 +22,11 @@ type PendingEvent struct {
 	Attempts int
 }
 
+type Backlog struct {
+	Pending int64
+	Oldest  time.Time
+}
+
 type Claim struct {
 	Limit      int
 	Now        time.Time
@@ -34,7 +39,7 @@ type Store interface {
 	MarkPublished(ctx context.Context, id, owner string, at time.Time) (bool, error)
 	Release(ctx context.Context, id, owner string, attempts int, availableAt time.Time) (bool,
 		error)
-	CountUnpublished(ctx context.Context) (int64, error)
+	Backlog(ctx context.Context) (Backlog, error)
 }
 
 type Message struct {
@@ -47,7 +52,7 @@ type Publisher interface {
 }
 
 type Recorder interface {
-	OutboxPending(count int64)
+	OutboxBacklog(pending int64, oldestAge time.Duration)
 	OutboxPublished(count int)
 	OutboxFailed(count int)
 }
@@ -99,12 +104,19 @@ func (r *Relay) Cycle(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	published := r.publish(ctx, batch)
-	pending, err := r.store.CountUnpublished(ctx)
+	backlog, err := r.store.Backlog(ctx)
 	if err != nil {
 		return published, err
 	}
-	r.recorder.OutboxPending(pending)
+	r.recorder.OutboxBacklog(backlog.Pending, oldestAge(backlog, r.clock()))
 	return published, nil
+}
+
+func oldestAge(backlog Backlog, now time.Time) time.Duration {
+	if backlog.Pending == 0 {
+		return 0
+	}
+	return max(0, now.Sub(backlog.Oldest))
 }
 
 func (r *Relay) publish(ctx context.Context, batch []PendingEvent) int {
