@@ -2,7 +2,7 @@ groups:
   - name: order-processor
     rules:
       - alert: OutboxBacklogAging
-        expr: max(outbox_oldest_age_seconds) > 60
+        expr: max(outbox_oldest_age_seconds{service="order-processor"}) > 60
         for: 2m
         labels:
           severity: critical
@@ -48,3 +48,24 @@ groups:
           severity: critical
         annotations:
           summary: A dependency circuit breaker is open
+  - name: master-data
+    rules:
+      - alert: MasterDataOutboxAging
+        expr: >-
+          max by (service)
+          (outbox_oldest_age_seconds{service=~"clients-api|products-api"}) > 30
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Client or product changes are not reaching their change topic
+          description: order-processor keeps serving the cached state until the TTL expires
+          runbook: docs/runbooks/cache-invalidation-lag.md
+      - alert: CacheInvalidationFailures
+        expr: sum(rate(orders_cache_invalidations_total{outcome="error"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: order-processor cannot apply change events to its Redis cache
+          runbook: docs/runbooks/cache-invalidation-lag.md
