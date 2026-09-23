@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import 'package:order_tracker/features/orders/domain/entities/market.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
 
 sealed class OrdersListEvent extends Equatable {
@@ -33,7 +33,7 @@ final class OrdersListStatusToggled extends OrdersListQueryEvent {
 final class OrdersListMarketToggled extends OrdersListQueryEvent {
   const OrdersListMarketToggled(this.market);
 
-  final Market market;
+  final MarketCode market;
 
   @override
   List<Object?> get props => [market];

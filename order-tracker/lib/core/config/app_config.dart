@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:order_tracker/core/json/json_map.dart';
+import 'package:order_tracker/core/markets/market_catalog.dart';
 
 abstract final class _ConfigFields {
   static const apiBaseUrl = 'apiBaseUrl';
@@ -17,6 +18,7 @@ final class AppConfig extends Equatable {
     required this.realm,
     required this.clientId,
     required this.redirectUri,
+    required this.catalog,
     this.enableSemantics = false,
   });
 
@@ -27,6 +29,7 @@ final class AppConfig extends Equatable {
       realm: json.requireString(_ConfigFields.realm),
       clientId: json.requireString(_ConfigFields.clientId),
       redirectUri: json.requireString(_ConfigFields.redirectUri),
+      catalog: MarketCatalog.fromJson(json),
       enableSemantics: json.optionalBool(_ConfigFields.enableSemantics) ?? false,
     );
   }
@@ -38,6 +41,7 @@ final class AppConfig extends Equatable {
   final String realm;
   final String clientId;
   final String redirectUri;
+  final MarketCatalog catalog;
   final bool enableSemantics;
 
   Uri apiBaseUri({required Uri appUri}) => appUri.resolve(apiBaseUrl);
@@ -57,6 +61,7 @@ final class AppConfig extends Equatable {
     realm,
     clientId,
     redirectUri,
+    catalog,
     enableSemantics,
   ];
 }

@@ -4,16 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:order_tracker/core/error/app_failure.dart';
+import 'package:order_tracker/core/json/json_map.dart';
 import 'package:order_tracker/core/l10n/app_strings.dart';
 import 'package:order_tracker/core/money/unit_price.dart';
 import 'package:order_tracker/core/result/result.dart';
 import 'package:order_tracker/core/widgets/failure_view.dart';
+import 'package:order_tracker/features/orders/data/dto/order_dto.dart';
+import 'package:order_tracker/features/orders/data/mappers/order_mapper.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_id.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_line.dart';
 import 'package:order_tracker/features/orders/presentation/orders_keys.dart';
 import 'package:order_tracker/features/orders/presentation/pages/order_search_page.dart';
 
+import '../../../fixtures/market_fixtures.dart';
 import '../../../fixtures/order_fixtures.dart';
 import '../../../helpers/mocks.dart';
 import '../../../helpers/pump_app.dart';
@@ -76,7 +80,7 @@ void main() {
     expect(find.text('PRD-008'), findsOneWidget);
     expect(find.textContaining('24 ×'), findsOneWidget);
     expect(find.text('Distribuidora Central · CLI-99821'), findsOneWidget);
-    expect(find.text(AppStrings.marketMx), findsOneWidget);
+    expect(find.text(testCatalog.nameOf('MX')), findsOneWidget);
     expect(find.text(AppStrings.eventVersion), findsOneWidget);
     expect(find.byKey(OrdersKeys.rejectionCard), findsNothing);
     verify(() => repository.findById(approvedOrderId)).called(1);
@@ -87,7 +91,7 @@ void main() {
     final line = OrderLine(
       productId: 'PRD-777',
       quantity: 2,
-      unitPrice: UnitPrice.parse('12.3456', currency: 'MXN'),
+      unitPrice: UnitPrice.parse('12.3456', currency: 'MXN', currencyDigits: 2),
     );
     answer(
       Ok(
@@ -109,6 +113,42 @@ void main() {
     await search(tester, approvedOrderId);
     await tester.pumpAndSettle();
     expect(find.text(AppStrings.joinDetails(['PRD-777', r'2 × $12.3456'])), findsOneWidget);
+  });
+
+  Order chileanOrder({String market = 'CL'}) {
+    final json = minimalOrderJson()
+      ..['market'] = market
+      ..['currency'] = 'CLP'
+      ..['lines'] = [
+        {'productId': 'PRD-015', 'quantity': 3, 'unitPrice': 990, 'lineTotal': 2970},
+      ]
+      ..['totals'] = {
+        'grossSubtotal': 38127,
+        'discount': 0,
+        'netSubtotal': 38127,
+        'tax': 7244,
+        'grandTotal': 45371,
+      };
+    return OrderDto.fromJson(JsonMap(json)).toDomain(testCatalog);
+  }
+
+  testWidgets('should render CLP amounts without decimals and the market name', (tester) async {
+    answer(Ok(chileanOrder()));
+    await pumpPage(tester);
+    await search(tester, rejectedOrderId);
+    await tester.pumpAndSettle();
+    expect(find.text('Chile'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(OrdersKeys.grandTotal));
+    expect(find.text(r'$ 45.371'), findsOneWidget);
+    expect(find.text(AppStrings.joinDetails(['PRD-015', r'3 × $ 990'])), findsOneWidget);
+  });
+
+  testWidgets('should show the raw code of a market outside the catalog', (tester) async {
+    answer(Ok(chileanOrder(market: 'BR')));
+    await pumpPage(tester);
+    await search(tester, rejectedOrderId);
+    await tester.pumpAndSettle();
+    expect(find.text('BR'), findsOneWidget);
   });
 
   testWidgets('should render the rejection reason and violations', (tester) async {

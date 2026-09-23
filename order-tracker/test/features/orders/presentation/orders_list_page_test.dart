@@ -7,7 +7,7 @@ import 'package:order_tracker/core/error/app_failure.dart';
 import 'package:order_tracker/core/l10n/app_strings.dart';
 import 'package:order_tracker/core/result/result.dart';
 import 'package:order_tracker/core/widgets/failure_view.dart';
-import 'package:order_tracker/features/orders/domain/entities/market.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
 import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart';
@@ -15,6 +15,7 @@ import 'package:order_tracker/features/orders/presentation/orders_keys.dart';
 import 'package:order_tracker/features/orders/presentation/pages/order_detail_page.dart';
 import 'package:order_tracker/features/orders/presentation/pages/orders_list_page.dart';
 
+import '../../../fixtures/market_fixtures.dart';
 import '../../../fixtures/order_fixtures.dart';
 import '../../../helpers/mocks.dart';
 import '../../../helpers/pump_app.dart';
@@ -91,11 +92,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(OrdersKeys.statusFilter(OrderStatus.rejected)));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(OrdersKeys.marketFilter(Market.co)));
+    await tester.tap(find.byKey(OrdersKeys.marketFilter(const MarketCode('CO'))));
     await tester.pumpAndSettle();
     verify(
       () => repository.list(
-        filter: const OrdersFilter(status: OrderStatus.rejected, market: Market.co),
+        filter: const OrdersFilter(status: OrderStatus.rejected, market: MarketCode('CO')),
         page: 0,
         size: OrdersFilter.pageSize,
       ),
@@ -104,6 +105,37 @@ void main() {
       find.byKey(OrdersKeys.statusFilter(OrderStatus.rejected)),
     );
     expect(chip.selected, isTrue);
+  });
+
+  testWidgets('should offer one chip per catalog market', (tester) async {
+    answerPages();
+    await pumpPage(tester, size: desktopSize);
+    await tester.pumpAndSettle();
+    for (final market in testCatalog.markets) {
+      final chip = find.byKey(OrdersKeys.marketFilter(MarketCode(market.code)));
+      expect(find.descendant(of: chip, matching: find.text(market.name)), findsOneWidget);
+    }
+    final chile = find.byKey(OrdersKeys.marketFilter(const MarketCode('CL')));
+    await tester.ensureVisible(chile);
+    await tester.pumpAndSettle();
+    await tester.tap(chile);
+    await tester.pumpAndSettle();
+    verify(
+      () => repository.list(
+        filter: const OrdersFilter(market: MarketCode('CL')),
+        page: 0,
+        size: OrdersFilter.pageSize,
+      ),
+    ).called(1);
+  });
+
+  testWidgets('should show the raw code of a market outside the catalog', (tester) async {
+    answerList(
+      (_) async => Ok(orderPage(items: [summary('ORD-BR-1', market: const MarketCode('BR'))])),
+    );
+    await pumpPage(tester);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('CLI-99821 · BR ·'), findsOneWidget);
   });
 
   testWidgets('should load more orders on demand', (tester) async {

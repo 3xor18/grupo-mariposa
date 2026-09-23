@@ -12,6 +12,7 @@ import 'package:order_tracker/features/auth/data/pkce.dart';
 import 'package:order_tracker/features/auth/data/token_set.dart';
 import 'package:order_tracker/features/auth/domain/auth_user.dart';
 
+import '../../../fixtures/market_fixtures.dart';
 import '../../../helpers/tokens.dart';
 
 void main() {
@@ -46,6 +47,7 @@ void main() {
         realm: 'mariposa',
         clientId: 'order-tracker',
         redirectUri: 'http://localhost:8090/',
+        catalog: testCatalog,
       ),
     );
     final redirect = Uri.parse('http://localhost:8090/');

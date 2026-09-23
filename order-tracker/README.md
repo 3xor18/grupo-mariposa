@@ -32,14 +32,27 @@ lib/
 
 - **DTOs and mappers**: DTOs mirror the contract and are separate from the domain entities. The
   explicit mappers in `features/orders/data/mappers` convert between them.
-  - Unknown statuses and markets map to `unknown`, so the app acts as a tolerant reader (v1 only
-    adds fields).
-  - A missing required field, or an amount with more than two decimals, becomes an
-    `UnexpectedResponseFailure` instead of a crash.
+  - Unknown statuses map to `unknown`, so the app acts as a tolerant reader (v1 only adds
+    fields).
+  - A missing required field, or an amount with more significant decimals than its currency
+    allows, becomes an `UnexpectedResponseFailure` instead of a crash.
   - `eventVersion` is mapped and shown. `sourceEventId` is not used, so it is not mapped.
-- **Money**: amounts are parsed from their decimal text into `Money`, which holds integer minor
-  units plus the currency. Formatting never touches binary floating point arithmetic. The
-  currency-to-locale map lives in `core/format/currency_locales.dart`.
+- **Market catalog (ADR 0006)**: markets are not an enum. `config.json` delivers the catalog, and
+  the app reads it into `MarketCatalog`. Each market has a code, a currency, a locale and a
+  display name, and each currency has its ISO 4217 fraction digits.
+  - A market is a `MarketCode` value object.
+  - Filter chips and labels are built from the catalog.
+  - A code outside the catalog is displayed as it comes and never fails.
+- **Money**: amounts are parsed from their decimal text into integer units, using the currency's
+  fraction digits from the catalog, so formatting never touches binary floating point.
+  - `Money` holds amounts and totals: 2 decimals for MXN, COP, PEN and USD, and 0 for CLP.
+  - `UnitPrice` keeps line prices with up to 4 decimals and trims them to the currency digits for
+    display.
+  - A currency outside the catalog uses 2 decimals and shows its code.
+- **Formatting**: `intl` locale data is used when it exists (`es-MX` gives `$2,100.11`). `intl`
+  has no data for `es-CL`, `es-CO`, `es-PE` or `es-EC`. For those, the app falls back to Spanish
+  separators with the symbol first: `$ 45.371` (CLP), `$ 1.234,50` (USD in Ecuador),
+  `S/ 2.100,11` (PEN).
 - **Errors**: problem+json responses (RFC 9457) become a sealed `AppFailure`. The app branches on
   `status` and `code`, never on `detail`.
 - **Dependency injection** uses `RepositoryProvider`, not `get_it`.
@@ -103,7 +116,13 @@ network timeout:
   "realm": "mariposa",
   "clientId": "order-tracker",
   "redirectUri": "http://localhost:8090/",
-  "enableSemantics": true
+  "enableSemantics": true,
+  "markets": [
+    { "code": "MX", "currency": "MXN", "locale": "es-MX", "name": "México" },
+    { "code": "CL", "currency": "CLP", "locale": "es-CL", "name": "Chile" },
+    { "code": "EC", "currency": "USD", "locale": "es-EC", "name": "Ecuador" }
+  ],
+  "currencies": { "MXN": 2, "CLP": 0, "USD": 2 }
 }
 ```
 
@@ -151,6 +170,13 @@ stops the container.
 | `enable-semantics` | `ENABLE_SEMANTICS` | `false` | turn on the semantics tree |
 | `hsts-max-age` | `HSTS_MAX_AGE` | `0` (off) | HSTS max-age, for deployments behind TLS |
 | — | `NGINX_RESOLVER` | `127.0.0.11` | DNS for the lazy proxy resolution |
+| `platform.markets` | `PLATFORM_MARKETS` | required | `CODE:CURRENCY:LOCALE` list (`application.yml`) |
+| `platform.currencies` | `PLATFORM_CURRENCIES` | required | `CODE:DIGITS` list (`application.yml`) |
+| `market-names` | `MARKET_NAMES` | empty (code) | `CODE:Name` list of display names |
+
+The script builds the `markets` and `currencies` members of `config.json` from these keys. It
+fails when a market uses a currency without declared digits, and it rejects names that contain
+quotes, backslashes, control characters or shell and nginx metacharacters.
 
 | Config server variable | Default |
 |---|---|
@@ -260,8 +286,11 @@ E2E_BASE_URL=http://localhost:8090 E2E_USERNAME=analyst E2E_PASSWORD=<DEMO_USER_
 
 ## Known limitations
 
-- Amounts are formatted with `intl` locale data. For `es_PE`, that data renders `S/ 2.100,11`
-  rather than Peru's usual `S/ 2,100.11`.
+- `intl` 0.20 has no number data for `es-CL`, `es-CO`, `es-PE` or `es-EC`. For those locales
+  the app uses Spanish separators with the symbol first. That is right for Chile, Colombia and
+  Ecuador, but Peru usually writes `S/ 2,100.11` rather than `S/ 2.100,11`.
+- Amounts are formatted with the locale of the first catalog market that uses their currency, so
+  USD always takes Ecuador's format.
 - Line `discountRate` and `taxRate` are assumed to be fractions (0.16 = 16 %), because the
   contract does not specify the unit.
 - Pagination is offset based. Duplicates are removed, but a row can still be skipped when newer

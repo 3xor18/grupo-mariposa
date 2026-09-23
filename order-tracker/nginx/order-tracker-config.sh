@@ -8,8 +8,13 @@ DEFAULT_RETRY_DELAY_SECONDS=1
 MAX_ATTEMPTS=4
 HSTS_DIRECTIVES='includeSubDomains'
 MANAGED_KEYS="API_BASE_URL ORDERS_API_URL KEYCLOAK_URL KEYCLOAK_REALM KEYCLOAK_CLIENT_ID
-REDIRECT_URI ENABLE_SEMANTICS HSTS_MAX_AGE NGINX_RESOLVER"
+REDIRECT_URI ENABLE_SEMANTICS HSTS_MAX_AGE NGINX_RESOLVER PLATFORM_MARKETS PLATFORM_CURRENCIES
+MARKET_NAMES"
+OPTIONAL_KEYS="MARKET_NAMES"
 URL_PATTERN='^https?://[A-Za-z0-9._~:/?#@!&()*+,=%-]+$'
+MARKET_ENTRY='[A-Z]{2}:[A-Z]{3}:[a-z]{2}(-[A-Z]{2})?'
+CURRENCY_ENTRY='[A-Z]{3}:[0-4]'
+MARKET_NAME_ENTRY='[A-Z]{2}:[^,:"\\$;<>{}|&`]+'
 PATH_PATTERN='^/[A-Za-z0-9._~/-]*$'
 NAME_PATTERN='^[A-Za-z0-9._-]+$'
 HOST_PATTERN='^[]A-Za-z0-9.:[-]+$'
@@ -41,7 +46,21 @@ pattern_for() {
     ENABLE_SEMANTICS) printf '%s' "$BOOLEAN_PATTERN" ;;
     HSTS_MAX_AGE) printf '%s' "$NUMBER_PATTERN" ;;
     NGINX_RESOLVER) printf '%s' "$HOST_PATTERN" ;;
+    PLATFORM_MARKETS) list_pattern "$MARKET_ENTRY" ;;
+    PLATFORM_CURRENCIES) list_pattern "$CURRENCY_ENTRY" ;;
+    MARKET_NAMES) list_pattern "$MARKET_NAME_ENTRY" ;;
     *) printf '%s' "$URL_PATTERN" ;;
+  esac
+}
+
+list_pattern() {
+  printf '^%s(,%s)*$' "$1" "$1"
+}
+
+is_optional() {
+  case " $OPTIONAL_KEYS " in
+    *" $1 "*) return 0 ;;
+    *) return 1 ;;
   esac
 }
 
@@ -158,6 +177,9 @@ resolve() {
 }
 
 validate() {
+  if [ -z "$2" ] && is_optional "$1"; then
+    return 0
+  fi
   case "$2" in
     '')
       log "$1 is required (environment variable or config server key)"
@@ -168,6 +190,10 @@ validate() {
       return 1
       ;;
   esac
+  if printf '%s' "$2" | grep -q '[[:cntrl:]]'; then
+    log "$1 contains control characters"
+    return 1
+  fi
   if ! printf '%s' "$2" | grep -Eq "$(pattern_for "$1")"; then
     log "$1 has an invalid value"
     return 1
@@ -188,6 +214,51 @@ hsts_header() {
   fi
 }
 
+list_entries() {
+  printf '%s\n' "$1" | tr ',' '\n'
+}
+
+validate_catalog_currencies() {
+  known=",$2,"
+  for currency in $(list_entries "$1" | cut -d: -f2); do
+    case "$known" in
+      *",$currency:"*) ;;
+      *)
+        log "PLATFORM_MARKETS uses $currency, which is missing from PLATFORM_CURRENCIES"
+        return 1
+        ;;
+    esac
+  done
+}
+
+markets_json() {
+  list_entries "$1" | awk -F: -v names="$2" '
+    BEGIN {
+      count = split(names, pairs, ",")
+      for (i = 1; i <= count; i++) {
+        split(pairs[i], pair, ":")
+        gsub(/^[ \t]+|[ \t]+$/, "", pair[2])
+        label[pair[1]] = pair[2]
+      }
+    }
+    {
+      name = ($1 in label) ? label[$1] : $1
+      entry = sprintf("{\"code\":\"%s\",\"currency\":\"%s\",\"locale\":\"%s\",\"name\":\"%s\"}",
+        $1, $2, $3, name)
+      items = items separator entry
+      separator = ","
+    }
+    END { printf "[%s]", items }
+  '
+}
+
+currencies_json() {
+  list_entries "$1" | awk -F: '
+    { items = items separator sprintf("\"%s\":%s", $1, $2); separator = "," }
+    END { printf "{%s}", items }
+  '
+}
+
 write_env_file() {
   for key in $MANAGED_KEYS; do
     value=$(resolve "$key" "$1")
@@ -198,9 +269,14 @@ write_env_file() {
 
 derived_values() {
   . "$1"
+  validate_catalog_currencies "$PLATFORM_MARKETS" "$PLATFORM_CURRENCIES" || exit 1
   sources="$(origin_of "$KEYCLOAK_URL") $(origin_of "$API_BASE_URL")"
   printf 'export CSP_CONNECT_SOURCES=%s\n' "$(shell_quote "${sources% }")"
   printf 'export HSTS_HEADER=%s\n' "$(shell_quote "$(hsts_header "$HSTS_MAX_AGE")")"
+  printf 'export MARKETS_JSON=%s\n' \
+    "$(shell_quote "$(markets_json "$PLATFORM_MARKETS" "$MARKET_NAMES")")"
+  printf 'export CURRENCIES_JSON=%s\n' \
+    "$(shell_quote "$(currencies_json "$PLATFORM_CURRENCIES")")"
 }
 
 append_derived_values() {
@@ -213,7 +289,8 @@ write_config_json() {
     set -a
     . "$RUNTIME_DIR/runtime.env"
     envsubst '${API_BASE_URL} ${KEYCLOAK_URL} ${KEYCLOAK_REALM} ${KEYCLOAK_CLIENT_ID}
-      ${REDIRECT_URI} ${ENABLE_SEMANTICS}' < "$CONFIG_TEMPLATE" > "$RUNTIME_DIR/config.json"
+      ${REDIRECT_URI} ${ENABLE_SEMANTICS} ${MARKETS_JSON} ${CURRENCIES_JSON}' \
+      < "$CONFIG_TEMPLATE" > "$RUNTIME_DIR/config.json"
   )
 }
 

@@ -63,11 +63,6 @@ abstract final class AppStrings {
   static const refreshFailed = 'No se pudo actualizar la lista.';
   static const nextPageFailed = 'No se pudieron cargar más pedidos.';
 
-  static const marketMx = 'México';
-  static const marketCo = 'Colombia';
-  static const marketPe = 'Perú';
-  static const marketUnknown = 'Otro mercado';
-
   static const errorTitle = 'Algo salió mal';
   static const networkError = 'No hay conexión con el servidor. Revisa tu red e intenta de nuevo.';
   static const serverError = 'El servicio no está disponible en este momento. Intenta de nuevo.';

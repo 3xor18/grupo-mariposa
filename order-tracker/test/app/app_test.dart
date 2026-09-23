@@ -26,6 +26,7 @@ import 'package:order_tracker/features/orders/domain/usecases/list_orders.dart';
 import 'package:order_tracker/features/orders/domain/usecases/search_order.dart';
 import 'package:order_tracker/features/orders/presentation/orders_keys.dart';
 
+import '../fixtures/market_fixtures.dart';
 import '../fixtures/order_fixtures.dart';
 import '../helpers/mocks.dart';
 import '../helpers/pump_app.dart';
@@ -72,7 +73,8 @@ void main() {
           authRepository: authRepository,
           searchOrder: SearchOrder(orderRepository),
           listOrders: ListOrders(orderRepository),
-          formatters: AppFormatters(),
+          formatters: AppFormatters(testCatalog),
+          catalog: testCatalog,
           onDispose: () async => disposals++,
         ),
       ),
@@ -176,9 +178,11 @@ void main() {
             'realm': 'mariposa',
             'clientId': 'order-tracker',
             'redirectUri': 'http://localhost:8090/',
+            ...testCatalogJson(),
             'enableSemantics': enableSemantics,
           }),
           200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
         ),
       );
     }
@@ -231,6 +235,7 @@ void main() {
         realm: 'mariposa',
         clientId: 'order-tracker',
         redirectUri: 'http://localhost:8090/',
+        catalog: testCatalog,
       ),
       location: FakeBrowserLocation(Uri.parse('http://localhost:8090/')),
       store: InMemoryKeyValueStore(),
@@ -247,7 +252,8 @@ void main() {
       authRepository: MockAuthRepository(),
       searchOrder: SearchOrder(MockOrderRepository()),
       listOrders: ListOrders(MockOrderRepository()),
-      formatters: AppFormatters(),
+      formatters: AppFormatters(testCatalog),
+      catalog: testCatalog,
     );
     await expectLater(dependencies.dispose(), completes);
   });

@@ -8,12 +8,13 @@ import 'package:order_tracker/core/http/api_client.dart';
 import 'package:order_tracker/core/result/result.dart';
 import 'package:order_tracker/features/orders/data/datasources/orders_api.dart';
 import 'package:order_tracker/features/orders/data/repositories/order_repository_impl.dart';
-import 'package:order_tracker/features/orders/domain/entities/market.dart';
+import 'package:order_tracker/features/orders/domain/entities/market_code.dart';
 import 'package:order_tracker/features/orders/domain/entities/order.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_page.dart';
 import 'package:order_tracker/features/orders/domain/entities/order_status.dart';
 import 'package:order_tracker/features/orders/domain/entities/orders_filter.dart';
 
+import '../../../fixtures/market_fixtures.dart';
 import '../../../fixtures/order_fixtures.dart';
 import '../../../helpers/mocks.dart';
 
@@ -26,7 +27,7 @@ void main() {
   setUp(() {
     httpClient = MockHttpClient();
     final apiClient = ApiClient(httpClient, Uri.parse('http://localhost:8090/api'));
-    repository = OrderRepositoryImpl(OrdersApi(apiClient));
+    repository = OrderRepositoryImpl(OrdersApi(apiClient), testCatalog);
   });
 
   void respond(Object body, int status, {String type = 'application/json'}) {
@@ -106,7 +107,7 @@ void main() {
     test('should send filters and paging as contract query parameters', () async {
       respond(orderPageJson(), 200);
       final result = await repository.list(
-        filter: const OrdersFilter(status: OrderStatus.rejected, market: Market.co),
+        filter: const OrdersFilter(status: OrderStatus.rejected, market: MarketCode('CO')),
         page: 1,
         size: 20,
       );
