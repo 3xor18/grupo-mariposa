@@ -7,6 +7,10 @@ con idempotencia, control de concurrencia y tolerancia a fallos parciales.
 > **Empieza por aquí:** [`docs/guide/guia-grupo-mariposa.html`](docs/guide/guia-grupo-mariposa.html) es una guía visual
 > e interactiva (en español) del flujo completo, cada microservicio, endpoints, eventos, pantallas y la demo.
 > Descárgala o clona el repo y ábrela en el navegador; GitHub no renderiza HTML.
+>
+> **Especificaciones (Spec-Driven Design):** [`specs/`](specs/README.md) define qué debe hacer la plataforma
+> (constitución + requisitos `REQ-*` con escenarios y trazabilidad a tests). Todo cambio parte de una
+> propuesta en `specs/changes/`.
 
 ```mermaid
 flowchart LR
