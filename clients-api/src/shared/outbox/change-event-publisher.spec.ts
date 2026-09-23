@@ -5,10 +5,17 @@ import {
   groupByTopic,
   KAFKA_NOT_CONFIGURED,
   KafkaChangeEventPublisher,
+  kafkaClientOptions,
   UnconfiguredChangeEventPublisher,
 } from './change-event-publisher';
 
-const MESSAGE = { id: 'event-1', topic: 'clients.changed.v1', key: 'CLI-1', payload: { a: 1 } };
+const MESSAGE = {
+  id: 'event-1',
+  topic: 'clients.changed.v1',
+  key: 'CLI-1',
+  version: 2,
+  payload: { a: 1 },
+};
 
 function producerStub(): {
   connect: jest.Mock;
@@ -79,7 +86,11 @@ describe('KafkaChangeEventPublisher', () => {
 
 describe('createChangeEventPublisher', () => {
   it('should_refuse_to_publish_when_kafka_is_not_configured', async () => {
-    const publisher = createChangeEventPublisher({ bootstrapServers: [], changesTopic: 't' });
+    const publisher = createChangeEventPublisher({
+      bootstrapServers: [],
+      changesTopic: 't',
+      tlsEnabled: false,
+    });
 
     expect(publisher).toBeInstanceOf(UnconfiguredChangeEventPublisher);
     await expect(publisher.publish([])).rejects.toThrow(KAFKA_NOT_CONFIGURED);
@@ -87,9 +98,15 @@ describe('createChangeEventPublisher', () => {
   });
 
   it('should_build_an_idempotent_kafka_publisher_when_brokers_are_set', () => {
-    const config = { bootstrapServers: ['localhost:9092'], changesTopic: 't' };
+    const config = { bootstrapServers: ['localhost:9092'], changesTopic: 't', tlsEnabled: true };
 
     expect(createChangeEventPublisher(config)).toBeInstanceOf(KafkaChangeEventPublisher);
     expect(typeof createKafkaProducer(config).sendBatch).toBe('function');
+    expect(kafkaClientOptions(config)).toMatchObject({
+      clientId: 'clients-api',
+      brokers: ['localhost:9092'],
+      ssl: true,
+    });
+    expect(kafkaClientOptions({ ...config, tlsEnabled: false }).ssl).toBe(false);
   });
 });
