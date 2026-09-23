@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -32,6 +34,7 @@ const (
 	InitialVersion  int64 = 1
 	MaxNameLength         = 120
 	eventKeyPattern       = "%s:%s"
+	versionBase           = 10
 )
 
 var (
@@ -72,12 +75,16 @@ type ChangeEvent struct {
 	Payload    []byte
 }
 
+type Precondition struct {
+	StrongTags []string
+}
+
 type UpdateRequest struct {
-	ID              ID
-	Market          Market
-	Patch           Patch
-	ExpectedVersion *int64
-	NewEvent        func(Product) (ChangeEvent, error)
+	ID           ID
+	Market       Market
+	Patch        Patch
+	Precondition *Precondition
+	NewEvent     func(Product) (ChangeEvent, error)
 }
 
 type Repository interface {
@@ -88,7 +95,7 @@ type Writer interface {
 	Update(ctx context.Context, request UpdateRequest) (Product, error)
 }
 
-func (p Product) Apply(patch Patch) Product {
+func (p Product) Apply(patch Patch) (Product, bool) {
 	updated := p
 	if patch.Name != nil {
 		updated.Name = *patch.Name
@@ -99,8 +106,11 @@ func (p Product) Apply(patch Patch) Product {
 	if patch.TaxCategory != nil {
 		updated.TaxCategory = *patch.TaxCategory
 	}
+	if updated == p {
+		return p, false
+	}
 	updated.Version++
-	return updated
+	return updated, true
 }
 
 func (p Product) EventKey() string {
@@ -108,7 +118,11 @@ func (p Product) EventKey() string {
 }
 
 func (r UpdateRequest) Matches(current Product) bool {
-	return r.ExpectedVersion == nil || *r.ExpectedVersion == current.Version
+	if r.Precondition == nil {
+		return true
+	}
+	return slices.Contains(r.Precondition.StrongTags,
+		strconv.FormatInt(current.Version, versionBase))
 }
 
 func ParseID(raw string) (ID, error) {

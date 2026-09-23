@@ -3,6 +3,7 @@ package memory_test
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -48,7 +49,7 @@ func TestUpdateAppliesPatchAndBuildsEvent(t *testing.T) {
 	var event product.Product
 	updated, err := repo.Update(context.Background(), product.UpdateRequest{
 		ID: "PRD-020", Market: "MX", Patch: product.Patch{Status: &status},
-		ExpectedVersion: ptr(product.InitialVersion),
+		Precondition: at(product.InitialVersion),
 		NewEvent: func(p product.Product) (product.ChangeEvent, error) {
 			event = p
 			return product.ChangeEvent{}, nil
@@ -81,7 +82,7 @@ func TestUpdateFailures(t *testing.T) {
 			request: product.UpdateRequest{ID: "PRD-001", Market: "US", NewEvent: noEvent}},
 		{name: "should_fail_when_stale", ctx: context.Background(),
 			want: product.ErrVersionConflict, request: product.UpdateRequest{ID: "PRD-001",
-				Market: "MX", ExpectedVersion: ptr(7), NewEvent: noEvent}},
+				Market: "MX", Precondition: at(7), NewEvent: noEvent}},
 	}
 	repo := memory.NewRepository(seed.Products())
 	for _, tc := range cases {
@@ -91,8 +92,9 @@ func TestUpdateFailures(t *testing.T) {
 			}
 		})
 	}
+	name := "renamed"
 	_, err := repo.Update(context.Background(), product.UpdateRequest{ID: "PRD-001",
-		Market: "MX", NewEvent: failingEvent})
+		Market: "MX", Patch: product.Patch{Name: &name}, NewEvent: failingEvent})
 	stored, _ := repo.FindByIDInMarket(context.Background(), "PRD-001", "MX")
 	if err == nil || stored.Version != product.InitialVersion {
 		t.Fatalf("event failure must abort the update, got %v version %d", err, stored.Version)
@@ -120,7 +122,7 @@ func TestConcurrentUpdatesWithSameVersionHaveOneWinner(t *testing.T) {
 			defer wg.Done()
 			_, err := repo.Update(context.Background(), product.UpdateRequest{ID: "PRD-001",
 				Market: "PE", Patch: product.Patch{Name: &name},
-				ExpectedVersion: ptr(product.InitialVersion), NewEvent: noEvent})
+				Precondition: at(product.InitialVersion), NewEvent: noEvent})
 			if err == nil {
 				wins.Add(1)
 			}
@@ -132,6 +134,26 @@ func TestConcurrentUpdatesWithSameVersionHaveOneWinner(t *testing.T) {
 	}
 }
 
-func ptr(v int64) *int64 {
-	return &v
+func at(version int64) *product.Precondition {
+	return &product.Precondition{StrongTags: []string{strconv.FormatInt(version, 10)}}
+}
+
+func TestNoOpUpdateKeepsVersionAndSkipsEvent(t *testing.T) {
+	repo := memory.NewRepository(seed.Products())
+	current, _ := repo.FindByIDInMarket(context.Background(), "PRD-001", "MX")
+	name := current.Name
+	got, err := repo.Update(context.Background(), product.UpdateRequest{ID: "PRD-001",
+		Market: "MX", Patch: product.Patch{Name: &name}, Precondition: at(1),
+		NewEvent: func(product.Product) (product.ChangeEvent, error) {
+			t.Fatal("no-op must not build an event")
+			return product.ChangeEvent{}, nil
+		}})
+	if err != nil || got != current {
+		t.Fatalf("want unchanged %+v, got %+v err=%v", current, got, err)
+	}
+	if _, err := repo.Update(context.Background(), product.UpdateRequest{ID: "PRD-001",
+		Market: "MX", Patch: product.Patch{Name: &name}, Precondition: at(9),
+		NewEvent: noEvent}); !errors.Is(err, product.ErrVersionConflict) {
+		t.Fatalf("stale precondition must still fail on no-op, got %v", err)
+	}
 }

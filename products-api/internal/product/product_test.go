@@ -100,12 +100,23 @@ func TestApplyChangesOnlyGivenFieldsAndBumpsVersion(t *testing.T) {
 		})},
 	}
 	for _, tc := range cases {
-		if got := base.Apply(tc.patch); got != tc.want {
-			t.Fatalf("want %+v, got %+v", tc.want, got)
+		if got, changed := base.Apply(tc.patch); !changed || got != tc.want {
+			t.Fatalf("want %+v, got %+v changed=%v", tc.want, got, changed)
 		}
 	}
 	if base.Version != 3 {
 		t.Fatal("apply must not mutate the original")
+	}
+}
+
+func TestApplyWithSameValuesIsNoOp(t *testing.T) {
+	base := product.Product{ID: "PRD-001", Market: "MX", Name: "Same",
+		Status: product.StatusActive, TaxCategory: product.TaxReduced, Version: 4}
+	name, status, tax := base.Name, base.Status, base.TaxCategory
+	for _, patch := range []product.Patch{{}, {Name: &name, Status: &status, TaxCategory: &tax}} {
+		if got, changed := base.Apply(patch); changed || got != base {
+			t.Fatalf("no-op patch must keep version, got %+v changed=%v", got, changed)
+		}
 	}
 }
 
@@ -115,17 +126,24 @@ func with(p product.Product, mutate func(*product.Product)) product.Product {
 	return p
 }
 
-func TestEventKeyAndVersionMatching(t *testing.T) {
+func TestEventKeyAndPreconditions(t *testing.T) {
 	current := product.Product{ID: "PRD-001", Market: "EC", Version: 2}
 	if current.EventKey() != "EC:PRD-001" {
 		t.Fatalf("unexpected key %q", current.EventKey())
 	}
-	two, three := int64(2), int64(3)
-	cases := map[*int64]bool{nil: true, &two: true, &three: false}
-	for expected, want := range cases {
-		request := product.UpdateRequest{ExpectedVersion: expected}
-		if request.Matches(current) != want {
-			t.Fatalf("expected version %v: want match %v", expected, want)
+	cases := []struct {
+		precondition *product.Precondition
+		want         bool
+	}{
+		{precondition: nil, want: true},
+		{precondition: &product.Precondition{StrongTags: []string{"1", "2"}}, want: true},
+		{precondition: &product.Precondition{StrongTags: []string{"3", "abc"}}, want: false},
+		{precondition: &product.Precondition{}, want: false},
+	}
+	for _, tc := range cases {
+		request := product.UpdateRequest{Precondition: tc.precondition}
+		if request.Matches(current) != tc.want {
+			t.Fatalf("precondition %+v: want match %v", tc.precondition, tc.want)
 		}
 	}
 }
