@@ -2,7 +2,7 @@ function fn(args) {
   return {
     eventId: args.eventId || java.util.UUID.randomUUID() + '',
     eventVersion: args.eventVersion || 1,
-    occurredAt: '2026-09-18T15:42:10Z',
+    occurredAt: args.occurredAt || '2026-09-18T15:42:10Z',
     orderId: args.orderId,
     market: args.market || 'MX',
     currency: args.currency || 'MXN',
