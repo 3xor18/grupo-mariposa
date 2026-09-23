@@ -4,6 +4,10 @@ Distribuidores de MX, CO y PE publican pedidos en Kafka. `order-processor` los v
 de clientes y productos, calcula impuestos y descuentos, persiste el resultado en MongoDB y lo publica. Todo esto
 con idempotencia, control de concurrencia y tolerancia a fallos parciales.
 
+> **Empieza por aquí:** [`docs/guide/guia-grupo-mariposa.html`](docs/guide/guia-grupo-mariposa.html) es una guía visual
+> e interactiva (en español) del flujo completo, cada microservicio, endpoints, eventos, pantallas y la demo.
+> Descárgala o clona el repo y ábrela en el navegador; GitHub no renderiza HTML.
+
 ```mermaid
 flowchart LR
     P[Productor] -->|orders.created.v1| K[(Kafka)]
