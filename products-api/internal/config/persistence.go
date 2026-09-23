@@ -10,6 +10,11 @@ import (
 
 const (
 	EnvPlatformMarkets    = "PLATFORM_MARKETS"
+	EnvPlatformCurrencies = "PLATFORM_CURRENCIES"
+	EnvSeedEnabled        = "SEED_ENABLED"
+	EnvKafkaTLSEnabled    = "KAFKA_TLS_ENABLED"
+	EnvOutboxRetention    = "OUTBOX_RETENTION"
+	defaultRetention      = "7d"
 	EnvStorageDriver      = "STORAGE_DRIVER"
 	EnvMongoURI           = "MONGODB_URI"
 	EnvMongoDatabase      = "MONGODB_DATABASE"
@@ -37,10 +42,15 @@ var (
 	errUnknownDriver      = errors.New("must be " + StorageMongo + " or " + StorageMemory)
 	errMemoryInProduction = errors.New("must not be " + StorageMemory + " when " +
 		EnvAppEnvironment + "=" + productionEnvironment)
+	errTrueInProduction = errors.New("must not be true when " + EnvAppEnvironment + "=" +
+		productionEnvironment)
+	errFalseInProduction = errors.New("must be true when " + EnvAppEnvironment + "=" +
+		productionEnvironment)
 )
 
 type Storage struct {
 	Driver   string
+	Seed     bool
 	MongoURI string
 	Database string
 	Timeout  time.Duration
@@ -49,6 +59,7 @@ type Storage struct {
 type Kafka struct {
 	Brokers []string
 	Topic   string
+	TLS     bool
 }
 
 type Outbox struct {
@@ -56,12 +67,14 @@ type Outbox struct {
 	BatchSize  int
 	Lease      time.Duration
 	RetryDelay time.Duration
+	Retention  time.Duration
 }
 
 func loadMarkets(r *Reader) market.Catalog {
-	catalog, err := market.Parse(r.String(EnvPlatformMarkets, market.DefaultMarkets))
+	catalog, err := market.Parse(r.String(EnvPlatformMarkets, market.DefaultMarkets),
+		r.String(EnvPlatformCurrencies, market.DefaultCurrencies))
 	if err != nil {
-		r.Fail(EnvPlatformMarkets, err)
+		r.Fail(EnvPlatformMarkets+"/"+EnvPlatformCurrencies, err)
 	}
 	return catalog
 }
@@ -69,9 +82,13 @@ func loadMarkets(r *Reader) market.Catalog {
 func loadStorage(r *Reader) Storage {
 	storage := Storage{
 		Driver:   r.String(EnvStorageDriver, StorageMongo),
+		Seed:     r.Bool(EnvSeedEnabled, false),
 		MongoURI: r.String(EnvMongoURI, ""),
 		Database: r.String(EnvMongoDatabase, defaultDatabase),
 		Timeout:  r.Millis(EnvMongoTimeoutMS, defaultMongoTimeoutMS),
+	}
+	if storage.Seed && production(r) {
+		r.Fail(EnvSeedEnabled, errTrueInProduction)
 	}
 	switch storage.Driver {
 	case StorageMongo:
@@ -90,6 +107,10 @@ func loadKafka(r *Reader, storage Storage) Kafka {
 	kafka := Kafka{
 		Brokers: splitList(r.String(EnvKafkaBootstrap, "")),
 		Topic:   r.String(EnvKafkaTopic, defaultTopic),
+		TLS:     r.Bool(EnvKafkaTLSEnabled, false),
+	}
+	if !kafka.TLS && production(r) {
+		r.Fail(EnvKafkaTLSEnabled, errFalseInProduction)
 	}
 	if storage.Driver == StorageMongo && len(kafka.Brokers) == 0 {
 		r.Fail(EnvKafkaBootstrap, errRequired)
@@ -103,6 +124,7 @@ func loadOutbox(r *Reader) Outbox {
 		BatchSize:  r.Int(EnvOutboxBatchSize, defaultBatchSize, minPositive, maxBatchSize),
 		Lease:      r.Millis(EnvOutboxLeaseMS, defaultLeaseMS),
 		RetryDelay: r.Millis(EnvOutboxRetryDelayMS, defaultRetryDelayMS),
+		Retention:  r.Duration(EnvOutboxRetention, defaultRetention),
 	}
 }
 
