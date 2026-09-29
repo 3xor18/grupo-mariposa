@@ -14,7 +14,7 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <karate.version>1.5.2</karate.version>
-        <kafka.version>3.9.1</kafka.version>
+        <kafka.version>4.3.1</kafka.version>
         <surefire.version>3.5.2</surefire.version>
     </properties>
 
