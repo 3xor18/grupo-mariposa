@@ -292,7 +292,7 @@ services:
     logging: *default-logging
 
   prometheus:
-    image: prom/prometheus:v3.5.0
+    image: prom/prometheus:v3.15.0
     entrypoint: ["sh", "/opt/mariposa/prometheus-entrypoint.sh"]
     environment:
       CONFIG_SERVER_USERNAME: ${CONFIG_SERVER_USERNAME:?run ./mariposa.sh init}
