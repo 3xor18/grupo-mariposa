@@ -338,7 +338,7 @@ services:
     logging: *default-logging
 
   jaeger:
-    image: jaegertracing/jaeger:2.9.0
+    image: jaegertracing/jaeger:2.21.0
     ports:
       - "127.0.0.1:16686:16686"
     healthcheck:
