@@ -25,7 +25,7 @@ x-master-data-dependency: &master-data-dependency
 
 services:
   mongo:
-    image: mongo:7.0.26
+    image: mongo:8.3.11
     entrypoint: ["bash", "/opt/mariposa/mongo-entrypoint.sh"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?run ./mariposa.sh init}
@@ -47,7 +47,7 @@ services:
     logging: *default-logging
 
   mongo-users:
-    image: mongo:7.0.26
+    image: mongo:8.3.11
     entrypoint: ["mongosh", "--quiet", "mongodb://mongo:27017/admin?replicaSet=rs0"]
     command: ["--file", "/opt/mariposa/ensure-users.js"]
     environment:
