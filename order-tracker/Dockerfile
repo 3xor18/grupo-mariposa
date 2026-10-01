@@ -37,6 +37,8 @@ ENV NGINX_ENVSUBST_FILTER="^(ORDERS_API_URL|NGINX_RESOLVER|CSP_CONNECT_SOURCES|H
     CONFIG_APP_NAME=order-tracker \
     CONFIG_PROFILE=default \
     CONFIG_SERVER_FAIL_FAST=true
+USER 0
+RUN apk upgrade --no-cache libexpat
 COPY --from=test /tmp/flutter-tests.passed /etc/order-tracker/
 COPY --from=runtime-config-test /tmp/runtime-config-tests.passed /etc/order-tracker/
 COPY --from=build /app/build/web /usr/share/nginx/html
