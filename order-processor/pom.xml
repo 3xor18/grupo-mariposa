@@ -26,6 +26,7 @@
         <httpcore5.version>5.4.3</httpcore5.version>
         <tomcat.version>10.1.60</tomcat.version>
         <bouncycastle.version>1.86</bouncycastle.version>
+        <jackson-bom.version>2.21.7</jackson-bom.version>
         <maven.compiler.release>21</maven.compiler.release>
         <spring-cloud.version>2025.0.3</spring-cloud.version>
         <resilience4j.version>2.3.0</resilience4j.version>

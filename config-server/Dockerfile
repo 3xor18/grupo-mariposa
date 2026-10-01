@@ -15,6 +15,7 @@ RUN cp target/config-server-*.jar target/application.jar \
 
 FROM ${RUNTIME_IMAGE}@${RUNTIME_DIGEST}
 ARG APP_UID=10001
+RUN apk upgrade --no-cache libexpat
 RUN addgroup -S -g "${APP_UID}" app && adduser -S -u "${APP_UID}" -G app -H app
 WORKDIR /app
 COPY --from=build /workspace/extracted/dependencies/ ./
