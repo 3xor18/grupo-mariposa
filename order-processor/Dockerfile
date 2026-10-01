@@ -16,6 +16,7 @@ RUN cp target/order-processor-*.jar target/application.jar \
        --destination target/extracted
 
 FROM ${RUNTIME_IMAGE}@${RUNTIME_DIGEST}
+RUN apk upgrade --no-cache libexpat
 RUN addgroup -S -g 10001 orders && adduser -S -u 10001 -G orders -H -s /sbin/nologin orders
 WORKDIR /app
 COPY --from=build --chown=10001:10001 /workspace/target/extracted/dependencies/ ./
