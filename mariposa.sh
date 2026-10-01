@@ -23,6 +23,9 @@ readonly CLIENT_ACTIVE=ACTIVE
 readonly CLIENT_BLOCKED=BLOCKED
 readonly FLUTTER_VERSION=3.44.0
 readonly FLUTTER_IMAGE="ghcr.io/cirruslabs/flutter:${FLUTTER_VERSION}"
+readonly GO_IMAGE=golang:1.26
+readonly DOCKER_SOCKET=//var/run/docker.sock
+readonly TESTCONTAINERS_HOST=host.docker.internal
 readonly SHOW_SECRETS_FLAG=--show-secrets
 readonly SECRET_LENGTH=32
 readonly SECRET_ENTROPY_BYTES=48
@@ -95,9 +98,14 @@ cmd_init() {
   echo ".env generado con secretos aleatorios."
 }
 
+# Git Bash entrega rutas /c/...; Docker en Windows necesita C:/...
+docker_path() {
+  if command -v cygpath > /dev/null; then cygpath -m "$1"; else printf '%s' "$1"; fi
+}
+
 cmd_up() {
   cmd_init
-  docker compose --env-file "${ENV_FILE}" up -d --build --wait "$@"
+  docker compose --env-file "$(docker_path "${ENV_FILE}")" up -d --build --wait "$@"
   cmd_urls
 }
 
@@ -203,12 +211,23 @@ cmd_mongo() {
   docker compose exec -T mongo mongosh --quiet --eval "${script}"
 }
 
+# -race necesita cgo; sin cgo (Windows) las pruebas Go corren en un contenedor Linux
+go_test() {
+  if [[ "$(go env CGO_ENABLED 2> /dev/null)" == 1 ]]; then
+    (cd "${ROOT_DIR}/products-api" && go test ./... -race -cover)
+    return
+  fi
+  docker run --rm -v "$(docker_path "${ROOT_DIR}"):/repo" -v "${DOCKER_SOCKET}:/var/run/docker.sock" \
+    -e TESTCONTAINERS_HOST_OVERRIDE="${TESTCONTAINERS_HOST}" -w /repo/products-api "${GO_IMAGE}" \
+    go test ./... -race -cover
+}
+
 cmd_test() {
-  (cd "${ROOT_DIR}/products-api" && go test ./... -race -cover)
+  go_test
   (cd "${ROOT_DIR}/clients-api" && npm ci && npm run lint && npm run test:cov)
   (cd "${ROOT_DIR}/order-processor" && maven -B verify)
   (cd "${ROOT_DIR}/config-server" && maven -B verify)
-  docker run --rm -v "${ROOT_DIR}/order-tracker:/app" -w /app "${FLUTTER_IMAGE}" \
+  docker run --rm -v "$(docker_path "${ROOT_DIR}/order-tracker"):/app" -w /app "${FLUTTER_IMAGE}" \
     sh -c "flutter pub get && flutter test --coverage"
 }
 
@@ -224,7 +243,8 @@ cmd_e2e() {
   cmd_publish "${UI_SEED_ORDER}"
   (cd "${ROOT_DIR}/e2e/karate" \
     && KEYCLOAK_URL="${keycloak_url}" DEMO_PASSWORD="${demo_password}" maven -B test)
-  (cd "${ROOT_DIR}/order-tracker/e2e" && npm ci && npx playwright install chromium \
+  (cd "${ROOT_DIR}/order-tracker/e2e" && npm ci \
+    && { [[ -n "${E2E_BROWSER_CHANNEL:-}" ]] || npx playwright install chromium; } \
     && E2E_USERNAME="${DEFAULT_USER}" E2E_PASSWORD="${demo_password}" npx playwright test)
 }
 
@@ -247,6 +267,7 @@ Uso: ./mariposa.sh <comando>
   mongo [expresión]    consulta la base orders
   test                 corre las pruebas de los componentes
   e2e                  corre Karate + Playwright contra la plataforma levantada
+                       (E2E_BROWSER_CHANNEL=chrome usa el Chrome instalado)
   demo-traffic [min]   genera pedidos variados en vivo para el tablero de Grafana (DEMO_CHAOS=true
                        agrega fallas de dependencias)
 EOF
